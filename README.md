@@ -1,38 +1,29 @@
-# Mijn OG - prototype 0.1
+# Mijn OG – Supabase Next.js prototype
 
-Eerste mobile-first PWA-prototype voor Onze Gezellen.
+Deze versie praat echt met het Supabase-project via `NEXT_PUBLIC_SUPABASE_URL` en `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
 
-## In deze versie
-- Demo-login
-- Dashboard
-- Volgende training
-- Aan-/afmelden (lokale demo-state)
-- Persoonlijke positieve stats
-- Clubbrede highlight
-- Agenda
-- Persoonlijke KNBSB/FOYS ICS-koppeling via Meer
-- PWA manifest + service worker
-- Eerste Supabase SQL-schema
+## Wat werkt
+- Inloggen met Supabase Auth
+- Eigen profiel ophalen uit `profiles`
+- Teamkoppelingen ophalen via `team_members -> teams`
+- Persoonlijke KNBSB/FOYS ICS-link opslaan in `calendar_connections`
+- Uitloggen
+- Lege staten voor stats/highlights in plaats van demo-data
 
-## Nog niet gekoppeld
-- Supabase authenticatie/database
-- Google Calendar
-- Server-side ophalen/parsen van KNBSB ICS-feed (UI + privé opslagmodel staan al klaar)
-- Echte spelers/statistieken
-- Teamoverzicht
-- Clubleaderboard
-- Events/pushmeldingen
+## Starten
+1. Installeer Node.js (LTS).
+2. Open deze map in Terminal.
+3. Voer uit: `npm install`
+4. Voer uit: `npm run dev`
+5. Open `http://localhost:3000`
 
-## Lokaal starten
-Vanuit deze map:
+## Belangrijk
+`.env.local` bevat alleen de publieke Supabase project-URL en publishable key. Gebruik NOOIT een service-role/secret key in de browser.
 
-python3 -m http.server 8080
-
-Open daarna http://localhost:8080
-
-## Volgende technische stap
-1. Supabase-project aanmaken.
-2. `supabase_schema.sql` uitvoeren.
-3. Demo-login vervangen door Supabase Auth.
-4. Dashboarddata uit Supabase laden.
-5. Google Calendar sync toevoegen.
+## Nog te bouwen
+- FOYS ICS daadwerkelijk server-side ophalen en parseren
+- Teambeheer / admin
+- Google Calendar trainingen
+- Stats import
+- Leaderboards en highlights
+- PWA manifest + installatie op beginscherm
