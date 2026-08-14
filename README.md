@@ -1,31 +1,28 @@
-# Mijn OG v2
+# Mijn OG v2.1
 
 Mobile-first Mijn OG webapp voor Onze Gezellen Honk- & Softbal.
 
-## v2 bevat
-- Echte Supabase login.
-- Wachtwoord vergeten / reset via Supabase Auth.
-- Voor- en achternaam wijzigen vanuit Instellingen.
-- Persoonlijke FOYS/KNBSB ICS-link opslaan in Supabase.
-- FOYS-agenda server-side ophalen via `/api/calendar` en echte komende wedstrijden tonen.
-- Eerstvolgende echte FOYS-wedstrijd op Home.
-- Geen demo-data: ontbrekende stats/highlights tonen een lege status.
-- Visuele stijl gebaseerd op de bestaande Onze Gezellen website: wit, zwart en OG-oranje.
-- Officieel OG-logo als headerlogo, favicon en PWA/iPhone homescreen-icoon.
+## v2.1 wijzigingen
+- Volledige visuele redesign op basis van het goedgekeurde mobiele concept.
+- Grote oranje kaart voor de eerstvolgende echte FOYS-wedstrijd.
+- Komende wedstrijden in een visuele agenda/tijdlijn.
+- Rustigere kaarten, meer witruimte en app-achtige navigatie.
+- Profielnaam staat standaard alleen als tekst in beeld.
+- Naamvelden verschijnen pas na **Aanpassen** en klappen na opslaan weer dicht.
+- FOYS-koppeling is ingeklapt onder **Koppelingen**.
+- Geen demo-data: ontbrekende stats, teamdata en highlights krijgen een nette lege status.
+- Bestaande Supabase login, resetflow en FOYS serverroute blijven behouden.
 
-## Vercel environment variables
-Deze moeten in Vercel blijven staan:
+## Uploaden naar GitHub
+1. Pak de ZIP uit.
+2. Vervang in je lokale GitHub Desktop repository de mappen/bestanden `app`, `lib`, `public`, `package.json`, `README.md`, `.env.example` en `.gitignore`.
+3. Commit bijvoorbeeld als `Mijn OG v2.1 redesign`.
+4. Klik **Push origin**.
+5. Vercel bouwt de nieuwe versie automatisch.
+
+## Vercel
+Deze environment variables moeten blijven bestaan:
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
 
-## Supabase reset URL
-Ga in Supabase naar Authentication > URL Configuration.
-- Site URL: `https://mijn-og.vercel.app`
-- Redirect URL: voeg `https://mijn-og.vercel.app/**` toe
-
-Als later een eigen domein wordt gebruikt, voeg dat domein hier ook toe.
-
-## Deployen
-1. Vervang de bestanden in de GitHub repository met deze versie.
-2. Commit en Push via GitHub Desktop.
-3. Vercel maakt automatisch een nieuwe deployment.
+Gebruik als live/testdomein het Vercel-domein dat correct naar de nieuwste production deployment wijst.
