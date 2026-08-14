@@ -1,29 +1,31 @@
-# Mijn OG – Supabase Next.js prototype
+# Mijn OG v2
 
-Deze versie praat echt met het Supabase-project via `NEXT_PUBLIC_SUPABASE_URL` en `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
+Mobile-first Mijn OG webapp voor Onze Gezellen Honk- & Softbal.
 
-## Wat werkt
-- Inloggen met Supabase Auth
-- Eigen profiel ophalen uit `profiles`
-- Teamkoppelingen ophalen via `team_members -> teams`
-- Persoonlijke KNBSB/FOYS ICS-link opslaan in `calendar_connections`
-- Uitloggen
-- Lege staten voor stats/highlights in plaats van demo-data
+## v2 bevat
+- Echte Supabase login.
+- Wachtwoord vergeten / reset via Supabase Auth.
+- Voor- en achternaam wijzigen vanuit Instellingen.
+- Persoonlijke FOYS/KNBSB ICS-link opslaan in Supabase.
+- FOYS-agenda server-side ophalen via `/api/calendar` en echte komende wedstrijden tonen.
+- Eerstvolgende echte FOYS-wedstrijd op Home.
+- Geen demo-data: ontbrekende stats/highlights tonen een lege status.
+- Visuele stijl gebaseerd op de bestaande Onze Gezellen website: wit, zwart en OG-oranje.
+- Officieel OG-logo als headerlogo, favicon en PWA/iPhone homescreen-icoon.
 
-## Starten
-1. Installeer Node.js (LTS).
-2. Open deze map in Terminal.
-3. Voer uit: `npm install`
-4. Voer uit: `npm run dev`
-5. Open `http://localhost:3000`
+## Vercel environment variables
+Deze moeten in Vercel blijven staan:
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
 
-## Belangrijk
-`.env.local` bevat alleen de publieke Supabase project-URL en publishable key. Gebruik NOOIT een service-role/secret key in de browser.
+## Supabase reset URL
+Ga in Supabase naar Authentication > URL Configuration.
+- Site URL: `https://mijn-og.vercel.app`
+- Redirect URL: voeg `https://mijn-og.vercel.app/**` toe
 
-## Nog te bouwen
-- FOYS ICS daadwerkelijk server-side ophalen en parseren
-- Teambeheer / admin
-- Google Calendar trainingen
-- Stats import
-- Leaderboards en highlights
-- PWA manifest + installatie op beginscherm
+Als later een eigen domein wordt gebruikt, voeg dat domein hier ook toe.
+
+## Deployen
+1. Vervang de bestanden in de GitHub repository met deze versie.
+2. Commit en Push via GitHub Desktop.
+3. Vercel maakt automatisch een nieuwe deployment.
