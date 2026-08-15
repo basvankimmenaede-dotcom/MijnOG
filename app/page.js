@@ -53,11 +53,11 @@ export default function HomePage() {
     setMessage('')
     const [profileResult, teamResult, calendarResult, eventResult, attendanceResult, profilesResult, membershipResult, eventTeamsResult, eventParticipantsResult] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
-      supabase.from('team_members').select('member_role, teams(id, name, sport, season_id, is_active)').eq('profile_id', userId),
+      supabase.from('team_members').select('member_role, teams(id, name, sport, season_id, is_active, team_photo_url)').eq('profile_id', userId),
       supabase.from('calendar_connections').select('*').eq('profile_id', userId).eq('provider', 'foys').maybeSingle(),
       supabase.from('events').select('*').order('start_at', { ascending: true }),
       supabase.from('attendance').select('*'),
-      supabase.from('profiles').select('id, first_name, last_name, jersey_number, role'),
+      supabase.from('profiles').select('id, first_name, last_name, jersey_number, role, avatar_url'),
       supabase.from('team_members').select('id,team_id,profile_id,member_role'),
       supabase.from('event_teams').select('event_id,team_id,teams(id,name,sport)'),
       supabase.from('event_participants').select('event_id,profile_id')
@@ -147,7 +147,7 @@ export default function HomePage() {
         {activeTab === 'Home' && <Dashboard profile={profile} teams={teams} events={allEvents} calendarConnection={calendarConnection} calendarState={calendarState} ownAttendance={ownAttendance} onAttendance={setAttendanceStatus} attendanceBusy={attendanceBusy} onAgenda={() => navigate('Agenda')} onTeam={() => navigate('Team')} onStats={() => navigate('Stats')} onMore={() => navigate('Meer')} />}
         {activeTab === 'Agenda' && <Agenda events={allEvents} connection={calendarConnection} state={calendarState} profile={profile} teams={teams} attendance={attendance} visibleProfiles={visibleProfiles} memberships={allMemberships} ownAttendance={ownAttendance} onAttendance={setAttendanceStatus} attendanceBusy={attendanceBusy} onRefresh={refreshAppData} onGoMore={() => navigate('Meer')} />}
         {activeTab === 'Stats' && <Stats />}
-        {activeTab === 'Team' && <Team teams={teams} />}
+        {activeTab === 'Team' && <Team session={session} profile={profile} teams={teams} profiles={visibleProfiles} memberships={allMemberships} onSaved={refreshAppData} onMessage={setMessage} />}
         {activeTab === 'Meer' && <More session={session} profile={profile} teams={teams} calendar={calendarConnection} onSaved={refreshAppData} onMessage={setMessage} />}
       </section>
       <nav className="bottom-nav" aria-label="Hoofdnavigatie">{tabs.map(tab => <button key={tab} className={activeTab === tab ? 'nav-item active' : 'nav-item'} onClick={() => navigate(tab)}><Icon name={iconNameForTab(tab)} /><small>{tab}</small></button>)}</nav>
@@ -448,7 +448,7 @@ function TrainingEditor({ profile, teams, profiles, memberships, event, onClose,
     setBusy(true); const {error} = await supabase.from('events').delete().eq('id',event.id); setBusy(false)
     if (error) setError(error.message); else onSaved()
   }
-  return <div className="sheet-backdrop" onMouseDown={e => { if(e.target===e.currentTarget) onClose() }}><section className="admin-sheet training-sheet"><div className="sheet-handle"/><header className="sheet-header"><span className="sheet-icon-spacer"/><div className="sheet-title-center"><p className="eyebrow orange">{event?'TRAINING BEHEREN':'NIEUWE TRAINING'}</p><h2>{event?'Training aanpassen':'Training toevoegen'}</h2></div><button className="sheet-icon-button" onClick={onClose}><Icon name="close" /></button></header><div className="sheet-body"><div className="form-stack training-form"><section className="audience-picker"><div className="picker-heading"><div><strong>Teams & deelnemers</strong><small>{invitedCount} speler{invitedCount===1?'':'s'} uitgenodigd</small></div></div><div className="team-checkbox-list">{selectableTeams.map(team => <label className="team-check" key={team.id}><input type="checkbox" checked={selectedTeamIds.includes(String(team.id))} onChange={() => toggleTeam(team.id)} /><span><strong>{team.name}</strong><small>{capitalize(team.sport)}</small></span></label>)}</div>{!selectableTeams.length && <div className="admin-empty">Je hebt geen teams waarvoor je trainingen kunt beheren.</div>}<div className="guest-picker"><div className="picker-heading"><div><strong>Extra deelnemers</strong><small>Voor iemand die een keer meetraint</small></div></div>{selectedGuests.length>0 && <div className="selected-guests">{selectedGuests.map(id => { const person=profiles.find(p => p.id===id); return <button key={id} type="button" onClick={() => removeGuest(id)}>{personName(person)} <span>×</span></button> })}</div>}<label>Speler zoeken<input type="search" value={guestSearch} onChange={e => setGuestSearch(e.target.value)} placeholder="Zoek op naam of rugnummer" /></label>{guestSearch && <div className="guest-results">{guestCandidates.slice(0,10).map(person => <button type="button" key={person.id} onClick={() => addGuest(person.id)}><span className="member-avatar small">{initials(person)}</span><span><strong>{personName(person)}</strong><small>{profileTeamNames(person.id)}</small></span><span>+ Toevoegen</span></button>)}{!guestCandidates.length && <div className="admin-empty">Geen spelers gevonden.</div>}</div>}</div></section><label>Titel<input value={form.title} onChange={e => setForm({...form,title:e.target.value})}/></label><div className="form-two"><label>Datum<input type="date" value={form.date} onChange={e => setForm({...form,date:e.target.value})}/></label><label>Verzameltijd<input type="time" value={form.meet} onChange={e => setForm({...form,meet:e.target.value})}/></label></div><div className="form-two"><label>Starttijd<input type="time" value={form.start} onChange={e => setForm({...form,start:e.target.value})}/></label><label>Eindtijd<input type="time" value={form.end} onChange={e => setForm({...form,end:e.target.value})}/></label></div><label>Locatie<input value={form.location_name} onChange={e => setForm({...form,location_name:e.target.value})} placeholder="Bijv. Van der Aart Sportpark"/></label><label>Adres<input value={form.location_address} onChange={e => setForm({...form,location_address:e.target.value})} placeholder="Optioneel"/></label><label>Omschrijving<textarea rows="4" value={form.description} onChange={e => setForm({...form,description:e.target.value})} placeholder="Wat gaan we trainen?"/></label>{error && <div className="notice error">{error}</div>}<button className="primary" disabled={busy||!selectableTeams.length} onClick={save}>{busy?'Opslaan…':'Opslaan'}</button>{event && <button className="danger-link" disabled={busy} onClick={remove}>Training verwijderen</button>}</div></div></section></div>
+  return <div className="sheet-backdrop" onMouseDown={e => { if(e.target===e.currentTarget) onClose() }}><section className="admin-sheet training-sheet"><div className="sheet-handle"/><header className="sheet-header"><span className="sheet-icon-spacer"/><div className="sheet-title-center"><p className="eyebrow orange">{event?'TRAINING BEHEREN':'NIEUWE TRAINING'}</p><h2>{event?'Training aanpassen':'Training toevoegen'}</h2></div><button className="sheet-icon-button" onClick={onClose}><Icon name="close" /></button></header><div className="sheet-body"><div className="form-stack training-form"><section className="audience-picker"><div className="picker-heading"><div><strong>Teams & deelnemers</strong><small>{invitedCount} deelnemer{invitedCount===1?'':'s'} uitgenodigd</small></div></div><div className="team-checkbox-list">{selectableTeams.map(team => <label className="team-check" key={team.id}><input type="checkbox" checked={selectedTeamIds.includes(String(team.id))} onChange={() => toggleTeam(team.id)} /><span><strong>{team.name}</strong><small>{capitalize(team.sport)}</small></span></label>)}</div>{!selectableTeams.length && <div className="admin-empty">Je hebt geen teams waarvoor je trainingen kunt beheren.</div>}<div className="guest-picker"><div className="picker-heading"><div><strong>Extra deelnemers</strong><small>Voor iemand die een keer meetraint</small></div></div>{selectedGuests.length>0 && <div className="selected-guests">{selectedGuests.map(id => { const person=profiles.find(p => p.id===id); return <button key={id} type="button" onClick={() => removeGuest(id)}>{personName(person)} <span>×</span></button> })}</div>}<label>Speler zoeken<input type="search" value={guestSearch} onChange={e => setGuestSearch(e.target.value)} placeholder="Zoek op naam of rugnummer" /></label>{guestSearch && <div className="guest-results">{guestCandidates.slice(0,10).map(person => <button type="button" key={person.id} onClick={() => addGuest(person.id)}><span className="member-avatar small">{initials(person)}</span><span><strong>{personName(person)}</strong><small>{profileTeamNames(person.id)}</small></span><span>+ Toevoegen</span></button>)}{!guestCandidates.length && <div className="admin-empty">Geen spelers gevonden.</div>}</div>}</div></section><label>Titel<input value={form.title} onChange={e => setForm({...form,title:e.target.value})}/></label><div className="form-two"><label>Datum<input type="date" value={form.date} onChange={e => setForm({...form,date:e.target.value})}/></label><label>Verzameltijd<input type="time" value={form.meet} onChange={e => setForm({...form,meet:e.target.value})}/></label></div><div className="form-two"><label>Starttijd<input type="time" value={form.start} onChange={e => setForm({...form,start:e.target.value})}/></label><label>Eindtijd<input type="time" value={form.end} onChange={e => setForm({...form,end:e.target.value})}/></label></div><label>Locatie<input value={form.location_name} onChange={e => setForm({...form,location_name:e.target.value})} placeholder="Bijv. Van der Aart Sportpark"/></label><label>Adres<input value={form.location_address} onChange={e => setForm({...form,location_address:e.target.value})} placeholder="Optioneel"/></label><label>Omschrijving<textarea rows="4" value={form.description} onChange={e => setForm({...form,description:e.target.value})} placeholder="Wat gaan we trainen?"/></label>{error && <div className="notice error">{error}</div>}<button className="primary" disabled={busy||!selectableTeams.length} onClick={save}>{busy?'Opslaan…':'Opslaan'}</button>{event && <button className="danger-link" disabled={busy} onClick={remove}>Training verwijderen</button>}</div></div></section></div>
 }
 
 function AbsenceModal({ event, reason, setReason, busy, onCancel, onConfirm }) {
@@ -456,7 +456,98 @@ function AbsenceModal({ event, reason, setReason, busy, onCancel, onConfirm }) {
 }
 
 function Stats() { return <section><ScreenHeader title="Jouw stats" /><div className="segmented"><span className="active">Overzicht</span><span>Aanvallen</span><span>Verdedigen</span></div><EmptyState icon="stats" title="Nog geen statistieken beschikbaar" text="Hier tonen we alleen echte data. Zodra een statsbron is gekoppeld, verschijnt jouw persoonlijke overzicht hier." /></section> }
-function Team({ teams }) { return <section><ScreenHeader title="Mijn team" />{teams.length ? <div className="team-grid">{teams.map(team => <article className="team-card" key={team.id}><span className="soft-icon large"><Icon name="team" /></span><div><h2>{team.name}</h2><p>{capitalize(team.sport)} · {translateRole(team.member_role)}</p></div></article>)}</div> : <EmptyState icon="team" title="Nog geen team gekoppeld" text="Een beheerder kan jouw account aan het juiste team koppelen." />}<SectionTitle title="Teamgegevens" /><EmptyState icon="stats" title="Nog geen teamstatistieken beschikbaar" text="Teamstats verschijnen hier zodra we een echte statistiekbron koppelen." /></section> }
+function Team({ session, profile, teams, profiles, memberships, onSaved, onMessage }) {
+  const [selectedTeam, setSelectedTeam] = useState(null)
+  const [busy, setBusy] = useState(false)
+
+  const membersForTeam = teamId => memberships
+    .filter(row => Number(row.team_id) === Number(teamId))
+    .map(row => ({ ...row, person: profiles.find(person => person.id === row.profile_id) }))
+    .filter(row => row.person)
+
+  async function uploadTeamPhoto(team, file) {
+    if (!file) return
+    setBusy(true); onMessage('')
+    try {
+      const blob = await compressImage(file, { maxWidth: 1400, maxHeight: 900, maxBytes: 300 * 1024, square: false })
+      const path = `${team.id}/team.webp`
+      const { error: uploadError } = await supabase.storage.from('team-images').upload(path, blob, { contentType: 'image/webp', upsert: true })
+      if (uploadError) throw uploadError
+      const { data } = supabase.storage.from('team-images').getPublicUrl(path)
+      const url = `${data.publicUrl}?v=${Date.now()}`
+      const { error } = await supabase.rpc('set_team_photo', { target_team_id: Number(team.id), new_url: url })
+      if (error) throw error
+      onMessage('Teamfoto opgeslagen ✓')
+      setSelectedTeam(current => current ? { ...current, team_photo_url: url } : current)
+      await onSaved()
+    } catch (error) { onMessage(`Teamfoto uploaden mislukt: ${error.message}`) }
+    setBusy(false)
+  }
+
+  async function uploadMemberAvatar(person, file) {
+    if (!file || profile?.role !== 'admin') return
+    setBusy(true); onMessage('')
+    try {
+      const blob = await compressImage(file, { maxWidth: 512, maxHeight: 512, maxBytes: 100 * 1024, square: true })
+      const path = `${person.id}/profile.webp`
+      const { error: uploadError } = await supabase.storage.from('avatars').upload(path, blob, { contentType: 'image/webp', upsert: true })
+      if (uploadError) throw uploadError
+      const { data } = supabase.storage.from('avatars').getPublicUrl(path)
+      const url = `${data.publicUrl}?v=${Date.now()}`
+      const { error } = await supabase.rpc('set_profile_avatar', { target_profile_id: person.id, new_url: url })
+      if (error) throw error
+      onMessage(`Profielfoto van ${personName(person)} opgeslagen ✓`)
+      await onSaved()
+    } catch (error) { onMessage(`Profielfoto uploaden mislukt: ${error.message}`) }
+    setBusy(false)
+  }
+
+  return <section>
+    <ScreenHeader title="Mijn team" />
+    {teams.length ? <div className="team-grid">{teams.map(team => <button className="team-card clickable-team" key={team.id} onClick={() => setSelectedTeam(team)}>
+      <TeamThumb team={team} />
+      <div><h2>{team.name}</h2><p>{capitalize(team.sport)} · {translateRole(team.member_role)}</p><small>Bekijk team</small></div>
+      <Icon name="chevron" />
+    </button>)}</div> : <EmptyState icon="team" title="Nog geen team gekoppeld" text="Een beheerder kan jouw account aan het juiste team koppelen." />}
+    <SectionTitle title="Teamgegevens" /><EmptyState icon="stats" title="Nog geen teamstatistieken beschikbaar" text="Teamstats verschijnen hier zodra we een echte statistiekbron koppelen." />
+    {selectedTeam && <TeamModal team={selectedTeam} currentProfile={profile} currentMembership={teams.find(t => Number(t.id)===Number(selectedTeam.id))} members={membersForTeam(selectedTeam.id)} busy={busy} onTeamPhoto={uploadTeamPhoto} onAvatar={uploadMemberAvatar} onClose={() => setSelectedTeam(null)} />}
+  </section>
+}
+
+function TeamThumb({ team }) {
+  return team?.team_photo_url ? <img className="team-thumb-image" src={team.team_photo_url} alt={`Teamfoto ${team.name}`} /> : <span className="soft-icon large"><Icon name="team" /></span>
+}
+
+function TeamModal({ team, currentProfile, currentMembership, members, busy, onTeamPhoto, onAvatar, onClose }) {
+  const players = members.filter(row => row.member_role === 'player')
+  const staff = members.filter(row => row.member_role === 'coach' || row.member_role === 'staff')
+  const canEditTeamPhoto = currentProfile?.role === 'admin' || currentMembership?.member_role === 'coach'
+  return <div className="modal-backdrop" onMouseDown={e => { if (e.target===e.currentTarget) onClose() }}>
+    <section className="team-modal" role="dialog" aria-modal="true" aria-label={team.name}>
+      <header className="team-modal-hero">
+        {team.team_photo_url ? <img src={team.team_photo_url} alt={`Teamfoto ${team.name}`} /> : <div className="team-photo-placeholder"><Icon name="team" /><span>Nog geen teamfoto</span></div>}
+        <button className="sheet-icon-button team-close" onClick={onClose}><Icon name="close" /></button>
+        {canEditTeamPhoto && <label className="photo-upload-button team-photo-button">{busy ? 'Uploaden…' : 'Teamfoto aanpassen'}<input type="file" accept="image/*" disabled={busy} onChange={e => { const file=e.target.files?.[0]; if(file) onTeamPhoto(team,file); e.target.value='' }} /></label>}
+      </header>
+      <div className="team-modal-body">
+        <div className="team-modal-title"><p className="eyebrow orange">{capitalize(team.sport)}</p><h2>{team.name}</h2></div>
+        <TeamPeopleSection title="Spelers" rows={players} admin={currentProfile?.role==='admin'} busy={busy} onAvatar={onAvatar} />
+        <TeamPeopleSection title="Staff" rows={staff} admin={currentProfile?.role==='admin'} busy={busy} onAvatar={onAvatar} />
+      </div>
+    </section>
+  </div>
+}
+
+function TeamPeopleSection({ title, rows, admin, busy, onAvatar }) {
+  return <section className="team-people-section"><div className="team-people-heading"><h3>{title}</h3><span>{rows.length}</span></div>
+    {rows.length ? <div className="team-people-grid">{rows.map(row => <article className="team-person" key={row.id}>
+      <div className="team-person-avatar-wrap"><ProfileAvatar person={row.person} size="large" />{admin && <label className="avatar-admin-edit" title="Profielfoto aanpassen"><Icon name="edit" /><input type="file" accept="image/*" disabled={busy} onChange={e => { const file=e.target.files?.[0]; if(file) onAvatar(row.person,file); e.target.value='' }} /></label>}</div>
+      <strong>{row.person.first_name || personName(row.person)}</strong>
+      <small>{translateRole(row.member_role)}{row.person.jersey_number ? ` · #${row.person.jersey_number}` : ''}</small>
+    </article>)}</div> : <div className="admin-empty">Nog geen {title.toLowerCase()} gekoppeld.</div>}
+  </section>
+}
+
 function AdminPanel({ onMessage, onChanged }) {
   const [open, setOpen] = useState(false)
   const [view, setView] = useState('menu')
@@ -483,7 +574,7 @@ function AdminPanel({ onMessage, onChanged }) {
     const [seasonResult, teamResult, profileResult, memberResult] = await Promise.all([
       supabase.from('seasons').select('*').order('starts_on', { ascending: false }),
       supabase.from('teams').select('id,name,sport,is_active,season_id,seasons(name,is_active)').order('name'),
-      supabase.from('profiles').select('id,first_name,last_name,jersey_number,role').order('first_name'),
+      supabase.from('profiles').select('id,first_name,last_name,jersey_number,role,avatar_url').order('first_name'),
       supabase.from('team_members').select('id,team_id,profile_id,member_role')
     ])
     if (seasonResult.error) onMessage(`Seizoenen laden mislukt: ${seasonResult.error.message}`)
@@ -716,7 +807,7 @@ function AdminPanel({ onMessage, onChanged }) {
                           return <article className="member-row" key={membership.id}>
                             <span className="member-avatar">{initials(person)}</span>
                             <div className="member-copy"><strong>{personName(person)}</strong><small>{person?.jersey_number ? `#${person.jersey_number} · ` : ''}{person?.role === 'admin' ? 'Clubbeheerder' : 'Mijn OG-lid'}</small></div>
-                            <select aria-label={`Teamrol van ${personName(person)}`} value={membership.member_role} onChange={e => changeMemberRole(membership.id, e.target.value)} disabled={busy}><option value="player">Speler</option><option value="coach">Coach</option></select>
+                            <select aria-label={`Teamrol van ${personName(person)}`} value={membership.member_role} onChange={e => changeMemberRole(membership.id, e.target.value)} disabled={busy}><option value="player">Speler</option><option value="coach">Coach</option><option value="staff">Staff</option></select>
                             <button className="remove-member" onClick={() => removeMember(membership)} disabled={busy} aria-label={`${personName(person)} verwijderen`}><Icon name="trash" /></button>
                           </article>
                         })}
@@ -729,7 +820,7 @@ function AdminPanel({ onMessage, onChanged }) {
                         {availableProfiles.slice(0, 30).map(person => <article className="available-member-row" key={person.id}>
                           <span className="member-avatar small">{initials(person)}</span>
                           <div className="member-copy"><strong>{personName(person)}</strong><small>{person.jersey_number ? `#${person.jersey_number}` : 'Geen rugnummer'}</small></div>
-                          <div className="add-member-actions"><button className="mini-action" disabled={busy} onClick={() => addMember(person.id, 'player')}>+ Speler</button><button className="mini-action coach" disabled={busy} onClick={() => addMember(person.id, 'coach')}>+ Coach</button></div>
+                          <div className="add-member-actions"><button className="mini-action" disabled={busy} onClick={() => addMember(person.id, 'player')}>+ Speler</button><button className="mini-action coach" disabled={busy} onClick={() => addMember(person.id, 'coach')}>+ Coach</button><button className="mini-action" disabled={busy} onClick={() => addMember(person.id, 'staff')}>+ Staff</button></div>
                         </article>)}
                         {!availableProfiles.length && <div className="admin-empty">Geen beschikbare leden gevonden.</div>}
                       </div>
@@ -757,6 +848,7 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
   const [profileBusy, setProfileBusy] = useState(false)
   const [editingName, setEditingName] = useState(false)
   const [showCalendar, setShowCalendar] = useState(false)
+  const [avatarBusy, setAvatarBusy] = useState(false)
 
   useEffect(() => setIcsUrl(calendar?.ics_url ?? ''), [calendar])
   useEffect(() => { setFirstName(profile?.first_name ?? ''); setLastName(profile?.last_name ?? '') }, [profile])
@@ -809,16 +901,51 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
     else { setIcsUrl(''); setShowCalendar(false); onMessage('KNBSB-agenda ontkoppeld.'); onSaved() }
   }
 
+  async function uploadOwnAvatar(file) {
+    if (!file) return
+    setAvatarBusy(true)
+    onMessage('')
+    try {
+      const blob = await compressImage(file, { maxWidth: 512, maxHeight: 512, maxBytes: 100 * 1024, square: true })
+      const path = `${session.user.id}/profile.webp`
+      const { error: uploadError } = await supabase.storage.from('avatars').upload(path, blob, { contentType: 'image/webp', upsert: true })
+      if (uploadError) throw uploadError
+      const { data } = supabase.storage.from('avatars').getPublicUrl(path)
+      const url = `${data.publicUrl}?v=${Date.now()}`
+      const { error } = await supabase.rpc('set_profile_avatar', { target_profile_id: session.user.id, new_url: url })
+      if (error) throw error
+      onMessage('Profielfoto opgeslagen ✓')
+      await onSaved()
+    } catch (error) { onMessage(`Profielfoto uploaden mislukt: ${error.message}`) }
+    setAvatarBusy(false)
+  }
+
+  async function removeOwnAvatar() {
+    setAvatarBusy(true)
+    onMessage('')
+    try {
+      await supabase.storage.from('avatars').remove([`${session.user.id}/profile.webp`])
+      const { error } = await supabase.rpc('set_profile_avatar', { target_profile_id: session.user.id, new_url: null })
+      if (error) throw error
+      onMessage('Profielfoto verwijderd.')
+      await onSaved()
+    } catch (error) { onMessage(`Profielfoto verwijderen mislukt: ${error.message}`) }
+    setAvatarBusy(false)
+  }
+
   async function signOut() { await supabase.auth.signOut() }
 
   return (
     <section>
       <ScreenHeader title="Profiel" />
 
-      <article className="profile-card">
-        <span className="avatar"><Icon name="person" /></span>
-        <div className="profile-copy"><h2>{displayName}</h2><p>{teamLine}</p></div>
-        <button className="outline-action" onClick={() => setEditingName(true)}><Icon name="edit" /> Aanpassen</button>
+      <article className="profile-card profile-card-with-photo">
+        <div className="profile-avatar-control">
+          <ProfileAvatar person={profile} size="profile" />
+          <label className="avatar-change-button" title="Profielfoto aanpassen"><Icon name="camera" /><input type="file" accept="image/*" disabled={avatarBusy} onChange={e => { const file=e.target.files?.[0]; if(file) uploadOwnAvatar(file); e.target.value='' }} /></label>
+        </div>
+        <div className="profile-copy"><h2>{displayName}</h2><p>{teamLine}</p><div className="profile-photo-actions"><label className="text-button upload-text">{avatarBusy ? 'Uploaden…' : 'Foto aanpassen'}<input type="file" accept="image/*" disabled={avatarBusy} onChange={e => { const file=e.target.files?.[0]; if(file) uploadOwnAvatar(file); e.target.value='' }} /></label>{profile?.avatar_url && <button className="text-button subtle-danger" disabled={avatarBusy} onClick={removeOwnAvatar}>Verwijderen</button>}</div></div>
+        <button className="outline-action" onClick={() => setEditingName(true)}><Icon name="edit" /> Naam</button>
       </article>
 
       {editingName && (
@@ -837,7 +964,7 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
         <SettingsRow icon="lock" title="Wachtwoord" subtitle="Reset via het inlogscherm" />
         <SettingsRow icon="bell" title="Notificaties" subtitle="Pushmeldingen komen later" disabled />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setShowCalendar(v => !v)} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.5.1" />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.5.2" />
       </div>
 
       {showCalendar && (
@@ -910,7 +1037,8 @@ function Icon({ name }) {
     people: <><circle cx="8" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M2.5 20c0-4 2.3-6 5.5-6s5.5 2 5.5 6M14 15c3.5 0 6 1.6 6 5"/></>,
     back: <><path d="m15 18-6-6 6-6"/></>,
     close: <><path d="M6 6l12 12M18 6 6 18"/></>,
-    trash: <><path d="M4 7h16M9 7V4h6v3M7 7l1 14h8l1-14M10 11v6M14 11v6"/></>
+    trash: <><path d="M4 7h16M9 7V4h6v3M7 7l1 14h8l1-14M10 11v6M14 11v6"/></>,
+    camera: <><path d="M4 8h3l1.5-2h7L17 8h3v11H4Z"/><circle cx="12" cy="13" r="3.5"/></>
   }
   return <svg className="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name] || paths.more}</svg>
 }
@@ -920,11 +1048,60 @@ function iconNameForTab(tab) {
 }
 
 function translateRole(role) {
-  return { player: 'speler', coach: 'coach', admin: 'beheerder' }[role] || role || 'lid'
+  return { player: 'speler', coach: 'coach', staff: 'staff', admin: 'beheerder' }[role] || role || 'lid'
 }
 
 function capitalize(value = '') { return value ? value.charAt(0).toUpperCase() + value.slice(1) : '' }
 
+
+function ProfileAvatar({ person, size = 'normal' }) {
+  const cls = `profile-avatar profile-avatar-${size}`
+  return person?.avatar_url ? <img className={cls} src={person.avatar_url} alt={`Profielfoto ${personName(person)}`} /> : <span className={`${cls} profile-avatar-fallback`}>{initials(person)}</span>
+}
+
+async function compressImage(file, { maxWidth, maxHeight, maxBytes, square }) {
+  const image = await loadImageFile(file)
+  let sourceX = 0, sourceY = 0, sourceWidth = image.width, sourceHeight = image.height
+  let width, height
+  if (square) {
+    const side = Math.min(image.width, image.height)
+    sourceX = (image.width - side) / 2
+    sourceY = (image.height - side) / 2
+    sourceWidth = side; sourceHeight = side
+    width = Math.min(maxWidth, side); height = width
+  } else {
+    const scale = Math.min(1, maxWidth / image.width, maxHeight / image.height)
+    width = Math.max(1, Math.round(image.width * scale))
+    height = Math.max(1, Math.round(image.height * scale))
+  }
+  const canvas = document.createElement('canvas')
+  canvas.width = width; canvas.height = height
+  const ctx = canvas.getContext('2d', { alpha: false })
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, width, height)
+  ctx.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, width, height)
+  let quality = .82
+  let blob = await canvasToBlob(canvas, quality)
+  while (blob.size > maxBytes && quality > .38) {
+    quality -= .07
+    blob = await canvasToBlob(canvas, quality)
+  }
+  if (blob.size > maxBytes) throw new Error(`Afbeelding blijft te groot (${Math.round(blob.size/1024)} KB). Kies een andere foto.`)
+  return blob
+}
+
+function loadImageFile(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file)
+    const image = new Image()
+    image.onload = () => { URL.revokeObjectURL(url); resolve(image) }
+    image.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Deze afbeelding kon niet worden gelezen.')) }
+    image.src = url
+  })
+}
+
+function canvasToBlob(canvas, quality) {
+  return new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Afbeelding verwerken mislukt.')), 'image/webp', quality))
+}
 
 function personName(profile) {
   if (!profile) return 'Onbekend lid'

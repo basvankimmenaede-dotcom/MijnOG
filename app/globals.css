@@ -1071,3 +1071,135 @@ input:focus, textarea:focus, select:focus {
   .admin-modal-backdrop, .modal-backdrop { padding: 12px; }
   .club-admin-modal, .detail-modal { border-radius: 16px; max-height: calc(100dvh - 24px); }
 }
+
+/* =========================================================
+   Mijn OG v2.5.2 — Profielfoto's & teamprofielen
+   ========================================================= */
+
+.profile-avatar {
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #fff2ea;
+  color: var(--og-orange-dark);
+  font-family: "Barlow Condensed", sans-serif;
+  font-weight: 800;
+  border: 1px solid rgba(255, 90, 10, .13);
+  flex: 0 0 auto;
+}
+.profile-avatar-normal { width: 46px; height: 46px; font-size: 17px; }
+.profile-avatar-large { width: 78px; height: 78px; font-size: 25px; }
+.profile-avatar-profile { width: 82px; height: 82px; font-size: 28px; }
+.profile-avatar-fallback { text-transform: uppercase; }
+
+.profile-card-with-photo { align-items: center; }
+.profile-avatar-control { position: relative; flex: 0 0 auto; }
+.avatar-change-button,
+.avatar-admin-edit {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--og-orange);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(17, 19, 24, .16);
+  cursor: pointer;
+}
+.avatar-change-button { right: -2px; bottom: -2px; width: 30px; height: 30px; }
+.avatar-admin-edit { right: 1px; bottom: 1px; width: 28px; height: 28px; }
+.avatar-change-button .icon,
+.avatar-admin-edit .icon { width: 15px; height: 15px; }
+.avatar-change-button input,
+.avatar-admin-edit input,
+.photo-upload-button input,
+.upload-text input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.profile-photo-actions { display: flex; gap: 12px; align-items: center; margin-top: 7px; flex-wrap: wrap; }
+.upload-text { position: relative; display: inline-flex; cursor: pointer; }
+.subtle-danger { color: var(--red); }
+
+.clickable-team {
+  width: 100%;
+  appearance: none;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 15px;
+}
+.clickable-team > .icon { color: var(--muted); }
+.clickable-team small { color: var(--og-orange-dark); font-weight: 700; }
+.team-thumb-image { width: 72px; height: 58px; border-radius: 12px; object-fit: cover; background: var(--soft); }
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(17, 19, 24, .52);
+  backdrop-filter: blur(3px);
+}
+.team-modal {
+  width: min(100%, 620px);
+  max-height: min(88dvh, 820px);
+  overflow: auto;
+  background: var(--white);
+  border-radius: 22px;
+  box-shadow: 0 24px 70px rgba(17, 19, 24, .25);
+}
+.team-modal-hero {
+  position: relative;
+  min-height: 210px;
+  overflow: hidden;
+  background: var(--ink);
+  border-radius: 22px 22px 0 0;
+}
+.team-modal-hero > img { width: 100%; height: 240px; object-fit: cover; display: block; }
+.team-photo-placeholder { min-height: 220px; display: grid; place-items: center; align-content: center; gap: 10px; color: rgba(255,255,255,.75); }
+.team-photo-placeholder .icon { width: 42px; height: 42px; }
+.team-close { position: absolute; right: 14px; top: 14px; background: rgba(255,255,255,.94); }
+.photo-upload-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 10px;
+  background: var(--og-orange);
+  color: white;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.team-photo-button { position: absolute; right: 14px; bottom: 14px; }
+.team-modal-body { padding: 24px; }
+.team-modal-title { text-align: center; padding-bottom: 8px; }
+.team-modal-title h2 { font-family: "Barlow Condensed", sans-serif; font-size: 31px; margin: 0; }
+.team-people-section { margin-top: 22px; }
+.team-people-heading { display: flex; align-items: baseline; justify-content: space-between; border-bottom: 1px solid var(--line); padding-bottom: 8px; margin-bottom: 14px; }
+.team-people-heading h3 { font-family: "Barlow Condensed", sans-serif; text-transform: uppercase; letter-spacing: .04em; font-size: 18px; margin: 0; }
+.team-people-heading span { color: var(--muted); font-size: 13px; }
+.team-people-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px 12px; }
+.team-person { text-align: center; min-width: 0; }
+.team-person-avatar-wrap { width: fit-content; margin: 0 auto 8px; position: relative; }
+.team-person strong, .team-person small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.team-person strong { font-size: 14px; }
+.team-person small { margin-top: 3px; color: var(--muted); font-size: 12px; text-transform: capitalize; }
+
+@media (max-width: 520px) {
+  .profile-card-with-photo { grid-template-columns: auto minmax(0,1fr); align-items: center; }
+  .profile-card-with-photo .outline-action { grid-column: 1 / -1; width: 100%; justify-content: center; }
+  .team-modal { max-height: 92dvh; border-radius: 18px; }
+  .team-modal-hero { border-radius: 18px 18px 0 0; min-height: 185px; }
+  .team-modal-hero > img { height: 200px; }
+  .team-modal-body { padding: 20px 16px 24px; }
+  .team-people-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px 8px; }
+  .profile-avatar-large { width: 68px; height: 68px; }
+  .team-photo-button { left: 14px; right: 14px; width: auto; }
+}
