@@ -39,3 +39,9 @@ Deze route moet eenmaal per uur worden aangeroepen met:
 `Authorization: Bearer <CRON_SECRET>`
 
 De app-code is hiervoor klaar. Je kunt later Vercel Cron of een andere scheduler koppelen.
+
+
+## v2.6.3 diagnostics
+- Lokale notificatietest zonder pushserver.
+- Server-side controle of VAPID public/private keys echt bij elkaar horen.
+- Toont of er een actieve subscription en geldig subject aanwezig zijn.
