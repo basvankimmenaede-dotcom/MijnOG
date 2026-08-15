@@ -403,6 +403,114 @@ function Team({ teams }) {
   )
 }
 
+function AdminPanel({ onMessage }) {
+  const [seasons, setSeasons] = useState([])
+  const [teams, setTeams] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [seasonForm, setSeasonForm] = useState({ name: '', starts_on: '', ends_on: '' })
+  const [teamForm, setTeamForm] = useState({ name: '', sport: 'softbal', season_id: '' })
+  const [showSeasonForm, setShowSeasonForm] = useState(false)
+  const [showTeamForm, setShowTeamForm] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => { loadAdminData() }, [])
+
+  async function loadAdminData() {
+    setLoading(true)
+    const [seasonResult, teamResult] = await Promise.all([
+      supabase.from('seasons').select('*').order('starts_on', { ascending: false }),
+      supabase.from('teams').select('id,name,sport,is_active,season_id,seasons(name,is_active)').order('name')
+    ])
+    if (seasonResult.error) onMessage(`Seizoenen laden mislukt: ${seasonResult.error.message}`)
+    else setSeasons(seasonResult.data ?? [])
+    if (teamResult.error) onMessage(`Teams laden mislukt: ${teamResult.error.message}`)
+    else setTeams(teamResult.data ?? [])
+    setLoading(false)
+  }
+
+  async function addSeason(e) {
+    e.preventDefault()
+    if (!seasonForm.name.trim()) return
+    setBusy(true); onMessage('')
+    const { error } = await supabase.from('seasons').insert({
+      name: seasonForm.name.trim(),
+      starts_on: seasonForm.starts_on || null,
+      ends_on: seasonForm.ends_on || null,
+      is_active: seasons.length === 0
+    })
+    setBusy(false)
+    if (error) return onMessage(`Seizoen toevoegen mislukt: ${error.message}`)
+    setSeasonForm({ name: '', starts_on: '', ends_on: '' }); setShowSeasonForm(false); onMessage('Seizoen toegevoegd ✓'); loadAdminData()
+  }
+
+  async function activateSeason(id) {
+    setBusy(true); onMessage('')
+    const current = seasons.find(s => s.is_active)
+    if (current && current.id !== id) {
+      const { error } = await supabase.from('seasons').update({ is_active: false }).eq('id', current.id)
+      if (error) { setBusy(false); return onMessage(`Actief seizoen wijzigen mislukt: ${error.message}`) }
+    }
+    const { error } = await supabase.from('seasons').update({ is_active: true }).eq('id', id)
+    setBusy(false)
+    if (error) onMessage(`Actief seizoen wijzigen mislukt: ${error.message}`)
+    else { onMessage('Actief seizoen gewijzigd ✓'); loadAdminData() }
+  }
+
+  async function addTeam(e) {
+    e.preventDefault()
+    if (!teamForm.name.trim() || !teamForm.season_id) return
+    setBusy(true); onMessage('')
+    const { error } = await supabase.from('teams').insert({
+      name: teamForm.name.trim(), sport: teamForm.sport, season_id: Number(teamForm.season_id), is_active: true
+    })
+    setBusy(false)
+    if (error) return onMessage(`Team toevoegen mislukt: ${error.message}`)
+    setTeamForm({ name: '', sport: 'softbal', season_id: '' }); setShowTeamForm(false); onMessage('Team toegevoegd ✓'); loadAdminData()
+  }
+
+  async function toggleTeam(team) {
+    setBusy(true); onMessage('')
+    const { error } = await supabase.from('teams').update({ is_active: !team.is_active }).eq('id', team.id)
+    setBusy(false)
+    if (error) onMessage(`Team wijzigen mislukt: ${error.message}`)
+    else loadAdminData()
+  }
+
+  if (loading) return <div className="subtle-loading">Beheer laden…</div>
+
+  return (
+    <section className="admin-panel">
+      <div className="admin-heading"><div><p className="eyebrow orange">BEHEERDER</p><h2>Clubbeheer</h2></div><span className="admin-badge">Admin</span></div>
+
+      <div className="admin-block">
+        <SectionTitle title="Seizoenen" action="+ Nieuw" onAction={() => setShowSeasonForm(v => !v)} />
+        {showSeasonForm && <form className="edit-panel form-stack" onSubmit={addSeason}>
+          <label>Naam<input placeholder="2027" value={seasonForm.name} onChange={e => setSeasonForm({...seasonForm, name:e.target.value})} required /></label>
+          <div className="admin-form-grid"><label>Startdatum<input type="date" value={seasonForm.starts_on} onChange={e => setSeasonForm({...seasonForm, starts_on:e.target.value})} /></label><label>Einddatum<input type="date" value={seasonForm.ends_on} onChange={e => setSeasonForm({...seasonForm, ends_on:e.target.value})} /></label></div>
+          <button className="primary" disabled={busy}>Seizoen toevoegen</button>
+        </form>}
+        <div className="admin-list">
+          {seasons.map(season => <article className="admin-row" key={season.id}><div><strong>{season.name}</strong><small>{season.starts_on || 'Geen startdatum'}{season.ends_on ? ` – ${season.ends_on}` : ''}</small></div>{season.is_active ? <span className="active-badge">Actief</span> : <button className="mini-action" disabled={busy} onClick={() => activateSeason(season.id)}>Actief maken</button>}</article>)}
+          {!seasons.length && <p className="muted">Nog geen seizoenen.</p>}
+        </div>
+      </div>
+
+      <div className="admin-block">
+        <SectionTitle title="Teams" action="+ Team" onAction={() => setShowTeamForm(v => !v)} />
+        {showTeamForm && <form className="edit-panel form-stack" onSubmit={addTeam}>
+          <label>Teamnaam<input placeholder="Softbal Dames 1" value={teamForm.name} onChange={e => setTeamForm({...teamForm, name:e.target.value})} required /></label>
+          <div className="admin-form-grid"><label>Sport<select value={teamForm.sport} onChange={e => setTeamForm({...teamForm, sport:e.target.value})}><option value="softbal">Softbal</option><option value="honkbal">Honkbal</option></select></label><label>Seizoen<select value={teamForm.season_id} onChange={e => setTeamForm({...teamForm, season_id:e.target.value})} required><option value="">Kies seizoen</option>{seasons.map(s => <option value={s.id} key={s.id}>{s.name}{s.is_active ? ' (actief)' : ''}</option>)}</select></label></div>
+          <button className="primary" disabled={busy}>Team toevoegen</button>
+        </form>}
+        <div className="admin-list">
+          {teams.map(team => <article className={`admin-row${team.is_active ? '' : ' inactive'}`} key={team.id}><div><strong>{team.name}</strong><small>{capitalize(team.sport)} · {team.seasons?.name || 'Geen seizoen'}</small></div><button className="mini-action" disabled={busy} onClick={() => toggleTeam(team)}>{team.is_active ? 'Archiveren' : 'Activeren'}</button></article>)}
+          {!teams.length && <p className="muted">Nog geen teams.</p>}
+        </div>
+      </div>
+    </section>
+  )
+}
+
 function More({ session, profile, teams, calendar, onSaved, onMessage }) {
   const [icsUrl, setIcsUrl] = useState(calendar?.ics_url ?? '')
   const [firstName, setFirstName] = useState(profile?.first_name ?? '')
@@ -504,6 +612,8 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
           </div>
         </section>
       )}
+
+      {profile?.role === 'admin' && <AdminPanel onMessage={onMessage} />}
 
       <button className="logout-button" onClick={signOut}><Icon name="logout" /> Uitloggen</button>
     </section>

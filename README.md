@@ -26,3 +26,8 @@ Deze environment variables moeten blijven bestaan:
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
 
 Gebruik als live/testdomein het Vercel-domein dat correct naar de nieuwste production deployment wijst.
+
+
+## Nieuw in 2.2 - Adminbeheer
+
+Gebruikers met `profiles.role = admin` zien onder **Meer** een blok **Clubbeheer**. Daar kunnen ze seizoenen toevoegen, het actieve seizoen kiezen, teams toevoegen en teams archiveren/activeren. De app gebruikt de bestaande RLS-policies en `public.is_admin()` helper in Supabase.
