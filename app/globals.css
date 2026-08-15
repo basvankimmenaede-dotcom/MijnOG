@@ -1303,3 +1303,5 @@ input:focus, textarea:focus, select:focus {
 .push-info-list strong { flex:0 0 auto; }
 .push-info-list span { color:var(--muted,#77736f); text-align:right; }
 @media (max-width: 520px) { .push-info-list > div { display:block; } .push-info-list span { display:block; text-align:left; margin-top:3px; } }
+
+.push-feedback { margin-top: 12px; padding: 12px 14px; border: 1px solid var(--line, #e8e4df); border-radius: 12px; background: #fff8f2; color: var(--ink, #171717); font-size: 14px; line-height: 1.45; }

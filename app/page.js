@@ -1064,7 +1064,7 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
         <SettingsRow icon="lock" title="Wachtwoord" subtitle="Reset via het inlogscherm" />
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setShowNotifications(v => !v)} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setShowCalendar(v => !v)} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.6.3" />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.6.4" />
       </div>
 
       {showNotifications && (
@@ -1097,6 +1097,7 @@ function PushSettings({ session, profile, onMessage }) {
   const [testing, setTesting] = useState(false)
   const [localTesting, setLocalTesting] = useState(false)
   const [diagnosing, setDiagnosing] = useState(false)
+  const [pushFeedback, setPushFeedback] = useState('')
   const [installed, setInstalled] = useState(true)
 
   useEffect(() => {
@@ -1172,18 +1173,19 @@ function PushSettings({ session, profile, onMessage }) {
   }
 
   async function sendTest() {
-    setTesting(true); onMessage('')
+    setTesting(true); setPushFeedback('Serverpush wordt verstuurd…'); onMessage('')
     try {
       const response = await fetch('/api/push/test', { method: 'POST', headers: { Authorization: `Bearer ${session.access_token}` } })
       const payload = await response.json()
       if (!response.ok) throw new Error(payload.error || 'Testmelding kon niet worden verstuurd.')
-      onMessage(payload.sent ? 'Testmelding verstuurd. Sluit Mijn OG even om hem als push te zien.' : 'Geen actieve pushinschrijving gevonden.')
-    } catch (error) { onMessage(`Testmelding mislukt: ${error.message}`) }
+      const text = payload.sent ? 'Server accepteerde de testpush. Sluit Mijn OG even om hem als push te zien.' : 'Geen actieve pushinschrijving gevonden.'
+      setPushFeedback(text); onMessage(text)
+    } catch (error) { const text = `Testmelding mislukt: ${error.message}`; setPushFeedback(text); onMessage(text) }
     finally { setTesting(false) }
   }
 
   async function sendLocalTest() {
-    setLocalTesting(true); onMessage('')
+    setLocalTesting(true); setPushFeedback('Lokale notificatie wordt getest…'); onMessage('')
     try {
       if (Notification.permission !== 'granted') throw new Error('Meldingstoestemming is niet actief.')
       const registration = await navigator.serviceWorker.getRegistration('/sw.js') || await navigator.serviceWorker.ready
@@ -1194,21 +1196,23 @@ function PushSettings({ session, profile, onMessage }) {
         tag: 'mijn-og-local-test',
         data: { url: '/?tab=Meer' }
       })
-      onMessage('Lokale testmelding aangeboden aan iOS. Zie je deze melding, dan werkt de telefoonkant goed.')
-    } catch (error) { onMessage(`Lokale test mislukt: ${error.message}`) }
+      const text = 'Lokale notificatie is door de service worker geaccepteerd. Verschijnt geen banner, controleer iOS-meldingsinstellingen.'
+      setPushFeedback(text); onMessage(text)
+    } catch (error) { const text = `Lokale test mislukt: ${error.message}`; setPushFeedback(text); onMessage(text) }
     finally { setLocalTesting(false) }
   }
 
   async function runDiagnostics() {
-    setDiagnosing(true); onMessage('')
+    setDiagnosing(true); setPushFeedback('Pushconfiguratie wordt gecontroleerd…'); onMessage('')
     try {
       const response = await fetch('/api/push/diagnostics', { headers: { Authorization: `Bearer ${session.access_token}` } })
       const payload = await response.json()
       if (!response.ok) throw new Error(payload.error || 'Diagnose mislukt.')
       const pairText = payload.vapid?.pairMatches ? 'VAPID-keypair klopt.' : `VAPID-keypair klopt NIET: ${payload.vapid?.problem || 'onbekend probleem'}`
       const subText = payload.subscription?.found ? ` Subscription gevonden (${payload.subscription.endpointOrigin}).` : ' Geen actieve subscription gevonden.'
-      onMessage(`${pairText}${subText}`)
-    } catch (error) { onMessage(`Pushdiagnose mislukt: ${error.message}`) }
+      const text = `${pairText}${subText}`
+      setPushFeedback(text); onMessage(text)
+    } catch (error) { const text = `Pushdiagnose mislukt: ${error.message}`; setPushFeedback(text); onMessage(text) }
     finally { setDiagnosing(false) }
   }
 
@@ -1217,11 +1221,12 @@ function PushSettings({ session, profile, onMessage }) {
     {!supported ? <div className="push-callout"><strong>Niet ondersteund</strong><p>Deze browser ondersteunt web-push niet.</p></div> : !installed ? <div className="push-callout"><strong>Installeer Mijn OG eerst</strong><p>Open Safari → Deel → Zet op beginscherm. Open Mijn OG daarna via het nieuwe icoon.</p></div> : <>
       <div className="push-status"><span className={`push-status-mark ${enabled ? 'on' : ''}`}><Icon name="bell" /></span><div><strong>{enabled ? 'Meldingen ingeschakeld' : 'Meldingen uitgeschakeld'}</strong><small>Toestemming: {translateNotificationPermission(permission)}</small></div></div>
       <div className="push-actions">
-        {!enabled ? <button className="primary" onClick={enablePush} disabled={busy}>{busy ? 'Inschakelen…' : 'Meldingen inschakelen'}</button> : <button className="secondary" onClick={disablePush} disabled={busy}>{busy ? 'Uitschakelen…' : 'Meldingen uitschakelen'}</button>}
-        {enabled && <button className="secondary" onClick={sendLocalTest} disabled={localTesting}>{localTesting ? 'Testen…' : 'Test melding op dit apparaat'}</button>}
-        {enabled && profile?.role === 'admin' && <button className="secondary" onClick={runDiagnostics} disabled={diagnosing}>{diagnosing ? 'Controleren…' : 'Controleer pushconfiguratie'}</button>}
-        {enabled && profile?.role === 'admin' && <button className="secondary" onClick={sendTest} disabled={testing}>{testing ? 'Versturen…' : 'Stuur testpush via server'}</button>}
+        {!enabled ? <button type="button" className="primary" onClick={enablePush} disabled={busy}>{busy ? 'Inschakelen…' : 'Meldingen inschakelen'}</button> : <button type="button" className="secondary" onClick={disablePush} disabled={busy}>{busy ? 'Uitschakelen…' : 'Meldingen uitschakelen'}</button>}
+        {enabled && <button type="button" className="secondary" onClick={sendLocalTest} disabled={localTesting}>{localTesting ? 'Testen…' : 'Test melding op dit apparaat'}</button>}
+        {enabled && profile?.role === 'admin' && <button type="button" className="secondary" onClick={runDiagnostics} disabled={diagnosing}>{diagnosing ? 'Controleren…' : 'Controleer pushconfiguratie'}</button>}
+        {enabled && profile?.role === 'admin' && <button type="button" className="secondary" onClick={sendTest} disabled={testing}>{testing ? 'Versturen…' : 'Stuur testpush via server'}</button>}
       </div>
+      {pushFeedback && <div className="push-feedback" role="status" aria-live="polite">{pushFeedback}</div>}
       <div className="push-info-list"><div><strong>Trainingen</strong><span>Belangrijke herinneringen en wijzigingen.</span></div><div><strong>Misschien</strong><span>24 uur voor aanvang een verzoek om definitief te kiezen.</span></div></div>
     </>}
   </section>
