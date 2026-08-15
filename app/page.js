@@ -144,7 +144,7 @@ export default function HomePage() {
     <main className="app-shell">
       <header className="topbar">
         <div className="brand-lockup"><img className="brand-logo" src="/og-logo.png" alt="Onze Gezellen" /><span className="brand-name">Mijn OG</span></div>
-        <button className="icon-button" aria-label="Meldingen" title="Meldingen komen later"><Icon name="bell" /><span className="notification-dot" aria-hidden="true" /></button>
+        <button className="icon-button" aria-label="Meldingen" title="Meldingen beheren" onClick={() => navigate('Meer')}><Icon name="bell" /></button>
       </header>
       <section className="content">
         {message && <div className="notice">{message}</div>}
@@ -946,6 +946,7 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
   const [profileBusy, setProfileBusy] = useState(false)
   const [editingName, setEditingName] = useState(false)
   const [showCalendar, setShowCalendar] = useState(false)
+  const [showNotifications, setShowNotifications] = useState(false)
   const [avatarBusy, setAvatarBusy] = useState(false)
   const [avatarCropFile, setAvatarCropFile] = useState(null)
 
@@ -1061,10 +1062,14 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
       <div className="settings-list">
         <SettingsRow icon="person" title="Persoonlijke gegevens" subtitle={session.user.email} />
         <SettingsRow icon="lock" title="Wachtwoord" subtitle="Reset via het inlogscherm" />
-        <SettingsRow icon="bell" title="Notificaties" subtitle="Pushmeldingen komen later" disabled />
+        <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setShowNotifications(v => !v)} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setShowCalendar(v => !v)} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.5.4" />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.6" />
       </div>
+
+      {showNotifications && (
+        <PushSettings session={session} profile={profile} onMessage={onMessage} />
+      )}
 
       {showCalendar && (
         <section className="edit-panel calendar-panel">
@@ -1082,6 +1087,121 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
       <button className="logout-button" onClick={signOut}><Icon name="logout" /> Uitloggen</button>
     </section>
   </>)
+}
+
+function PushSettings({ session, profile, onMessage }) {
+  const [supported, setSupported] = useState(true)
+  const [permission, setPermission] = useState('default')
+  const [enabled, setEnabled] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [installed, setInstalled] = useState(true)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const canPush = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
+    setSupported(canPush)
+    setPermission(canPush ? Notification.permission : 'unsupported')
+    const standalone = window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true
+    const isiOS = /iphone|ipad|ipod/i.test(window.navigator.userAgent)
+    setInstalled(!isiOS || standalone)
+    if (!canPush) return
+    navigator.serviceWorker.register('/sw.js').then(async registration => {
+      const subscription = await registration.pushManager.getSubscription()
+      setEnabled(Boolean(subscription))
+    }).catch(() => setSupported(false))
+  }, [])
+
+  async function enablePush() {
+    if (!supported) return
+    if (!installed) {
+      onMessage('Voeg Mijn OG op iPhone eerst toe aan je beginscherm en open de app daarna vanaf het icoon.')
+      return
+    }
+    const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+    if (!publicKey) {
+      onMessage('De publieke push-sleutel ontbreekt in Vercel.')
+      return
+    }
+    setBusy(true); onMessage('')
+    try {
+      const result = await Notification.requestPermission()
+      setPermission(result)
+      if (result !== 'granted') throw new Error('Meldingstoestemming is niet gegeven.')
+      const registration = await navigator.serviceWorker.register('/sw.js')
+      await navigator.serviceWorker.ready
+      let subscription = await registration.pushManager.getSubscription()
+      if (!subscription) {
+        subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(publicKey) })
+      }
+      const json = subscription.toJSON()
+      const { error } = await supabase.from('push_subscriptions').upsert({
+        profile_id: session.user.id,
+        endpoint: subscription.endpoint,
+        p256dh: json.keys?.p256dh,
+        auth: json.keys?.auth,
+        user_agent: navigator.userAgent,
+        enabled: true,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'endpoint' })
+      if (error) throw error
+      setEnabled(true)
+      onMessage('Pushmeldingen zijn ingeschakeld.')
+    } catch (error) {
+      onMessage(`Pushmeldingen inschakelen mislukt: ${error.message}`)
+    } finally { setBusy(false) }
+  }
+
+  async function disablePush() {
+    setBusy(true); onMessage('')
+    try {
+      const registration = await navigator.serviceWorker.getRegistration('/sw.js') || await navigator.serviceWorker.ready
+      const subscription = await registration.pushManager.getSubscription()
+      if (subscription) {
+        await supabase.from('push_subscriptions').delete().eq('profile_id', session.user.id).eq('endpoint', subscription.endpoint)
+        await subscription.unsubscribe()
+      } else {
+        await supabase.from('push_subscriptions').delete().eq('profile_id', session.user.id)
+      }
+      setEnabled(false)
+      onMessage('Pushmeldingen zijn uitgeschakeld.')
+    } catch (error) { onMessage(`Uitschakelen mislukt: ${error.message}`) }
+    finally { setBusy(false) }
+  }
+
+  async function sendTest() {
+    setTesting(true); onMessage('')
+    try {
+      const response = await fetch('/api/push/test', { method: 'POST', headers: { Authorization: `Bearer ${session.access_token}` } })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.error || 'Testmelding kon niet worden verstuurd.')
+      onMessage(payload.sent ? 'Testmelding verstuurd. Sluit Mijn OG even om hem als push te zien.' : 'Geen actieve pushinschrijving gevonden.')
+    } catch (error) { onMessage(`Testmelding mislukt: ${error.message}`) }
+    finally { setTesting(false) }
+  }
+
+  return <section className="edit-panel notification-panel">
+    <div className="edit-panel-head"><div><h2>Pushmeldingen</h2><p className="muted no-margin">Ontvang herinneringen over trainingen en aanwezigheid.</p></div></div>
+    {!supported ? <div className="push-callout"><strong>Niet ondersteund</strong><p>Deze browser ondersteunt web-push niet.</p></div> : !installed ? <div className="push-callout"><strong>Installeer Mijn OG eerst</strong><p>Open Safari → Deel → Zet op beginscherm. Open Mijn OG daarna via het nieuwe icoon.</p></div> : <>
+      <div className="push-status"><span className={`push-status-mark ${enabled ? 'on' : ''}`}><Icon name="bell" /></span><div><strong>{enabled ? 'Meldingen ingeschakeld' : 'Meldingen uitgeschakeld'}</strong><small>Toestemming: {translateNotificationPermission(permission)}</small></div></div>
+      <div className="push-actions">
+        {!enabled ? <button className="primary" onClick={enablePush} disabled={busy}>{busy ? 'Inschakelen…' : 'Meldingen inschakelen'}</button> : <button className="secondary" onClick={disablePush} disabled={busy}>{busy ? 'Uitschakelen…' : 'Meldingen uitschakelen'}</button>}
+        {enabled && profile?.role === 'admin' && <button className="secondary" onClick={sendTest} disabled={testing}>{testing ? 'Versturen…' : 'Stuur testmelding naar mij'}</button>}
+      </div>
+      <div className="push-info-list"><div><strong>Trainingen</strong><span>Belangrijke herinneringen en wijzigingen.</span></div><div><strong>Misschien</strong><span>24 uur voor aanvang een verzoek om definitief te kiezen.</span></div></div>
+    </>}
+  </section>
+}
+
+function translateNotificationPermission(value) {
+  return { granted: 'toegestaan', denied: 'geblokkeerd', default: 'nog niet gevraagd', unsupported: 'niet ondersteund' }[value] || value
+}
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4)
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
+  const rawData = window.atob(base64)
+  return Uint8Array.from([...rawData].map(char => char.charCodeAt(0)))
 }
 
 function SettingsRow({ icon, title, subtitle, status, onClick, disabled }) {

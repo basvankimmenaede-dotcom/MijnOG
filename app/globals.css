@@ -1286,3 +1286,20 @@ input:focus, textarea:focus, select:focus {
 .invite-intro { margin-bottom: 14px; }
 .invite-intro h3 { margin: 2px 0 6px; }
 .invite-intro p { margin: 0; }
+
+/* v2.6 Push notifications */
+.notification-panel { margin-top: 14px; }
+.push-callout { padding: 16px; border: 1px solid var(--border, #e8e4df); border-radius: 14px; background: var(--surface-soft, #f7f5f2); }
+.push-callout strong { display:block; margin-bottom:4px; }
+.push-callout p { margin:0; color:var(--muted,#77736f); }
+.push-status { display:flex; align-items:center; gap:14px; padding:14px 0 18px; }
+.push-status-mark { width:44px; height:44px; border-radius:50%; display:grid; place-items:center; background:#eeeae5; color:var(--muted,#77736f); flex:0 0 auto; }
+.push-status-mark.on { background:rgba(243,111,33,.14); color:var(--og-orange,#f36f21); }
+.push-status strong, .push-status small { display:block; }
+.push-status small { margin-top:2px; color:var(--muted,#77736f); }
+.push-actions { display:grid; gap:10px; }
+.push-info-list { margin-top:18px; border-top:1px solid var(--border,#e8e4df); }
+.push-info-list > div { display:flex; justify-content:space-between; gap:18px; padding:13px 0; border-bottom:1px solid var(--border,#e8e4df); }
+.push-info-list strong { flex:0 0 auto; }
+.push-info-list span { color:var(--muted,#77736f); text-align:right; }
+@media (max-width: 520px) { .push-info-list > div { display:block; } .push-info-list span { display:block; text-align:left; margin-top:3px; } }

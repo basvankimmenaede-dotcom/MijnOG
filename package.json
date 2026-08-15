@@ -1,6 +1,6 @@
 {
   "name": "mijn-og",
-  "version": "2.5.4",
+  "version": "2.6.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -11,6 +11,7 @@
     "@supabase/supabase-js": "latest",
     "next": "latest",
     "react": "latest",
-    "react-dom": "latest"
+    "react-dom": "latest",
+    "web-push": "3.6.7"
   }
 }
