@@ -15,30 +15,31 @@ export default function HomePage() {
   const [teams, setTeams] = useState([])
   const [calendarConnection, setCalendarConnection] = useState(null)
   const [calendarEvents, setCalendarEvents] = useState([])
+  const [trainingEvents, setTrainingEvents] = useState([])
+  const [attendance, setAttendance] = useState([])
+  const [visibleProfiles, setVisibleProfiles] = useState([])
   const [calendarState, setCalendarState] = useState({ loading: false, error: '' })
   const [recoveryMode, setRecoveryMode] = useState(false)
+  const [absenceEvent, setAbsenceEvent] = useState(null)
+  const [absenceReason, setAbsenceReason] = useState('')
+  const [attendanceBusy, setAttendanceBusy] = useState(false)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session ?? null)
       setAuthReady(true)
     })
-
     const { data: listener } = supabase.auth.onAuthStateChange((event, newSession) => {
       if (event === 'PASSWORD_RECOVERY') setRecoveryMode(true)
       setSession(newSession)
       setAuthReady(true)
     })
-
     return () => listener.subscription.unsubscribe()
   }, [])
 
   useEffect(() => {
     if (!session?.user?.id) {
-      setProfile(null)
-      setTeams([])
-      setCalendarConnection(null)
-      setCalendarEvents([])
+      setProfile(null); setTeams([]); setCalendarConnection(null); setCalendarEvents([]); setTrainingEvents([]); setAttendance([]); setVisibleProfiles([])
       return
     }
     loadUserData(session.user.id, session.access_token)
@@ -47,47 +48,69 @@ export default function HomePage() {
   async function loadUserData(userId, accessToken = session?.access_token) {
     setLoading(true)
     setMessage('')
-
-    const [profileResult, teamResult, calendarResult] = await Promise.all([
+    const [profileResult, teamResult, calendarResult, eventResult, attendanceResult, profilesResult] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
-      supabase.from('team_members').select('member_role, teams(id, name, sport)').eq('profile_id', userId),
-      supabase.from('calendar_connections').select('*').eq('profile_id', userId).eq('provider', 'foys').maybeSingle()
+      supabase.from('team_members').select('member_role, teams(id, name, sport, season_id, is_active)').eq('profile_id', userId),
+      supabase.from('calendar_connections').select('*').eq('profile_id', userId).eq('provider', 'foys').maybeSingle(),
+      supabase.from('events').select('*').order('start_at', { ascending: true }),
+      supabase.from('attendance').select('*'),
+      supabase.from('profiles').select('id, first_name, last_name, jersey_number, role')
     ])
-
     if (profileResult.error) setMessage(`Profiel kon niet worden geladen: ${profileResult.error.message}`)
     else setProfile(profileResult.data)
-
     if (teamResult.error) setMessage(`Teamgegevens konden niet worden geladen: ${teamResult.error.message}`)
     else setTeams((teamResult.data ?? []).filter(row => row.teams).map(row => ({ ...row.teams, member_role: row.member_role })))
-
-    if (calendarResult.error) {
-      setMessage(`Agendakoppeling kon niet worden geladen: ${calendarResult.error.message}`)
-      setCalendarConnection(null)
-    } else {
+    if (calendarResult.error) { setMessage(`Agendakoppeling kon niet worden geladen: ${calendarResult.error.message}`); setCalendarConnection(null) }
+    else {
       setCalendarConnection(calendarResult.data)
       if (calendarResult.data?.is_active && accessToken) await loadCalendar(accessToken)
       else setCalendarEvents([])
     }
-
+    if (eventResult.error) setMessage(`Trainingen konden niet worden geladen: ${eventResult.error.message}`)
+    else setTrainingEvents((eventResult.data ?? []).map(normalizeTrainingEvent))
+    if (!attendanceResult.error) setAttendance(attendanceResult.data ?? [])
+    if (!profilesResult.error) setVisibleProfiles(profilesResult.data ?? [])
     setLoading(false)
+  }
+
+  async function refreshAppData() {
+    if (session?.user?.id) await loadUserData(session.user.id, session.access_token)
   }
 
   async function loadCalendar(accessToken = session?.access_token) {
     if (!accessToken) return
     setCalendarState({ loading: true, error: '' })
     try {
-      const response = await fetch('/api/calendar', {
-        headers: { Authorization: `Bearer ${accessToken}` },
-        cache: 'no-store'
-      })
+      const response = await fetch('/api/calendar', { headers: { Authorization: `Bearer ${accessToken}` }, cache: 'no-store' })
       const payload = await response.json()
       if (!response.ok) throw new Error(payload.error || 'Agenda kon niet worden geladen.')
-      setCalendarEvents(payload.events ?? [])
+      setCalendarEvents((payload.events ?? []).map(event => ({ ...event, type: 'game', source: 'foys' })))
       setCalendarState({ loading: false, error: '' })
     } catch (error) {
       setCalendarEvents([])
       setCalendarState({ loading: false, error: error.message })
     }
+  }
+
+  const allEvents = useMemo(() => [...calendarEvents, ...trainingEvents].filter(event => new Date(event.start).getTime() >= Date.now() - 86400000).sort((a,b) => new Date(a.start)-new Date(b.start)), [calendarEvents, trainingEvents])
+  const ownAttendance = useMemo(() => Object.fromEntries(attendance.filter(row => row.profile_id === session?.user?.id).map(row => [String(row.event_id), row])), [attendance, session?.user?.id])
+
+  async function setAttendanceStatus(event, status) {
+    if (status === 'absent') { setAbsenceReason(''); setAbsenceEvent(event); return }
+    setAttendanceBusy(true); setMessage('')
+    const { error } = await supabase.from('attendance').upsert({ event_id: event.id, profile_id: session.user.id, status, note: null, updated_at: new Date().toISOString() }, { onConflict: 'event_id,profile_id' })
+    setAttendanceBusy(false)
+    if (error) setMessage(`Aanwezigheid opslaan mislukt: ${error.message}`)
+    else await refreshAppData()
+  }
+
+  async function confirmAbsence() {
+    if (!absenceReason.trim()) return setMessage('Geef een reden voor je afmelding.')
+    setAttendanceBusy(true); setMessage('')
+    const { error } = await supabase.from('attendance').upsert({ event_id: absenceEvent.id, profile_id: session.user.id, status: 'absent', note: absenceReason.trim(), updated_at: new Date().toISOString() }, { onConflict: 'event_id,profile_id' })
+    setAttendanceBusy(false)
+    if (error) setMessage(`Afmelden mislukt: ${error.message}`)
+    else { setAbsenceEvent(null); setAbsenceReason(''); await refreshAppData() }
   }
 
   if (!authReady) return <main className="center"><div className="loader">Mijn OG laden…</div></main>
@@ -97,50 +120,23 @@ export default function HomePage() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <div className="brand-lockup">
-          <img className="brand-logo" src="/og-logo.png" alt="Onze Gezellen" />
-          <span className="brand-name">Mijn OG</span>
-        </div>
-        <button className="icon-button" aria-label="Meldingen" title="Meldingen komen later">
-          <Icon name="bell" />
-          <span className="notification-dot" aria-hidden="true" />
-        </button>
+        <div className="brand-lockup"><img className="brand-logo" src="/og-logo.png" alt="Onze Gezellen" /><span className="brand-name">Mijn OG</span></div>
+        <button className="icon-button" aria-label="Meldingen" title="Meldingen komen later"><Icon name="bell" /><span className="notification-dot" aria-hidden="true" /></button>
       </header>
-
       <section className="content">
         {message && <div className="notice">{message}</div>}
         {loading && <div className="subtle-loading">Gegevens bijwerken…</div>}
-        {activeTab === 'Home' && (
-          <Dashboard
-            profile={profile}
-            teams={teams}
-            calendarEvents={calendarEvents}
-            calendarConnection={calendarConnection}
-            calendarState={calendarState}
-            onAgenda={() => setActiveTab('Agenda')}
-            onTeam={() => setActiveTab('Team')}
-            onStats={() => setActiveTab('Stats')}
-            onMore={() => setActiveTab('Meer')}
-          />
-        )}
-        {activeTab === 'Agenda' && <Agenda events={calendarEvents} connection={calendarConnection} state={calendarState} onRefresh={() => loadCalendar()} onGoMore={() => setActiveTab('Meer')} />}
+        {activeTab === 'Home' && <Dashboard profile={profile} teams={teams} events={allEvents} calendarConnection={calendarConnection} calendarState={calendarState} ownAttendance={ownAttendance} onAttendance={setAttendanceStatus} attendanceBusy={attendanceBusy} onAgenda={() => setActiveTab('Agenda')} onTeam={() => setActiveTab('Team')} onStats={() => setActiveTab('Stats')} onMore={() => setActiveTab('Meer')} />}
+        {activeTab === 'Agenda' && <Agenda events={allEvents} connection={calendarConnection} state={calendarState} profile={profile} teams={teams} attendance={attendance} visibleProfiles={visibleProfiles} ownAttendance={ownAttendance} onAttendance={setAttendanceStatus} attendanceBusy={attendanceBusy} onRefresh={refreshAppData} onGoMore={() => setActiveTab('Meer')} />}
         {activeTab === 'Stats' && <Stats />}
         {activeTab === 'Team' && <Team teams={teams} />}
-        {activeTab === 'Meer' && <More session={session} profile={profile} teams={teams} calendar={calendarConnection} onSaved={() => loadUserData(session.user.id)} onMessage={setMessage} />}
+        {activeTab === 'Meer' && <More session={session} profile={profile} teams={teams} calendar={calendarConnection} onSaved={refreshAppData} onMessage={setMessage} />}
       </section>
-
-      <nav className="bottom-nav" aria-label="Hoofdnavigatie">
-        {tabs.map(tab => (
-          <button key={tab} className={activeTab === tab ? 'nav-item active' : 'nav-item'} onClick={() => setActiveTab(tab)}>
-            <Icon name={iconNameForTab(tab)} />
-            <small>{tab}</small>
-          </button>
-        ))}
-      </nav>
+      <nav className="bottom-nav" aria-label="Hoofdnavigatie">{tabs.map(tab => <button key={tab} className={activeTab === tab ? 'nav-item active' : 'nav-item'} onClick={() => setActiveTab(tab)}><Icon name={iconNameForTab(tab)} /><small>{tab}</small></button>)}</nav>
+      {absenceEvent && <AbsenceModal event={absenceEvent} reason={absenceReason} setReason={setAbsenceReason} busy={attendanceBusy} onCancel={() => { setAbsenceEvent(null); setAbsenceReason(''); setMessage('') }} onConfirm={confirmAbsence} />}
     </main>
   )
 }
-
 function Login({ onMessage, message }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -240,169 +236,109 @@ function PasswordRecovery({ onDone }) {
   )
 }
 
-function Dashboard({ profile, teams, calendarEvents, calendarConnection, calendarState, onAgenda, onTeam, onStats, onMore }) {
+
+function Dashboard({ profile, teams, events, calendarConnection, calendarState, ownAttendance, onAttendance, attendanceBusy, onAgenda, onTeam, onStats, onMore }) {
   const firstName = profile?.first_name?.trim() || ''
   const team = teams[0] || null
-  const nextEvent = calendarEvents[0] || null
-  const upcoming = calendarEvents.slice(0, 3)
-
-  return (
-    <>
-      <section className="home-intro">
-        <h1>{firstName ? `Hoi ${firstName}!` : 'Welkom bij Mijn OG'}</h1>
-        <p className="muted no-margin">Alles wat voor jou en je team belangrijk is, op één plek.</p>
-      </section>
-
-      <section className="hero-event">
-        <div className="hero-ball" aria-hidden="true" />
-        <div className="hero-topline">
-          <span>VOLGENDE WEDSTRIJD</span>
-          {nextEvent && <span className="hero-badge">Wedstrijd</span>}
-        </div>
-        {calendarState.loading ? (
-          <div className="hero-empty">Agenda laden…</div>
-        ) : calendarState.error ? (
-          <div className="hero-empty"><strong>Agenda kon niet worden geladen.</strong><span>{calendarState.error}</span></div>
-        ) : nextEvent ? (
-          <>
-            <h2>{nextEvent.title}</h2>
-            <div className="hero-meta"><Icon name="calendar" /> <span>{formatLongDate(nextEvent.start)}</span></div>
-            <div className="hero-meta"><Icon name="clock" /> <span>{formatTimeRange(nextEvent.start, nextEvent.end)}</span></div>
-            {nextEvent.location && <div className="hero-meta"><Icon name="pin" /> <span>{nextEvent.location}</span></div>}
-            <button className="hero-action" onClick={onAgenda}>Wedstrijddetails <Icon name="arrow" /></button>
-          </>
-        ) : calendarConnection ? (
-          <div className="hero-empty"><strong>Geen komende wedstrijden.</strong><span>Je FOYS-agenda is gekoppeld.</span><button className="hero-action" onClick={onAgenda}>Bekijk agenda <Icon name="arrow" /></button></div>
-        ) : (
-          <div className="hero-empty"><strong>Koppel je KNBSB-agenda.</strong><span>Voeg je persoonlijke FOYS-link toe om wedstrijden hier automatisch te zien.</span><button className="hero-action" onClick={onMore}>Agenda koppelen <Icon name="arrow" /></button></div>
-        )}
-      </section>
-
-      <SectionTitle title="Komende activiteiten" action="Alles bekijken" onAction={onAgenda} />
-      <section className="activity-card">
-        {upcoming.length > 0 ? upcoming.map(event => <CompactEvent key={event.uid || `${event.start}-${event.title}`} event={event} />) : (
-          <EmptyState icon="calendar" title="Geen activiteiten gevonden" text={calendarConnection ? 'Nieuwe KNBSB-wedstrijden verschijnen hier automatisch.' : 'Koppel je KNBSB-agenda om je programma te zien.'} />
-        )}
-      </section>
-
-      <SectionTitle title="Mijn team" />
-      {team ? (
-        <button className="team-link-card" onClick={onTeam}>
-          <span className="soft-icon"><Icon name="team" /></span>
-          <span className="team-link-copy"><strong>{team.name}</strong><small>{capitalize(team.sport)} · {translateRole(team.member_role)}</small></span>
-          <Icon name="chevron" />
-        </button>
-      ) : (
-        <EmptyState icon="team" title="Nog geen team gekoppeld" text="Een beheerder kan jouw account aan het juiste team koppelen." />
-      )}
-
-      <SectionTitle title="Mijn stats" action="Bekijk stats" onAction={onStats} />
-      <section className="stats-placeholder">
-        <div><span className="stats-eyebrow">PERSOONLIJK</span><h3>Nog geen statistieken beschikbaar</h3><p>Zodra we een echte statsbron koppelen, verschijnen je prestaties hier automatisch.</p></div>
-        <Icon name="stats" />
-      </section>
-
-      <SectionTitle title="Clubnieuws & highlights" />
-      <EmptyState icon="trophy" title="Nog geen clubhighlight geplaatst" text="Clubbrede highlights verschijnen hier zodra er echte content is toegevoegd." />
-    </>
-  )
+  const nextEvent = events[0] || null
+  const upcoming = events.slice(0, 3)
+  return <>
+    <section className="home-intro centered-copy"><h1>{firstName ? `Hoi ${firstName}!` : 'Welkom bij Mijn OG'}</h1><p className="muted no-margin">Alles wat voor jou en je team belangrijk is, op één plek.</p></section>
+    <section className={`hero-event ${nextEvent?.type === 'training' ? 'training-hero' : ''}`}>
+      <div className="hero-ball" aria-hidden="true" />
+      <div className="hero-topline"><span>VOLGENDE ACTIVITEIT</span>{nextEvent && <span className="hero-badge">{eventTypeLabel(nextEvent)}</span>}</div>
+      {calendarState.loading && !nextEvent ? <div className="hero-empty">Agenda laden…</div> : nextEvent ? <>
+        <h2>{nextEvent.title}</h2>
+        <div className="hero-meta"><Icon name="calendar" /><span>{formatLongDate(nextEvent.start)}</span></div>
+        <div className="hero-meta"><Icon name="clock" /><span>{formatTimeRange(nextEvent.start, nextEvent.end)}</span></div>
+        {nextEvent.meetAt && <div className="hero-meta"><Icon name="people" /><span>Verzamelen {formatClock(nextEvent.meetAt)}</span></div>}
+        {nextEvent.location && <div className="hero-meta"><Icon name="pin" /><span>{nextEvent.location}</span></div>}
+        {nextEvent.type === 'training' && <AttendanceButtons current={ownAttendance[String(nextEvent.id)]?.status} onSelect={status => onAttendance(nextEvent, status)} busy={attendanceBusy} compact />}
+        <button className="hero-action" onClick={onAgenda}>Bekijk details <Icon name="arrow" /></button>
+      </> : calendarConnection ? <div className="hero-empty"><strong>Geen komende activiteiten.</strong><span>Nieuwe wedstrijden en trainingen verschijnen hier automatisch.</span><button className="hero-action" onClick={onAgenda}>Bekijk agenda <Icon name="arrow" /></button></div> : <div className="hero-empty"><strong>Koppel je KNBSB-agenda.</strong><span>Voeg je persoonlijke FOYS-link toe om wedstrijden te zien.</span><button className="hero-action" onClick={onMore}>Agenda koppelen <Icon name="arrow" /></button></div>}
+    </section>
+    <SectionTitle title="Komende activiteiten" action="Alles bekijken" onAction={onAgenda} />
+    <section className="activity-card">{upcoming.length ? upcoming.map(event => <CompactEvent key={event.uid || `${event.type}-${event.id}`} event={event} />) : <EmptyState icon="calendar" title="Geen activiteiten gevonden" text="Trainingen en wedstrijden verschijnen hier zodra ze beschikbaar zijn." />}</section>
+    <SectionTitle title="Mijn team" />
+    {team ? <button className="team-link-card" onClick={onTeam}><span className="soft-icon"><Icon name="team" /></span><span className="team-link-copy"><strong>{team.name}</strong><small>{capitalize(team.sport)} · {translateRole(team.member_role)}</small></span><Icon name="chevron" /></button> : <EmptyState icon="team" title="Nog geen team gekoppeld" text="Een beheerder kan jouw account aan het juiste team koppelen." />}
+    <SectionTitle title="Mijn stats" action="Bekijk stats" onAction={onStats} /><section className="stats-placeholder"><div><span className="stats-eyebrow">PERSOONLIJK</span><h3>Nog geen statistieken beschikbaar</h3><p>Zodra we een echte statsbron koppelen, verschijnen je prestaties hier automatisch.</p></div><Icon name="stats" /></section>
+    <SectionTitle title="Clubnieuws & highlights" /><EmptyState icon="trophy" title="Nog geen clubhighlight geplaatst" text="Clubbrede highlights verschijnen hier zodra er echte content is toegevoegd." />
+  </>
 }
 
 function CompactEvent({ event }) {
   const date = new Date(event.start)
-  return (
-    <article className="compact-event">
-      <div className="compact-date"><strong>{date.getDate()}</strong><span>{date.toLocaleDateString('nl-NL', { month: 'short' }).replace('.', '').toUpperCase()}</span></div>
-      <div className="compact-event-copy">
-        <strong>{event.title}</strong>
-        <span>{formatShortDate(event.start)}</span>
-        <small>{formatTimeRange(event.start, event.end)}{event.location ? ` · ${event.location}` : ''}</small>
-      </div>
-      <span className="type-chip">Wedstrijd</span>
-    </article>
-  )
+  return <article className="compact-event"><div className="compact-date"><strong>{date.getDate()}</strong><span>{date.toLocaleDateString('nl-NL', { month: 'short' }).replace('.', '').toUpperCase()}</span></div><div className="compact-event-copy"><strong>{event.title}</strong><span>{formatShortDate(event.start)}</span><small>{formatTimeRange(event.start,event.end)}{event.location ? ` · ${event.location}` : ''}</small></div><span className={`type-chip ${event.type === 'training' ? 'training-chip' : ''}`}>{eventTypeLabel(event)}</span></article>
 }
 
-function Agenda({ events, connection, state, onRefresh, onGoMore }) {
-  const grouped = useMemo(() => groupByMonth(events), [events])
-  return (
-    <section>
-      <ScreenHeader title="Komende activiteiten" action={connection ? 'Vernieuwen' : null} onAction={onRefresh} />
-      <div className="filter-row">
-        <span className="filter-chip active">Alles</span>
-        <span className="filter-chip">Wedstrijden</span>
-        <span className="filter-chip muted-chip">Trainingen later</span>
-      </div>
-
-      {!connection ? (
-        <EmptyState icon="link" title="KNBSB-agenda koppelen" text="Voeg onder Meer je persoonlijke FOYS ICS-link toe." action="Naar koppelingen" onAction={onGoMore} />
-      ) : state.loading ? (
-        <EmptyState icon="calendar" title="Wedstrijden laden…" text="We halen je persoonlijke KNBSB-programma op." />
-      ) : state.error ? (
-        <EmptyState icon="calendar" title="Agenda kon niet worden geladen" text={state.error} action="Opnieuw proberen" onAction={onRefresh} />
-      ) : events.length === 0 ? (
-        <EmptyState icon="calendar" title="Geen komende activiteiten" text="Je FOYS-koppeling werkt. Nieuwe wedstrijden verschijnen hier automatisch." />
-      ) : (
-        <div className="agenda-timeline">
-          {Object.entries(grouped).map(([month, monthEvents]) => (
-            <section key={month} className="timeline-month">
-              <h2>{month}</h2>
-              {monthEvents.map(event => <TimelineEvent event={event} key={event.uid || `${event.start}-${event.title}`} />)}
-            </section>
-          ))}
-        </div>
-      )}
-    </section>
-  )
+function Agenda({ events, connection, state, profile, teams, attendance, visibleProfiles, ownAttendance, onAttendance, attendanceBusy, onRefresh, onGoMore }) {
+  const [filter, setFilter] = useState('all')
+  const [editorOpen, setEditorOpen] = useState(false)
+  const [editingEvent, setEditingEvent] = useState(null)
+  const canCreate = profile?.role === 'admin' || teams.some(team => team.member_role === 'coach')
+  const filtered = events.filter(event => filter === 'all' || (filter === 'games' ? event.type === 'game' : event.type === 'training'))
+  const grouped = useMemo(() => groupByMonth(filtered), [filtered])
+  function canManage(event) { return event.type === 'training' && (profile?.role === 'admin' || teams.some(team => team.id === event.teamId && team.member_role === 'coach')) }
+  return <section>
+    <ScreenHeader title="Komende activiteiten" action={canCreate ? '+ Training' : (connection ? 'Vernieuwen' : null)} onAction={() => canCreate ? setEditorOpen(true) : onRefresh()} />
+    <div className="filter-row centered-filters"><button className={`filter-chip ${filter==='all'?'active':''}`} onClick={() => setFilter('all')}>Alles</button><button className={`filter-chip ${filter==='games'?'active':''}`} onClick={() => setFilter('games')}>Wedstrijden</button><button className={`filter-chip ${filter==='training'?'active':''}`} onClick={() => setFilter('training')}>Trainingen</button></div>
+    {!connection && events.every(event => event.type !== 'training') ? <EmptyState icon="link" title="KNBSB-agenda koppelen" text="Voeg onder Meer je persoonlijke FOYS ICS-link toe." action="Naar koppelingen" onAction={onGoMore} /> : state.loading && events.length===0 ? <EmptyState icon="calendar" title="Activiteiten laden…" text="We halen je programma op." /> : filtered.length===0 ? <EmptyState icon="calendar" title="Geen activiteiten gevonden" text="Er zijn binnen dit filter geen komende activiteiten." /> : <div className="agenda-timeline">{Object.entries(grouped).map(([month, monthEvents]) => <section key={month} className="timeline-month"><h2>{month}</h2>{monthEvents.map(event => <TimelineEvent key={event.uid || `${event.type}-${event.id}`} event={event} current={ownAttendance[String(event.id)]} onAttendance={onAttendance} busy={attendanceBusy} canManage={canManage(event)} onEdit={() => { setEditingEvent(event); setEditorOpen(true) }} attendance={attendance.filter(row => String(row.event_id)===String(event.id))} profiles={visibleProfiles} />)}</section>)}</div>}
+    {editorOpen && <TrainingEditor profile={profile} teams={teams} event={editingEvent} onClose={() => { setEditorOpen(false); setEditingEvent(null) }} onSaved={async () => { setEditorOpen(false); setEditingEvent(null); await onRefresh() }} />}
+  </section>
 }
 
-function TimelineEvent({ event }) {
+function TimelineEvent({ event, current, onAttendance, busy, canManage, onEdit, attendance, profiles }) {
   const date = new Date(event.start)
-  return (
-    <article className="timeline-event">
-      <div className="timeline-date"><strong>{date.getDate()}</strong><span>{date.toLocaleDateString('nl-NL', { month: 'short' }).replace('.', '').toUpperCase()}</span></div>
-      <div className="timeline-line" aria-hidden="true"><span /></div>
-      <div className="timeline-copy">
-        <div className="timeline-title-row"><h3>{event.title}</h3><span className="type-chip">Wedstrijd</span></div>
-        <p>{formatShortDate(event.start)}</p>
-        <p>{formatTimeRange(event.start, event.end)}{event.location ? ` · ${event.location}` : ''}</p>
-        {event.description && <details><summary>Meer informatie</summary><div className="event-description">{event.description}</div></details>}
-      </div>
-    </article>
-  )
+  return <article className="timeline-event"><div className="timeline-date"><strong>{date.getDate()}</strong><span>{date.toLocaleDateString('nl-NL',{month:'short'}).replace('.','').toUpperCase()}</span></div><div className="timeline-line" aria-hidden="true"><span /></div><div className="timeline-copy"><div className="timeline-title-row"><h3>{event.title}</h3><span className={`type-chip ${event.type==='training'?'training-chip':''}`}>{eventTypeLabel(event)}</span></div><p>{formatShortDate(event.start)}</p><p>{formatTimeRange(event.start,event.end)}{event.location ? ` · ${event.location}` : ''}</p>{event.meetAt && <p>Verzamelen: {formatClock(event.meetAt)}</p>}{event.description && <p className="event-description-inline">{event.description}</p>}{event.type==='training' && <AttendanceButtons current={current?.status} onSelect={status => onAttendance(event,status)} busy={busy} />}{canManage && <div className="coach-tools"><button className="mini-action" onClick={onEdit}>Training beheren</button><AttendanceSummary rows={attendance} profiles={profiles} /></div>}</div></article>
 }
 
-function Stats() {
-  return (
-    <section>
-      <ScreenHeader title="Jouw stats" />
-      <div className="segmented"><span className="active">Overzicht</span><span>Aanvallen</span><span>Verdedigen</span></div>
-      <EmptyState icon="stats" title="Nog geen statistieken beschikbaar" text="Hier tonen we alleen echte data. Zodra een statsbron is gekoppeld, verschijnt jouw persoonlijke overzicht hier." />
-    </section>
-  )
+function AttendanceButtons({ current, onSelect, busy, compact=false }) {
+  return <div className={`attendance-buttons ${compact?'compact':''}`}><button className={current==='present'?'attendance-btn present active':'attendance-btn present'} disabled={busy} onClick={() => onSelect('present')}>✓ Aanwezig</button><button className={current==='maybe'?'attendance-btn maybe active':'attendance-btn maybe'} disabled={busy} onClick={() => onSelect('maybe')}>? Misschien</button><button className={current==='absent'?'attendance-btn absent active':'attendance-btn absent'} disabled={busy} onClick={() => onSelect('absent')}>✕ Afwezig</button></div>
 }
 
-function Team({ teams }) {
-  return (
-    <section>
-      <ScreenHeader title="Mijn team" />
-      {teams.length ? (
-        <div className="team-grid">
-          {teams.map(team => (
-            <article className="team-card" key={team.id}>
-              <span className="soft-icon large"><Icon name="team" /></span>
-              <div><h2>{team.name}</h2><p>{capitalize(team.sport)} · {translateRole(team.member_role)}</p></div>
-            </article>
-          ))}
-        </div>
-      ) : <EmptyState icon="team" title="Nog geen team gekoppeld" text="Een beheerder kan jouw account aan het juiste team koppelen." />}
-
-      <SectionTitle title="Teamgegevens" />
-      <EmptyState icon="stats" title="Nog geen teamstatistieken beschikbaar" text="Teamstats verschijnen hier zodra we een echte statistiekbron koppelen." />
-    </section>
-  )
+function AttendanceSummary({ rows, profiles }) {
+  const profileMap = Object.fromEntries(profiles.map(p => [p.id,p]))
+  const groups = { present: [], maybe: [], absent: [] }
+  rows.forEach(row => groups[row.status]?.push(row))
+  return <details className="attendance-summary"><summary>{groups.present.length} aanwezig · {groups.maybe.length} misschien · {groups.absent.length} afwezig</summary><div className="attendance-groups">{[['present','Aanwezig'],['maybe','Misschien'],['absent','Afwezig']].map(([key,label]) => <div key={key}><strong>{label}</strong>{groups[key].length ? groups[key].map(row => <p key={row.id}>{personName(profileMap[row.profile_id])}{row.note ? ` — ${row.note}` : ''}</p>) : <p className="muted">Nog niemand</p>}</div>)}</div></details>
 }
 
+function TrainingEditor({ profile, teams, event, onClose, onSaved }) {
+  const [allTeams, setAllTeams] = useState([])
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [form, setForm] = useState(() => event ? {
+    team_id: String(event.teamId), title:event.title||'Training', date:toDateInput(event.start), start:toTimeInput(event.start), end:toTimeInput(event.end), meet:toTimeInput(event.meetAt), location_name:event.location||'', location_address:event.locationAddress||'', description:event.description||''
+  } : { team_id:'', title:'Training', date:'', start:'', end:'', meet:'', location_name:'', location_address:'', description:'' })
+  useEffect(() => {
+    if (profile?.role === 'admin') supabase.from('teams').select('id,name,sport,is_active').eq('is_active',true).order('name').then(({data}) => setAllTeams(data??[]))
+    else setAllTeams(teams.filter(team => team.member_role==='coach'))
+  }, [])
+  useEffect(() => { if (!form.team_id && allTeams[0]) setForm(v => ({...v,team_id:String(allTeams[0].id)})) }, [allTeams])
+  async function save() {
+    if (!form.team_id || !form.date || !form.start) return setError('Kies een team, datum en starttijd.')
+    setBusy(true); setError('')
+    const payload = { team_id:Number(form.team_id), type:'training', title:form.title.trim()||'Training', description:form.description.trim()||null, start_at:combineDateTime(form.date,form.start), end_at:form.end?combineDateTime(form.date,form.end):null, meet_at:form.meet?combineDateTime(form.date,form.meet):null, location_name:form.location_name.trim()||null, location_address:form.location_address.trim()||null, updated_at:new Date().toISOString() }
+    let result
+    if (event?.id) result = await supabase.from('events').update(payload).eq('id',event.id)
+    else result = await supabase.from('events').insert({ ...payload, created_by:profile.id })
+    setBusy(false)
+    if (result.error) setError(result.error.message); else onSaved()
+  }
+  async function remove() {
+    if (!event?.id || !window.confirm('Training verwijderen?')) return
+    setBusy(true); const {error} = await supabase.from('events').delete().eq('id',event.id); setBusy(false)
+    if (error) setError(error.message); else onSaved()
+  }
+  return <div className="sheet-backdrop" onMouseDown={e => { if(e.target===e.currentTarget) onClose() }}><section className="admin-sheet training-sheet"><div className="sheet-handle"/><header className="sheet-header"><span className="sheet-icon-spacer"/><div className="sheet-title-center"><p className="eyebrow orange">{event?'TRAINING BEHEREN':'NIEUWE TRAINING'}</p><h2>{event?'Training aanpassen':'Training toevoegen'}</h2></div><button className="sheet-icon-button" onClick={onClose}><Icon name="close" /></button></header><div className="sheet-body"><div className="form-stack training-form"><label>Team<select value={form.team_id} onChange={e => setForm({...form,team_id:e.target.value})}>{allTeams.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}</select></label><label>Titel<input value={form.title} onChange={e => setForm({...form,title:e.target.value})}/></label><div className="form-two"><label>Datum<input type="date" value={form.date} onChange={e => setForm({...form,date:e.target.value})}/></label><label>Verzameltijd<input type="time" value={form.meet} onChange={e => setForm({...form,meet:e.target.value})}/></label></div><div className="form-two"><label>Starttijd<input type="time" value={form.start} onChange={e => setForm({...form,start:e.target.value})}/></label><label>Eindtijd<input type="time" value={form.end} onChange={e => setForm({...form,end:e.target.value})}/></label></div><label>Locatie<input value={form.location_name} onChange={e => setForm({...form,location_name:e.target.value})} placeholder="Bijv. Van der Aart Sportpark"/></label><label>Adres<input value={form.location_address} onChange={e => setForm({...form,location_address:e.target.value})} placeholder="Optioneel"/></label><label>Omschrijving<textarea rows="4" value={form.description} onChange={e => setForm({...form,description:e.target.value})} placeholder="Wat gaan we trainen?"/></label>{error && <div className="notice error">{error}</div>}<button className="primary" disabled={busy} onClick={save}>{busy?'Opslaan…':'Opslaan'}</button>{event && <button className="danger-link" disabled={busy} onClick={remove}>Training verwijderen</button>}</div></div></section></div>
+}
+
+function AbsenceModal({ event, reason, setReason, busy, onCancel, onConfirm }) {
+  return <div className="modal-backdrop"><section className="confirm-modal"><span className="confirm-icon"><Icon name="calendar" /></span><h2>Afmelden bevestigen</h2><p>Je meldt je af voor <strong>{event.title}</strong> op {formatShortDate(event.start)}.</p><label>Reden van afmelding<textarea rows="4" value={reason} onChange={e => setReason(e.target.value)} placeholder="Waarom kun je niet aanwezig zijn?" autoFocus required /></label><div className="modal-actions"><button className="secondary" onClick={onCancel} disabled={busy}>Annuleren</button><button className="danger-solid" onClick={onConfirm} disabled={busy}>{busy?'Opslaan…':'Afmelding bevestigen'}</button></div></section></div>
+}
+
+function Stats() { return <section><ScreenHeader title="Jouw stats" /><div className="segmented"><span className="active">Overzicht</span><span>Aanvallen</span><span>Verdedigen</span></div><EmptyState icon="stats" title="Nog geen statistieken beschikbaar" text="Hier tonen we alleen echte data. Zodra een statsbron is gekoppeld, verschijnt jouw persoonlijke overzicht hier." /></section> }
+function Team({ teams }) { return <section><ScreenHeader title="Mijn team" />{teams.length ? <div className="team-grid">{teams.map(team => <article className="team-card" key={team.id}><span className="soft-icon large"><Icon name="team" /></span><div><h2>{team.name}</h2><p>{capitalize(team.sport)} · {translateRole(team.member_role)}</p></div></article>)}</div> : <EmptyState icon="team" title="Nog geen team gekoppeld" text="Een beheerder kan jouw account aan het juiste team koppelen." />}<SectionTitle title="Teamgegevens" /><EmptyState icon="stats" title="Nog geen teamstatistieken beschikbaar" text="Teamstats verschijnen hier zodra we een echte statistiekbron koppelen." /></section> }
 function AdminPanel({ onMessage, onChanged }) {
   const [open, setOpen] = useState(false)
   const [view, setView] = useState('menu')
@@ -784,7 +720,7 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
         <SettingsRow icon="lock" title="Wachtwoord" subtitle="Reset via het inlogscherm" />
         <SettingsRow icon="bell" title="Notificaties" subtitle="Pushmeldingen komen later" disabled />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setShowCalendar(v => !v)} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.3" />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.4" />
       </div>
 
       {showCalendar && (
@@ -914,3 +850,26 @@ function groupByMonth(events) {
     return acc
   }, {})
 }
+
+function normalizeTrainingEvent(row) {
+  return {
+    id: row.id,
+    uid: `training-${row.id}`,
+    type: 'training',
+    source: 'supabase',
+    teamId: row.team_id,
+    title: row.title || 'Training',
+    description: row.description || '',
+    start: row.start_at,
+    end: row.end_at,
+    meetAt: row.meet_at,
+    location: row.location_name || row.location_address || '',
+    locationAddress: row.location_address || ''
+  }
+}
+
+function eventTypeLabel(event) { return event?.type === 'training' ? 'Training' : 'Wedstrijd' }
+function formatClock(value) { return value ? new Date(value).toLocaleTimeString('nl-NL', { hour:'2-digit', minute:'2-digit' }) : '' }
+function toDateInput(value) { if (!value) return ''; const d=new Date(value); const y=d.getFullYear(); const m=String(d.getMonth()+1).padStart(2,'0'); const day=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${day}` }
+function toTimeInput(value) { if (!value) return ''; const d=new Date(value); return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` }
+function combineDateTime(date,time) { return new Date(`${date}T${time}:00`).toISOString() }
