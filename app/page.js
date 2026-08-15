@@ -374,10 +374,7 @@ function TimelineEvent({ event, current, onAttendance, busy, canManage, onEdit, 
 
 function ActivityDetailModal({ event, profile, teams, profiles, memberships, clubLocations, transportEvent, transportResponses, onChanged, onClose }) {
   const [transportOpen, setTransportOpen] = useState(false)
-  const matchedLocation = matchClubLocation(event, clubLocations)
-  const canConfigureTransport = profile?.role === 'admin' || teams.some(team => team.member_role === 'coach')
-  const configuredLocation = clubLocations.find(location => String(location.id) === String(transportEvent?.location_id)) || matchedLocation
-  return <div className="modal-backdrop" onMouseDown={e => { if(e.target===e.currentTarget) onClose() }}><section className="detail-modal" role="dialog" aria-modal="true"><header className="detail-modal-header"><div><p className="eyebrow orange">{eventTypeLabel(event).toUpperCase()}</p><h2>{event.title}</h2></div><button className="sheet-icon-button" onClick={onClose}><Icon name="close"/></button></header><div className="detail-modal-body"><div className="detail-meta-grid"><div><Icon name="calendar"/><span>{formatLongDate(event.start)}</span></div><div><Icon name="clock"/><span>{formatTimeRange(event.start,event.end)}</span></div>{event.location && <div><Icon name="pin"/><span>{event.location}</span></div>}</div>{configuredLocation && <LocationTravelCard location={configuredLocation} fallbackDestination={event.location} />}{event.description && <p className="detail-description">{event.description}</p>}<button className="transport-open-button" onClick={() => setTransportOpen(true)}><Icon name="car"/><span><strong>Vervoer</strong><small>{transportEvent ? transportStatusLabel(transportEvent, transportResponses) : (canConfigureTransport ? 'Vervoer instellen voor deze wedstrijd' : 'Nog niet ingesteld')}</small></span><Icon name="chevron"/></button><p className="muted detail-note">Aanwezigheid wordt voor KNBSB/FOYS-wedstrijden nog niet via Mijn OG bijgehouden.</p></div></section>{transportOpen && <TransportModal event={event} profile={profile} teams={teams} profiles={profiles} memberships={memberships} locations={clubLocations} transportEvent={transportEvent} responses={transportResponses} canConfigure={canConfigureTransport} onChanged={onChanged} onClose={() => setTransportOpen(false)} />}</div>
+  return <div className="modal-backdrop" onMouseDown={e => { if(e.target===e.currentTarget) onClose() }}><section className="detail-modal" role="dialog" aria-modal="true"><header className="detail-modal-header"><div><p className="eyebrow orange">{eventTypeLabel(event).toUpperCase()}</p><h2>{event.title}</h2></div><button className="sheet-icon-button" onClick={onClose}><Icon name="close"/></button></header><div className="detail-modal-body"><div className="detail-meta-grid"><div><Icon name="calendar"/><span>{formatLongDate(event.start)}</span></div><div><Icon name="clock"/><span>{formatTimeRange(event.start,event.end)}</span></div>{event.location && <div><Icon name="pin"/><span>{event.location}</span></div>}</div>{event.location && <LocationTravelCard location={null} fallbackDestination={event.location} />}{event.description && <p className="detail-description">{event.description}</p>}<button className="transport-open-button" onClick={() => setTransportOpen(true)}><Icon name="car"/><span><strong>Vervoer</strong><small>{transportEvent ? transportStatusLabel(transportEvent, transportResponses) : 'Bekijk wie rijdt en wie mee moet'}</small></span><Icon name="chevron"/></button><p className="muted detail-note">Aanwezigheid wordt voor KNBSB/FOYS-wedstrijden nog niet via Mijn OG bijgehouden.</p></div></section>{transportOpen && <TransportModal event={event} profile={profile} teams={teams} profiles={profiles} memberships={memberships} transportEvent={transportEvent} responses={transportResponses} onChanged={onChanged} onClose={() => setTransportOpen(false)} />}</div>
 }
 
 function EventAudience({ event, compact=false }) {
@@ -1118,7 +1115,7 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
         <SettingsRow icon="lock" title="Wachtwoord" subtitle="Wachtwoord wijzigen via resetmail" onClick={() => setSettingsView('password')} />
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.7.2" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.7.3" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -1153,7 +1150,7 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 2.7.2</h3>
+        <h3>Versie 2.7.3</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS agenda</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>
@@ -1341,34 +1338,51 @@ function LocationTravelCard({ location, fallbackDestination }) {
   return <div className="location-travel-card"><div><Icon name="pin"/><span><strong>{location?.name || 'Locatie'}</strong><small>{location?.address || fallbackDestination}</small>{location?.travel_minutes != null && <small>± {formatTravelMinutes(location.travel_minutes)} vanaf Onze Gezellen</small>}</span></div><a className="mini-action" href={googleMapsRouteUrl(location, fallbackDestination)} target="_blank" rel="noreferrer">Open in Google Maps</a></div>
 }
 
-function TransportModal({ event, profile, teams, profiles, memberships, locations, transportEvent, responses, canConfigure, onChanged, onClose }) {
-  const [config, setConfig] = useState(transportEvent)
-  const [teamId, setTeamId] = useState(String(transportEvent?.team_id || teams[0]?.id || ''))
-  const [locationId, setLocationId] = useState(String(transportEvent?.location_id || matchClubLocation(event, locations)?.id || ''))
-  const [busy, setBusy] = useState(false)
-  const [mode, setMode] = useState(() => responses.find(row => row.event_key === eventTransportKey(event) && row.profile_id === profile.id)?.mode || '')
-  const [seats, setSeats] = useState(() => responses.find(row => row.event_key === eventTransportKey(event) && row.profile_id === profile.id)?.seats_available || 3)
-  const [note, setNote] = useState(() => responses.find(row => row.event_key === eventTransportKey(event) && row.profile_id === profile.id)?.note || '')
+function inferTransportTeam(event, teams = []) {
+  if (!teams.length) return null
+  const text = `${event?.title || ''} ${event?.description || ''}`.toLowerCase().replace(/[^a-z0-9]+/g, ' ')
+  const scored = teams.map(team => {
+    const name = String(team.name || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+    const tokens = name.split(/\s+/).filter(token => token.length >= 2 && !['onze','gezellen','og','team'].includes(token))
+    const score = tokens.reduce((sum, token) => sum + (text.includes(token) ? token.length : 0), 0)
+    return { team, score }
+  }).sort((a,b) => b.score-a.score)
+  if (scored[0]?.score > 0) return scored[0].team
+  return teams.length === 1 ? teams[0] : teams[0]
+}
+
+function TransportModal({ event, profile, teams, profiles, memberships, transportEvent, responses, onChanged, onClose }) {
   const key = eventTransportKey(event)
+  const inferredTeam = inferTransportTeam(event, teams)
+  const [config, setConfig] = useState(transportEvent)
+  const [setupError, setSetupError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const ownResponse = responses.find(row => row.event_key === key && row.profile_id === profile.id)
+  const [mode, setMode] = useState(ownResponse?.mode || '')
+  const [seats, setSeats] = useState(ownResponse?.seats_available || 3)
+  const [note, setNote] = useState(ownResponse?.note || '')
+
+  useEffect(() => {
+    let cancelled = false
+    async function ensureTransportEvent() {
+      if (config || !inferredTeam?.id) return
+      const payload = { event_key:key, title:event.title, starts_at:event.start, team_id:Number(inferredTeam.id), location_id:null, created_by:profile.id, updated_at:new Date().toISOString() }
+      const { data, error } = await supabase.from('transport_events').upsert(payload, { onConflict:'event_key' }).select('*').single()
+      if (cancelled) return
+      if (error) setSetupError('Vervoer kon niet automatisch worden geopend. Voer eerst de v2.7.3 Supabase-update uit.')
+      else { setConfig(data); await onChanged?.() }
+    }
+    ensureTransportEvent()
+    return () => { cancelled = true }
+  }, [config, inferredTeam?.id, key])
+
   const eventResponses = responses.filter(row => row.event_key === key)
   const summary = getTransportSummary(config, responses)
-  const selectedLocation = locations.find(location => String(location.id) === String(config?.location_id || locationId)) || matchClubLocation(event, locations)
-  const teamMemberships = config ? memberships.filter(row => String(row.team_id) === String(config.team_id)) : []
+  const teamId = config?.team_id || inferredTeam?.id
+  const teamMemberships = teamId ? memberships.filter(row => String(row.team_id) === String(teamId)) : []
   const eligibleIds = new Set(teamMemberships.filter(row => row.member_role === 'player').map(row => row.profile_id))
   const responseIds = new Set(eventResponses.map(row => row.profile_id))
   const noResponseIds = [...eligibleIds].filter(id => !responseIds.has(id))
-  const profileMap = Object.fromEntries(profiles.map(p => [p.id,p]))
-  const isManager = profile.role === 'admin' || teams.some(team => team.member_role === 'coach' && String(team.id) === String(config?.team_id || teamId))
-  const manageableTeams = profile.role === 'admin' ? teams : teams.filter(team => team.member_role === 'coach')
-
-  async function saveConfig() {
-    if (!teamId) return
-    setBusy(true)
-    const payload = { event_key:key, title:event.title, starts_at:event.start, team_id:Number(teamId), location_id:locationId ? Number(locationId) : null, created_by:profile.id, updated_at:new Date().toISOString() }
-    const { data, error } = await supabase.from('transport_events').upsert(payload, { onConflict:'event_key' }).select('*').single()
-    setBusy(false)
-    if (!error) { setConfig(data); await onChanged?.() }
-  }
 
   async function saveResponse(nextMode=mode) {
     if (!config || !nextMode) return
@@ -1379,7 +1393,7 @@ function TransportModal({ event, profile, teams, profiles, memberships, location
     if (!error) { setMode(nextMode); await onChanged?.() }
   }
 
-  return <div className="transport-modal-layer" onMouseDown={e => { if(e.target===e.currentTarget) onClose() }}><section className="transport-modal" role="dialog" aria-modal="true"><header className="detail-modal-header"><div><p className="eyebrow orange">VERVOER</p><h2>{event.title}</h2></div><button className="sheet-icon-button" onClick={onClose}><Icon name="close"/></button></header><div className="transport-modal-body">{!config ? canConfigure ? <div className="transport-setup"><p>Stel eerst in voor welk team en welke locatie dit vervoer geldt.</p><label>Team<select value={teamId} onChange={e => setTeamId(e.target.value)}>{manageableTeams.map(team => <option value={team.id} key={team.id}>{team.name}</option>)}</select></label><label>Locatie<select value={locationId} onChange={e => setLocationId(e.target.value)}><option value="">Geen gekoppelde locatie</option>{locations.map(location => <option value={location.id} key={location.id}>{location.name}</option>)}</select></label><button className="primary" onClick={saveConfig} disabled={busy || !teamId}>{busy?'Opslaan…':'Vervoer instellen'}</button></div> : <div className="admin-empty spacious">Vervoer is nog niet ingesteld voor deze wedstrijd.</div> : <>{selectedLocation && <LocationTravelCard location={selectedLocation} fallbackDestination={event.location}/>}<div className={`transport-alert ${summary.shortage > 0 ? 'shortage' : 'ok'}`}>{summary.shortage > 0 ? <><strong>! NOG {summary.shortage} PLEKKEN NODIG</strong><span>Er zijn nog niet genoeg aangeboden passagiersplekken.</span></> : <><strong>{summary.passengers || summary.seats ? 'VERVOER GEREGELD' : 'VERVOER NOG OPEN'}</strong><span>{summary.seats} plekken aangeboden · {summary.passengers} meerijders</span></>}</div><div className="transport-choice"><h3>Wat doe jij?</h3><button className={mode==='driver'?'active':''} onClick={() => setMode('driver')}><Icon name="car"/> Ik rijd</button><button className={mode==='passenger'?'active':''} onClick={() => saveResponse('passenger')}>Ik rijd mee</button><button className={mode==='self'?'active':''} onClick={() => saveResponse('self')}>Eigen vervoer</button></div>{mode==='driver' && <div className="driver-form"><label>Beschikbare passagiersplekken<div className="seat-stepper"><button type="button" onClick={() => setSeats(Math.max(0,Number(seats)-1))}>−</button><strong>{seats}</strong><button type="button" onClick={() => setSeats(Math.min(20,Number(seats)+1))}>+</button></div></label><label>Opmerking (optioneel)<input value={note} onChange={e => setNote(e.target.value)} placeholder="Bijv. vertrek vanaf clubhuis" /></label><button className="primary" onClick={() => saveResponse('driver')} disabled={busy}>{busy?'Opslaan…':'Ik rijd opslaan'}</button></div>}<TransportPeopleOverview responses={eventResponses} profiles={profiles} noResponseIds={noResponseIds} showNoResponse={isManager}/>{canConfigure && <details className="transport-manage"><summary>Vervoerinstellingen</summary><div className="admin-form-grid"><label>Team<select value={teamId} onChange={e => setTeamId(e.target.value)}>{manageableTeams.map(team => <option value={team.id} key={team.id}>{team.name}</option>)}</select></label><label>Locatie<select value={locationId} onChange={e => setLocationId(e.target.value)}><option value="">Geen gekoppelde locatie</option>{locations.map(location => <option value={location.id} key={location.id}>{location.name}</option>)}</select></label></div><button className="mini-action" onClick={saveConfig}>Wijzigingen opslaan</button></details>}</>}</div></section></div>
+  return <div className="transport-modal-layer" onMouseDown={e => { if(e.target===e.currentTarget) onClose() }}><section className="transport-modal" role="dialog" aria-modal="true"><header className="detail-modal-header"><div><p className="eyebrow orange">VERVOER</p><h2>{event.title}</h2></div><button className="sheet-icon-button" onClick={onClose}><Icon name="close"/></button></header><div className="transport-modal-body">{event.location && <LocationTravelCard location={null} fallbackDestination={event.location}/>} {setupError ? <div className="transport-alert shortage"><strong>{setupError}</strong></div> : !config ? <div className="admin-empty spacious">Vervoersoverzicht laden…</div> : <><div className={`transport-alert ${summary.shortage > 0 ? 'shortage' : 'ok'}`}>{summary.shortage > 0 ? <><strong>! NOG {summary.shortage} PLEKKEN NODIG</strong><span>{summary.passengers} personen willen meerijden · {summary.seats} plekken beschikbaar</span></> : <><strong>{summary.passengers || summary.seats ? 'VERVOER GEREGELD' : 'VERVOER NOG OPEN'}</strong><span>{summary.passengers} meerijders · {summary.seats} plekken beschikbaar{summary.surplus > 0 ? ` · ${summary.surplus} plekken over` : ''}</span></>}</div><div className="transport-choice"><h3>Wat doe jij?</h3><button className={mode==='driver'?'active':''} onClick={() => setMode('driver')}><Icon name="car"/> Ik rijd</button><button className={mode==='passenger'?'active':''} onClick={() => saveResponse('passenger')}>Ik rijd mee</button><button className={mode==='self'?'active':''} onClick={() => saveResponse('self')}>Eigen vervoer</button></div>{mode==='driver' && <div className="driver-form"><label>Beschikbare passagiersplekken<div className="seat-stepper"><button type="button" onClick={() => setSeats(Math.max(0,Number(seats)-1))}>−</button><strong>{seats}</strong><button type="button" onClick={() => setSeats(Math.min(20,Number(seats)+1))}>+</button></div></label><label>Opmerking (optioneel)<input value={note} onChange={e => setNote(e.target.value)} placeholder="Bijv. vertrek vanaf clubhuis" /></label><button className="primary" onClick={() => saveResponse('driver')} disabled={busy}>{busy?'Opslaan…':'Ik rijd opslaan'}</button></div>}<TransportPeopleOverview responses={eventResponses} profiles={profiles} noResponseIds={noResponseIds} showNoResponse={true}/></>}</div></section></div>
 }
 
 function TransportPeopleOverview({ responses, profiles, noResponseIds, showNoResponse }) {
