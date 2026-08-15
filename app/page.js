@@ -53,7 +53,7 @@ export default function HomePage() {
     setMessage('')
     const [profileResult, teamResult, calendarResult, eventResult, attendanceResult, profilesResult, membershipResult, eventTeamsResult, eventParticipantsResult] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
-      supabase.from('team_members').select('member_role, teams(id, name, sport, season_id, is_active, team_photo_url)').eq('profile_id', userId),
+      supabase.from('team_members').select('member_role, teams(id, name, sport, season_id, is_active, team_photo_url, seasons(is_active))').eq('profile_id', userId),
       supabase.from('calendar_connections').select('*').eq('profile_id', userId).eq('provider', 'foys').maybeSingle(),
       supabase.from('events').select('*').order('start_at', { ascending: true }),
       supabase.from('attendance').select('*'),
@@ -65,7 +65,7 @@ export default function HomePage() {
     if (profileResult.error) setMessage(`Profiel kon niet worden geladen: ${profileResult.error.message}`)
     else setProfile(profileResult.data)
     if (teamResult.error) setMessage(`Teamgegevens konden niet worden geladen: ${teamResult.error.message}`)
-    else setTeams((teamResult.data ?? []).filter(row => row.teams).map(row => ({ ...row.teams, member_role: row.member_role })))
+    else setTeams((teamResult.data ?? []).filter(row => row.teams && row.teams.is_active !== false && row.teams.seasons?.is_active !== false).map(row => ({ ...row.teams, member_role: row.member_role })))
     if (calendarResult.error) { setMessage(`Agendakoppeling kon niet worden geladen: ${calendarResult.error.message}`); setCalendarConnection(null) }
     else {
       setCalendarConnection(calendarResult.data)
@@ -159,6 +159,7 @@ function Login({ onMessage, message }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
+  const [cropRequest, setCropRequest] = useState(null)
   const [resetBusy, setResetBusy] = useState(false)
   const [resetSent, setResetSent] = useState(false)
 
@@ -257,7 +258,6 @@ function PasswordRecovery({ onDone }) {
 
 function Dashboard({ profile, teams, events, calendarConnection, calendarState, ownAttendance, onAttendance, attendanceBusy, onAgenda, onTeam, onStats, onMore }) {
   const firstName = profile?.first_name?.trim() || ''
-  const team = teams[0] || null
   const nextEvent = events[0] || null
   const upcoming = events.slice(0, 3)
   return <>
@@ -277,8 +277,8 @@ function Dashboard({ profile, teams, events, calendarConnection, calendarState, 
     </section>
     <SectionTitle title="Komende activiteiten" action="Alles bekijken" onAction={onAgenda} />
     <section className="activity-card">{upcoming.length ? upcoming.map(event => <CompactEvent key={event.uid || `${event.type}-${event.id}`} event={event} />) : <EmptyState icon="calendar" title="Geen activiteiten gevonden" text="Trainingen en wedstrijden verschijnen hier zodra ze beschikbaar zijn." />}</section>
-    <SectionTitle title="Mijn team" />
-    {team ? <button className="team-link-card" onClick={onTeam}><span className="soft-icon"><Icon name="team" /></span><span className="team-link-copy"><strong>{team.name}</strong><small>{capitalize(team.sport)} · {translateRole(team.member_role)}</small></span><Icon name="chevron" /></button> : <EmptyState icon="team" title="Nog geen team gekoppeld" text="Een beheerder kan jouw account aan het juiste team koppelen." />}
+    <SectionTitle title={teams.length > 1 ? "Mijn teams" : "Mijn team"} />
+    {teams.length ? <div className="home-team-list">{teams.map(team => <button className="team-link-card" key={team.id} onClick={onTeam}><TeamThumb team={team} /><span className="team-link-copy"><strong>{team.name}</strong><small>{capitalize(team.sport)} · {translateRole(team.member_role)}</small></span><Icon name="chevron" /></button>)}</div> : <EmptyState icon="team" title="Nog geen team gekoppeld" text="Een beheerder kan jouw account aan het juiste team koppelen." />}
     <SectionTitle title="Mijn stats" action="Bekijk stats" onAction={onStats} /><section className="stats-placeholder"><div><span className="stats-eyebrow">PERSOONLIJK</span><h3>Nog geen statistieken beschikbaar</h3><p>Zodra we een echte statsbron koppelen, verschijnen je prestaties hier automatisch.</p></div><Icon name="stats" /></section>
     <SectionTitle title="Clubnieuws & highlights" /><EmptyState icon="trophy" title="Nog geen clubhighlight geplaatst" text="Clubbrede highlights verschijnen hier zodra er echte content is toegevoegd." />
   </>
@@ -307,12 +307,18 @@ function Agenda({ events, connection, state, profile, teams, attendance, visible
     {!connection && events.every(event => event.type !== 'training') ? <EmptyState icon="link" title="KNBSB-agenda koppelen" text="Voeg onder Meer je persoonlijke FOYS ICS-link toe." action="Naar koppelingen" onAction={onGoMore} /> : state.loading && events.length===0 ? <EmptyState icon="calendar" title="Activiteiten laden…" text="We halen je programma op." /> : filtered.length===0 ? <EmptyState icon="calendar" title="Geen activiteiten gevonden" text="Er zijn binnen dit filter geen komende activiteiten." /> : <div className="agenda-timeline">{Object.entries(grouped).map(([month, monthEvents]) => <section key={month} className="timeline-month"><h2>{month}</h2>{monthEvents.map(event => <TimelineEvent key={event.uid || `${event.type}-${event.id}`} event={event} current={ownAttendance[String(event.id)]} onAttendance={onAttendance} busy={attendanceBusy} canManage={canManage(event)} onEdit={() => { setEditingEvent(event); setEditorOpen(true) }} onDetails={() => setDetailEvent(event)} attendance={attendance.filter(row => String(row.event_id)===String(event.id))} profiles={visibleProfiles} memberships={memberships} />)}</section>)}</div>}
     {editorOpen && <TrainingEditor profile={profile} teams={teams} profiles={visibleProfiles} memberships={memberships} event={editingEvent} onClose={() => { setEditorOpen(false); setEditingEvent(null) }} onSaved={async () => { setEditorOpen(false); setEditingEvent(null); await onRefresh() }} />}
     {detailEvent?.type === 'training' && <TrainingDetailModal event={detailEvent} current={ownAttendance[String(detailEvent.id)]} onAttendance={onAttendance} busy={attendanceBusy} canManage={canManage(detailEvent)} onEdit={() => { setDetailEvent(null); setEditingEvent(detailEvent); setEditorOpen(true) }} onClose={() => setDetailEvent(null)} attendance={attendance.filter(row => String(row.event_id)===String(detailEvent.id))} profiles={visibleProfiles} memberships={memberships} />}
+    {detailEvent && detailEvent.type !== 'training' && <ActivityDetailModal event={detailEvent} onClose={() => setDetailEvent(null)} />}
   </section>
 }
 
 function TimelineEvent({ event, current, onAttendance, busy, canManage, onEdit, onDetails, attendance, profiles, memberships }) {
   const date = new Date(event.start)
-  return <article className="timeline-event"><div className="timeline-date"><strong>{date.getDate()}</strong><span>{date.toLocaleDateString('nl-NL',{month:'short'}).replace('.','').toUpperCase()}</span></div><div className="timeline-line" aria-hidden="true"><span /></div><div className="timeline-copy"><div className="timeline-title-row"><h3>{event.title}</h3><span className={`type-chip ${event.type==='training'?'training-chip':''}`}>{eventTypeLabel(event)}</span></div><p>{formatShortDate(event.start)}</p><p>{formatTimeRange(event.start,event.end)}{event.location ? ` · ${event.location}` : ''}</p>{event.meetAt && <p>Verzamelen: {formatClock(event.meetAt)}</p>}{event.type==='training' && <EventAudience event={event} compact />}{event.description && <p className="event-description-inline">{event.description}</p>}{event.type==='training' && <AttendanceButtons current={current?.status} onSelect={status => onAttendance(event,status)} busy={busy} />}<div className="event-inline-actions"><button className="mini-action" onClick={onDetails}>Details</button>{canManage && <button className="mini-action coach" onClick={onEdit}>Beheren</button>}</div>{canManage && <AttendanceSummary event={event} rows={attendance} profiles={profiles} memberships={memberships} />}</div></article>
+  return <article className="timeline-event"><div className="timeline-date"><strong>{date.getDate()}</strong><span>{date.toLocaleDateString('nl-NL',{month:'short'}).replace('.','').toUpperCase()}</span></div><div className="timeline-line" aria-hidden="true"><span /></div><div className="timeline-copy"><div className="timeline-title-row"><h3>{event.title}</h3><span className={`type-chip ${event.type==='training'?'training-chip':''}`}>{eventTypeLabel(event)}</span></div><p>{formatShortDate(event.start)}</p><p>{formatTimeRange(event.start,event.end)}{event.location ? ` · ${event.location}` : ''}</p>{event.meetAt && <p>Verzamelen: {formatClock(event.meetAt)}</p>}{event.type==='training' && <EventAudience event={event} compact />}{event.description && <p className="event-description-inline">{event.description}</p>}{event.type==='training' && <AttendanceButtons current={current?.status} onSelect={status => onAttendance(event,status)} busy={busy} />}<div className="event-inline-actions"><button className="mini-action" onClick={onDetails}>Details</button>{canManage && <button className="mini-action coach" onClick={onEdit}>Beheren</button>}</div></div></article>
+}
+
+
+function ActivityDetailModal({ event, onClose }) {
+  return <div className="modal-backdrop" onMouseDown={e => { if(e.target===e.currentTarget) onClose() }}><section className="detail-modal" role="dialog" aria-modal="true"><header className="detail-modal-header"><div><p className="eyebrow orange">{eventTypeLabel(event).toUpperCase()}</p><h2>{event.title}</h2></div><button className="sheet-icon-button" onClick={onClose}><Icon name="close"/></button></header><div className="detail-modal-body"><div className="detail-meta-grid"><div><Icon name="calendar"/><span>{formatLongDate(event.start)}</span></div><div><Icon name="clock"/><span>{formatTimeRange(event.start,event.end)}</span></div>{event.location && <div><Icon name="pin"/><span>{event.location}</span></div>}</div>{event.description && <p className="detail-description">{event.description}</p>}<p className="muted detail-note">Aanwezigheid wordt voor KNBSB/FOYS-wedstrijden nog niet via Mijn OG bijgehouden.</p></div></section></div>
 }
 
 function EventAudience({ event, compact=false }) {
@@ -469,7 +475,7 @@ function Team({ session, profile, teams, profiles, memberships, onSaved, onMessa
     if (!file) return
     setBusy(true); onMessage('')
     try {
-      const blob = await compressImage(file, { maxWidth: 1400, maxHeight: 900, maxBytes: 300 * 1024, square: false })
+      const blob = file.type === 'image/webp' ? file : await compressImage(file, { maxWidth: 1400, maxHeight: 900, maxBytes: 300 * 1024, square: false })
       const path = `${team.id}/team.webp`
       const { error: uploadError } = await supabase.storage.from('team-images').upload(path, blob, { contentType: 'image/webp', upsert: true })
       if (uploadError) throw uploadError
@@ -488,7 +494,7 @@ function Team({ session, profile, teams, profiles, memberships, onSaved, onMessa
     if (!file || profile?.role !== 'admin') return
     setBusy(true); onMessage('')
     try {
-      const blob = await compressImage(file, { maxWidth: 512, maxHeight: 512, maxBytes: 100 * 1024, square: true })
+      const blob = file.type === 'image/webp' ? file : await compressImage(file, { maxWidth: 512, maxHeight: 512, maxBytes: 100 * 1024, square: true })
       const path = `${person.id}/profile.webp`
       const { error: uploadError } = await supabase.storage.from('avatars').upload(path, blob, { contentType: 'image/webp', upsert: true })
       if (uploadError) throw uploadError
@@ -510,7 +516,8 @@ function Team({ session, profile, teams, profiles, memberships, onSaved, onMessa
       <Icon name="chevron" />
     </button>)}</div> : <EmptyState icon="team" title="Nog geen team gekoppeld" text="Een beheerder kan jouw account aan het juiste team koppelen." />}
     <SectionTitle title="Teamgegevens" /><EmptyState icon="stats" title="Nog geen teamstatistieken beschikbaar" text="Teamstats verschijnen hier zodra we een echte statistiekbron koppelen." />
-    {selectedTeam && <TeamModal team={selectedTeam} currentProfile={profile} currentMembership={teams.find(t => Number(t.id)===Number(selectedTeam.id))} members={membersForTeam(selectedTeam.id)} busy={busy} onTeamPhoto={uploadTeamPhoto} onAvatar={uploadMemberAvatar} onClose={() => setSelectedTeam(null)} />}
+    {cropRequest && <ImageCropModal file={cropRequest.file} shape={cropRequest.kind==='avatar'?'circle':'wide'} onClose={() => setCropRequest(null)} onSave={async blob => { const request=cropRequest; setCropRequest(null); if(request.kind==='avatar') await uploadMemberAvatar(request.person,blob); else await uploadTeamPhoto(request.team,blob) }} />}
+    {selectedTeam && <TeamModal team={selectedTeam} currentProfile={profile} currentMembership={teams.find(t => Number(t.id)===Number(selectedTeam.id))} members={membersForTeam(selectedTeam.id)} busy={busy} onTeamPhoto={(team,file) => setCropRequest({ kind:'team', team, file })} onAvatar={(person,file) => setCropRequest({ kind:'avatar', person, file })} onClose={() => setSelectedTeam(null)} />}
   </section>
 }
 
@@ -531,8 +538,8 @@ function TeamModal({ team, currentProfile, currentMembership, members, busy, onT
       </header>
       <div className="team-modal-body">
         <div className="team-modal-title"><p className="eyebrow orange">{capitalize(team.sport)}</p><h2>{team.name}</h2></div>
-        <TeamPeopleSection title="Spelers" rows={players} admin={currentProfile?.role==='admin'} busy={busy} onAvatar={onAvatar} />
         <TeamPeopleSection title="Staff" rows={staff} admin={currentProfile?.role==='admin'} busy={busy} onAvatar={onAvatar} />
+        <TeamPeopleSection title="Spelers" rows={players} admin={currentProfile?.role==='admin'} busy={busy} onAvatar={onAvatar} />
       </div>
     </section>
   </div>
@@ -849,12 +856,13 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
   const [editingName, setEditingName] = useState(false)
   const [showCalendar, setShowCalendar] = useState(false)
   const [avatarBusy, setAvatarBusy] = useState(false)
+  const [avatarCropFile, setAvatarCropFile] = useState(null)
 
   useEffect(() => setIcsUrl(calendar?.ics_url ?? ''), [calendar])
   useEffect(() => { setFirstName(profile?.first_name ?? ''); setLastName(profile?.last_name ?? '') }, [profile])
 
   const displayName = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ').trim() || 'Naam nog niet ingesteld'
-  const teamLine = teams[0]?.name ? `${teams[0].name}${profile?.jersey_number ? ` · #${profile.jersey_number}` : ''}` : (profile?.jersey_number ? `#${profile.jersey_number}` : 'Nog geen team gekoppeld')
+  const teamLine = teams.length ? `${teams.map(team => team.name).join(' · ')}${profile?.jersey_number ? ` · #${profile.jersey_number}` : ''}` : (profile?.jersey_number ? `#${profile.jersey_number}` : 'Nog geen team gekoppeld')
 
   async function saveProfile() {
     setProfileBusy(true)
@@ -906,7 +914,7 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
     setAvatarBusy(true)
     onMessage('')
     try {
-      const blob = await compressImage(file, { maxWidth: 512, maxHeight: 512, maxBytes: 100 * 1024, square: true })
+      const blob = file.type === 'image/webp' ? file : await compressImage(file, { maxWidth: 512, maxHeight: 512, maxBytes: 100 * 1024, square: true })
       const path = `${session.user.id}/profile.webp`
       const { error: uploadError } = await supabase.storage.from('avatars').upload(path, blob, { contentType: 'image/webp', upsert: true })
       if (uploadError) throw uploadError
@@ -935,17 +943,17 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
 
   async function signOut() { await supabase.auth.signOut() }
 
-  return (
+  return (<>{avatarCropFile && <ImageCropModal file={avatarCropFile} shape="circle" onClose={() => setAvatarCropFile(null)} onSave={async blob => { setAvatarCropFile(null); await uploadOwnAvatar(blob) }} />} 
     <section>
       <ScreenHeader title="Profiel" />
 
       <article className="profile-card profile-card-with-photo">
         <div className="profile-avatar-control">
           <ProfileAvatar person={profile} size="profile" />
-          <label className="avatar-change-button" title="Profielfoto aanpassen"><Icon name="camera" /><input type="file" accept="image/*" disabled={avatarBusy} onChange={e => { const file=e.target.files?.[0]; if(file) uploadOwnAvatar(file); e.target.value='' }} /></label>
+          <label className="avatar-change-button" title="Profielfoto aanpassen"><Icon name="camera" /><input type="file" accept="image/*" disabled={avatarBusy} onChange={e => { const file=e.target.files?.[0]; if(file) setAvatarCropFile(file); e.target.value='' }} /></label>
         </div>
-        <div className="profile-copy"><h2>{displayName}</h2><p>{teamLine}</p><div className="profile-photo-actions"><label className="text-button upload-text">{avatarBusy ? 'Uploaden…' : 'Foto aanpassen'}<input type="file" accept="image/*" disabled={avatarBusy} onChange={e => { const file=e.target.files?.[0]; if(file) uploadOwnAvatar(file); e.target.value='' }} /></label>{profile?.avatar_url && <button className="text-button subtle-danger" disabled={avatarBusy} onClick={removeOwnAvatar}>Verwijderen</button>}</div></div>
-        <button className="outline-action" onClick={() => setEditingName(true)}><Icon name="edit" /> Naam</button>
+        <div className="profile-copy"><h2>{displayName}</h2><p>{teamLine}</p><label className="text-button upload-text">{avatarBusy ? 'Uploaden…' : 'Foto aanpassen'}<input type="file" accept="image/*" disabled={avatarBusy} onChange={e => { const file=e.target.files?.[0]; if(file) setAvatarCropFile(file); e.target.value='' }} /></label></div>
+        <button className="profile-name-edit" onClick={() => setEditingName(true)} aria-label="Naam aanpassen"><Icon name="edit" /> Aanpassen</button>
       </article>
 
       {editingName && (
@@ -964,7 +972,7 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
         <SettingsRow icon="lock" title="Wachtwoord" subtitle="Reset via het inlogscherm" />
         <SettingsRow icon="bell" title="Notificaties" subtitle="Pushmeldingen komen later" disabled />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setShowCalendar(v => !v)} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.5.2" />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.5.3" />
       </div>
 
       {showCalendar && (
@@ -982,7 +990,7 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
 
       <button className="logout-button" onClick={signOut}><Icon name="logout" /> Uitloggen</button>
     </section>
-  )
+  </>)
 }
 
 function SettingsRow({ icon, title, subtitle, status, onClick, disabled }) {
@@ -1053,6 +1061,37 @@ function translateRole(role) {
 
 function capitalize(value = '') { return value ? value.charAt(0).toUpperCase() + value.slice(1) : '' }
 
+
+
+function ImageCropModal({ file, shape='circle', onClose, onSave }) {
+  const [url, setUrl] = useState('')
+  const [zoom, setZoom] = useState(1)
+  const [offset, setOffset] = useState({x:0,y:0})
+  const [drag, setDrag] = useState(null)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => { const next=URL.createObjectURL(file); setUrl(next); return () => URL.revokeObjectURL(next) }, [file])
+  function move(e) { if(!drag) return; setOffset({x:drag.ox + e.clientX-drag.x, y:drag.oy + e.clientY-drag.y}) }
+  async function save() { setBusy(true); try { const blob=await cropImageFile(file,{shape,zoom,offset,maxBytes:shape==='circle'?100*1024:300*1024}); await onSave(blob) } finally { setBusy(false) } }
+  return <div className="modal-backdrop crop-backdrop" onMouseDown={e => { if(e.target===e.currentTarget) onClose() }}><section className="crop-modal"><header><div><p className="eyebrow orange">FOTO AANPASSEN</p><h2>{shape==='circle'?'Profielfoto uitlijnen':'Teamfoto uitlijnen'}</h2></div><button className="sheet-icon-button" onClick={onClose}><Icon name="close"/></button></header><div className={`crop-stage ${shape}`} onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); setDrag({x:e.clientX,y:e.clientY,ox:offset.x,oy:offset.y}) }} onPointerMove={move} onPointerUp={() => setDrag(null)}>{url && <img src={url} alt="Foto uitsnijden" draggable="false" style={{transform:`translate(${offset.x}px, ${offset.y}px) scale(${zoom})`}}/>}<div className="crop-mask"/></div><label className="crop-zoom"><span>Zoom</span><input type="range" min="1" max="2.5" step="0.05" value={zoom} onChange={e => setZoom(Number(e.target.value))}/></label><p className="crop-help">Sleep de foto om hem goed uit te lijnen.</p><div className="crop-actions"><button className="secondary" onClick={onClose}>Annuleren</button><button className="primary" disabled={busy} onClick={save}>{busy?'Verwerken…':'Opslaan'}</button></div></section></div>
+}
+
+async function cropImageFile(file,{shape,zoom,offset,maxBytes}) {
+  const image=await loadImageFile(file)
+  const outW=shape==='circle'?512:1200, outH=shape==='circle'?512:675
+  const base=Math.max(outW/image.width,outH/image.height)
+  const scale=base*zoom
+  const drawnW=image.width*scale, drawnH=image.height*scale
+  const stageW=shape==='circle'?320:520, stageH=shape==='circle'?320:293
+  const factor=outW/stageW
+  const dx=(outW-drawnW)/2 + offset.x*factor
+  const dy=(outH-drawnH)/2 + offset.y*factor
+  const canvas=document.createElement('canvas'); canvas.width=outW; canvas.height=outH
+  const ctx=canvas.getContext('2d',{alpha:false}); ctx.fillStyle='#fff'; ctx.fillRect(0,0,outW,outH); ctx.drawImage(image,dx,dy,drawnW,drawnH)
+  let quality=.82, blob=await canvasToBlob(canvas,quality)
+  while(blob.size>maxBytes && quality>.35){ quality-=.06; blob=await canvasToBlob(canvas,quality) }
+  if(blob.size>maxBytes) throw new Error('Afbeelding blijft te groot. Kies een andere foto.')
+  return blob
+}
 
 function ProfileAvatar({ person, size = 'normal' }) {
   const cls = `profile-avatar profile-avatar-${size}`

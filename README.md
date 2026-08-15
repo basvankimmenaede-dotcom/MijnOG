@@ -1,4 +1,4 @@
-# Mijn OG v2.5.2 — Profiel- & teamfoto's
+# Mijn OG v2.5.3 — Profiel- & teamfoto's
 
 ## Nieuw
 - Gebruikers kunnen hun eigen profielfoto uploaden of verwijderen.
@@ -8,7 +8,7 @@
 - Coaches van het team en admins kunnen de teamfoto aanpassen.
 - Teamfoto's worden gecomprimeerd naar maximaal 1400×900 en circa 300 KB WebP.
 - Nieuwe teamrol `staff` naast `player` en `coach`.
-- `Over Mijn OG` toont versie 2.5.2.
+- `Over Mijn OG` toont versie 2.5.3.
 
 ## Supabase
 Voer vóór gebruik één keer `supabase_v252_photos_staff.sql` uit in de Supabase SQL Editor.

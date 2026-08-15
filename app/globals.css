@@ -1203,3 +1203,81 @@ input:focus, textarea:focus, select:focus {
   .profile-avatar-large { width: 68px; height: 68px; }
   .team-photo-button { left: 14px; right: 14px; width: auto; }
 }
+
+/* =========================================================
+   Mijn OG v2.5.3 — alignment & photo crop polish
+   ========================================================= */
+.home-team-list { display:grid; gap:10px; }
+.team-link-card .team-thumb-image { width:52px; height:52px; border-radius:11px; }
+.team-link-card { grid-template-columns:52px minmax(0,1fr) 22px; padding:12px 14px; gap:14px; }
+.team-link-copy { min-width:0; display:grid; gap:3px; align-content:center; }
+.team-link-copy strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+.profile-card-with-photo {
+  position:relative;
+  display:grid;
+  grid-template-columns:96px minmax(0,1fr) auto;
+  gap:18px;
+  align-items:center;
+  padding:22px 24px;
+}
+.profile-avatar-profile { width:92px; height:92px; }
+.profile-copy { min-width:0; align-self:center; }
+.profile-copy h2 { margin:0 0 4px; line-height:1; }
+.profile-copy p { margin:0 0 9px; line-height:1.35; }
+.profile-copy .upload-text { margin-top:2px; }
+.profile-name-edit {
+  align-self:start; display:inline-flex; align-items:center; gap:7px;
+  min-height:38px; padding:0 12px; border:1px solid rgba(243,111,33,.55);
+  border-radius:10px; background:#fff; color:var(--og-orange-dark); font-weight:800;
+}
+.profile-name-edit .icon { width:15px; height:15px; }
+
+.agenda-timeline { --date-col:82px; --line-col:20px; }
+.timeline-month > h2 { margin:34px 0 18px; }
+.timeline-event {
+  grid-template-columns:var(--date-col) var(--line-col) minmax(0,1fr);
+  gap:12px; min-height:0; align-items:stretch; margin:0;
+}
+.timeline-date { width:100%; height:92px; align-self:start; display:grid; place-content:center; text-align:center; }
+.timeline-line { position:relative; width:var(--line-col); min-height:100%; display:flex; justify-content:center; }
+.timeline-line::before { content:""; position:absolute; top:0; bottom:0; left:50%; width:1px; background:var(--line); transform:translateX(-50%); }
+.timeline-line > span { position:relative; z-index:1; margin-top:27px; width:14px; height:14px; border:4px solid var(--canvas); border-radius:50%; background:var(--og-orange); box-sizing:content-box; }
+.timeline-copy { min-width:0; padding:2px 0 22px; margin-bottom:0; border-bottom:1px solid var(--line); }
+.timeline-title-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; align-items:start; }
+.timeline-title-row h3 { min-width:0; margin:0 0 5px; line-height:1.06; overflow-wrap:anywhere; }
+.timeline-title-row .type-chip { margin-top:0; white-space:nowrap; }
+.timeline-copy > p { margin:3px 0; line-height:1.4; }
+.event-inline-actions { margin-top:14px; }
+
+.attendance-expanded { margin-top:18px; padding-top:18px; border-top:1px solid var(--line); }
+.attendance-counts { display:grid; gap:4px; margin-bottom:12px; }
+.attendance-summary-content { margin-top:12px; }
+.attendance-groups > div { padding:12px 0; border-top:1px solid var(--line); }
+.attendance-groups p { margin:5px 0 0; }
+
+.crop-modal { width:min(100%,600px); background:#fff; border-radius:20px; padding:20px; box-shadow:0 24px 70px rgba(17,19,24,.28); }
+.crop-modal > header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:18px; }
+.crop-modal h2 { margin:2px 0 0; }
+.crop-stage { position:relative; margin:0 auto; overflow:hidden; background:#171717; touch-action:none; cursor:grab; user-select:none; }
+.crop-stage:active { cursor:grabbing; }
+.crop-stage.circle { width:min(320px,80vw); aspect-ratio:1; border-radius:50%; }
+.crop-stage.wide { width:100%; max-width:520px; aspect-ratio:16/9; border-radius:14px; }
+.crop-stage img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; transform-origin:center; pointer-events:none; }
+.crop-mask { position:absolute; inset:0; pointer-events:none; box-shadow:inset 0 0 0 2px rgba(255,255,255,.9), inset 0 0 0 999px rgba(0,0,0,.05); border-radius:inherit; }
+.crop-zoom { display:grid; grid-template-columns:auto 1fr; align-items:center; gap:14px; margin:18px 0 6px; font-weight:800; }
+.crop-zoom input { width:100%; accent-color:var(--og-orange); }
+.crop-help { text-align:center; color:var(--muted); font-size:13px; margin:8px 0 16px; }
+.crop-actions { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+
+@media (max-width: 640px) {
+  .profile-card-with-photo { grid-template-columns:82px minmax(0,1fr); gap:14px; padding:18px; align-items:center; }
+  .profile-avatar-profile { width:78px; height:78px; }
+  .profile-name-edit { grid-column:2; justify-self:start; align-self:start; margin-top:2px; }
+  .profile-copy h2 { font-size:27px; }
+  .agenda-timeline { --date-col:64px; --line-col:16px; }
+  .timeline-event { gap:8px; }
+  .timeline-date { height:82px; }
+  .timeline-title-row { grid-template-columns:1fr; gap:6px; }
+  .timeline-title-row .type-chip { justify-self:start; }
+}
