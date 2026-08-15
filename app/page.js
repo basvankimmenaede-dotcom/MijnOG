@@ -159,7 +159,6 @@ function Login({ onMessage, message }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
-  const [cropRequest, setCropRequest] = useState(null)
   const [resetBusy, setResetBusy] = useState(false)
   const [resetSent, setResetSent] = useState(false)
 
@@ -464,6 +463,7 @@ function AbsenceModal({ event, reason, setReason, busy, onCancel, onConfirm }) {
 function Stats() { return <section><ScreenHeader title="Jouw stats" /><div className="segmented"><span className="active">Overzicht</span><span>Aanvallen</span><span>Verdedigen</span></div><EmptyState icon="stats" title="Nog geen statistieken beschikbaar" text="Hier tonen we alleen echte data. Zodra een statsbron is gekoppeld, verschijnt jouw persoonlijke overzicht hier." /></section> }
 function Team({ session, profile, teams, profiles, memberships, onSaved, onMessage }) {
   const [selectedTeam, setSelectedTeam] = useState(null)
+  const [cropRequest, setCropRequest] = useState(null)
   const [busy, setBusy] = useState(false)
 
   const membersForTeam = teamId => memberships
@@ -972,7 +972,7 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
         <SettingsRow icon="lock" title="Wachtwoord" subtitle="Reset via het inlogscherm" />
         <SettingsRow icon="bell" title="Notificaties" subtitle="Pushmeldingen komen later" disabled />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setShowCalendar(v => !v)} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.5.3" />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.5.3.1" />
       </div>
 
       {showCalendar && (
