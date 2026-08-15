@@ -1401,3 +1401,110 @@ input:focus, textarea:focus, select:focus {
   .settings-modal-header { min-height: 62px; padding: 13px 15px; }
   .settings-modal-body { padding: 16px; }
 }
+
+/* =========================================================
+   MIJN OG v2.7 - vervoer & locaties
+   ========================================================= */
+.transport-open-button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 44px minmax(0,1fr) 24px;
+  align-items: center;
+  gap: 12px;
+  margin-top: 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--warm-grey, #e8e4df);
+  border-radius: 14px;
+  background: #fff;
+  text-align: left;
+}
+.transport-open-button > .icon:first-child { width: 24px; height: 24px; color: var(--og-orange, #f36f21); }
+.transport-open-button span { display: grid; gap: 2px; min-width: 0; }
+.transport-open-button strong { font-size: 16px; }
+.transport-open-button small { color: var(--muted, #77736f); white-space: normal; }
+.transport-inline { display: inline-flex; align-items: center; gap: 7px; margin-top: 10px; font-size: 12px; letter-spacing: .04em; }
+.transport-inline .icon { width: 17px; height: 17px; }
+.transport-inline.shortage, .transport-shortage-text { color: #b82e2e !important; font-weight: 800; }
+.transport-inline.ok, .transport-ok-text { color: #278557 !important; font-weight: 700; }
+.compact-event-copy .transport-shortage-text,
+.compact-event-copy .transport-ok-text { margin-top: 4px; }
+
+.location-travel-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px;
+  margin-top: 14px;
+  border: 1px solid var(--warm-grey, #e8e4df);
+  border-radius: 14px;
+  background: var(--canvas, #f7f5f2);
+}
+.location-travel-card > div { display: flex; gap: 10px; min-width: 0; align-items: flex-start; }
+.location-travel-card .icon { width: 22px; height: 22px; color: var(--og-orange, #f36f21); flex: 0 0 auto; }
+.location-travel-card span { display: grid; gap: 2px; min-width: 0; }
+.location-travel-card small { color: var(--muted, #77736f); }
+.location-travel-card a { flex: 0 0 auto; text-decoration: none; }
+
+.transport-modal-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 140;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(20,20,20,.45);
+  backdrop-filter: blur(3px);
+}
+.transport-modal {
+  width: min(620px, 100%);
+  max-height: min(86vh, 820px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(0,0,0,.2);
+}
+.transport-modal-body { overflow-y: auto; padding: 0 22px 24px; }
+.transport-setup { display: grid; gap: 14px; }
+.transport-setup label { display: grid; gap: 7px; font-weight: 700; }
+.transport-setup select,
+.location-form input,
+.location-form select,
+.driver-form input,
+.transport-manage select { width: 100%; }
+.transport-alert { display: grid; gap: 5px; padding: 16px; margin: 16px 0; border-radius: 14px; border: 1px solid; }
+.transport-alert strong { font-family: 'Barlow Condensed', sans-serif; font-size: 22px; letter-spacing: .03em; }
+.transport-alert.shortage { color: #a92828; border-color: #e8b2b2; background: #fff6f6; }
+.transport-alert.ok { color: #216a49; border-color: #b9d9c9; background: #f5fbf7; }
+.transport-choice { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 18px 0; }
+.transport-choice h3 { grid-column: 1/-1; margin: 0 0 4px; }
+.transport-choice button { min-height: 48px; border-radius: 12px; border: 1px solid var(--warm-grey, #e8e4df); background: #fff; font-weight: 700; }
+.transport-choice button.active { border-color: var(--og-orange, #f36f21); background: #fff5ee; color: #d95712; }
+.transport-choice .icon { width: 20px; height: 20px; vertical-align: middle; margin-right: 4px; }
+.driver-form { display: grid; gap: 14px; padding: 16px; border-radius: 14px; background: var(--canvas, #f7f5f2); }
+.driver-form label { display: grid; gap: 8px; font-weight: 700; }
+.seat-stepper { display: grid; grid-template-columns: 46px 60px 46px; align-items: center; width: max-content; overflow: hidden; border: 1px solid var(--warm-grey, #e8e4df); border-radius: 12px; background: #fff; }
+.seat-stepper button { height: 44px; border: 0; background: transparent; font-size: 24px; }
+.seat-stepper strong { text-align: center; font-size: 20px; }
+.transport-people { display: grid; gap: 18px; margin-top: 20px; }
+.transport-people > div { padding-top: 14px; border-top: 1px solid var(--warm-grey, #e8e4df); }
+.transport-people h3 { margin: 0 0 8px; font-size: 16px; }
+.transport-people p { margin: 5px 0; }
+.transport-manage { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--warm-grey, #e8e4df); }
+.transport-manage summary { cursor: pointer; font-weight: 800; margin-bottom: 14px; }
+.transport-manage .admin-form-grid { margin: 12px 0; }
+.admin-row-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.location-admin-row > div:first-child { display: grid; gap: 2px; }
+
+@media (max-width: 640px) {
+  .location-travel-card { align-items: flex-start; flex-direction: column; }
+  .location-travel-card a { width: 100%; text-align: center; }
+  .transport-choice { grid-template-columns: 1fr; }
+  .transport-choice h3 { grid-column: 1; }
+  .transport-modal-layer { padding: 12px; }
+  .transport-modal { max-height: 90vh; border-radius: 18px; }
+  .transport-modal-body { padding: 0 16px 22px; }
+  .admin-row-actions { width: 100%; justify-content: flex-start; }
+}
