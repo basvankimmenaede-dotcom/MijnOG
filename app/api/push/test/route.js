@@ -38,7 +38,20 @@ export async function POST(request) {
         await webpush.sendNotification({ endpoint: row.endpoint, keys: { p256dh: row.p256dh, auth: row.auth } }, JSON.stringify({ title: 'Mijn OG werkt!', body: 'Pushmeldingen zijn succesvol gekoppeld.', url: '/?tab=Meer', tag: 'mijn-og-test' }))
         sent++
       } catch (pushError) {
-        if ([404, 410].includes(pushError?.statusCode)) await service.from('push_subscriptions').delete().eq('id', row.id)
+        console.error('Push test failed', {
+          subscriptionId: row.id,
+          statusCode: pushError?.statusCode || null,
+          body: pushError?.body || null,
+          message: pushError?.message || String(pushError)
+        })
+        if ([404, 410].includes(pushError?.statusCode)) {
+          await service.from('push_subscriptions').delete().eq('id', row.id)
+        }
+        return Response.json({
+          error: 'Pushmelding kon niet worden afgeleverd.',
+          statusCode: pushError?.statusCode || null,
+          detail: pushError?.body || pushError?.message || 'Onbekende pushfout'
+        }, { status: 502 })
       }
     }
     return Response.json({ ok: true, sent })
