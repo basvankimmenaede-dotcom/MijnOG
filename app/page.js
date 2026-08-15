@@ -403,29 +403,70 @@ function Team({ teams }) {
   )
 }
 
-function AdminPanel({ onMessage }) {
+function AdminPanel({ onMessage, onChanged }) {
+  const [open, setOpen] = useState(false)
+  const [view, setView] = useState('menu')
   const [seasons, setSeasons] = useState([])
   const [teams, setTeams] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [seasonForm, setSeasonForm] = useState({ name: '', starts_on: '', ends_on: '' })
-  const [teamForm, setTeamForm] = useState({ name: '', sport: 'softbal', season_id: '' })
+  const [profiles, setProfiles] = useState([])
+  const [memberships, setMemberships] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [busy, setBusy] = useState(false)
   const [showSeasonForm, setShowSeasonForm] = useState(false)
   const [showTeamForm, setShowTeamForm] = useState(false)
-  const [busy, setBusy] = useState(false)
+  const [seasonForm, setSeasonForm] = useState({ name: '', starts_on: '', ends_on: '' })
+  const [teamForm, setTeamForm] = useState({ name: '', sport: 'softbal', season_id: '' })
+  const [selectedSeasonId, setSelectedSeasonId] = useState('')
+  const [selectedTeamId, setSelectedTeamId] = useState('')
+  const [memberSearch, setMemberSearch] = useState('')
 
-  useEffect(() => { loadAdminData() }, [])
+  useEffect(() => {
+    if (open) loadAdminData()
+  }, [open])
 
   async function loadAdminData() {
     setLoading(true)
-    const [seasonResult, teamResult] = await Promise.all([
+    const [seasonResult, teamResult, profileResult, memberResult] = await Promise.all([
       supabase.from('seasons').select('*').order('starts_on', { ascending: false }),
-      supabase.from('teams').select('id,name,sport,is_active,season_id,seasons(name,is_active)').order('name')
+      supabase.from('teams').select('id,name,sport,is_active,season_id,seasons(name,is_active)').order('name'),
+      supabase.from('profiles').select('id,first_name,last_name,jersey_number,role').order('first_name'),
+      supabase.from('team_members').select('id,team_id,profile_id,member_role')
     ])
     if (seasonResult.error) onMessage(`Seizoenen laden mislukt: ${seasonResult.error.message}`)
-    else setSeasons(seasonResult.data ?? [])
+    else {
+      const rows = seasonResult.data ?? []
+      setSeasons(rows)
+      if (!selectedSeasonId && rows.length) {
+        const active = rows.find(row => row.is_active) || rows[0]
+        setSelectedSeasonId(String(active.id))
+      }
+    }
     if (teamResult.error) onMessage(`Teams laden mislukt: ${teamResult.error.message}`)
     else setTeams(teamResult.data ?? [])
+    if (profileResult.error) onMessage(`Leden laden mislukt: ${profileResult.error.message}`)
+    else setProfiles(profileResult.data ?? [])
+    if (memberResult.error) onMessage(`Teamindeling laden mislukt: ${memberResult.error.message}`)
+    else setMemberships(memberResult.data ?? [])
     setLoading(false)
+  }
+
+  function closeAdmin() {
+    setOpen(false)
+    setView('menu')
+    setShowSeasonForm(false)
+    setShowTeamForm(false)
+    setMemberSearch('')
+  }
+
+  function goTo(nextView) {
+    setView(nextView)
+    setShowSeasonForm(false)
+    setShowTeamForm(false)
+    setMemberSearch('')
+    if (nextView === 'members' && !selectedTeamId) {
+      const candidate = teams.find(team => String(team.season_id) === String(selectedSeasonId) && team.is_active)
+      if (candidate) setSelectedTeamId(String(candidate.id))
+    }
   }
 
   async function addSeason(e) {
@@ -440,7 +481,10 @@ function AdminPanel({ onMessage }) {
     })
     setBusy(false)
     if (error) return onMessage(`Seizoen toevoegen mislukt: ${error.message}`)
-    setSeasonForm({ name: '', starts_on: '', ends_on: '' }); setShowSeasonForm(false); onMessage('Seizoen toegevoegd ✓'); loadAdminData()
+    setSeasonForm({ name: '', starts_on: '', ends_on: '' })
+    setShowSeasonForm(false)
+    onMessage('Seizoen toegevoegd ✓')
+    await loadAdminData()
   }
 
   async function activateSeason(id) {
@@ -453,7 +497,12 @@ function AdminPanel({ onMessage }) {
     const { error } = await supabase.from('seasons').update({ is_active: true }).eq('id', id)
     setBusy(false)
     if (error) onMessage(`Actief seizoen wijzigen mislukt: ${error.message}`)
-    else { onMessage('Actief seizoen gewijzigd ✓'); loadAdminData() }
+    else {
+      setSelectedSeasonId(String(id))
+      onMessage('Actief seizoen gewijzigd ✓')
+      await loadAdminData()
+      onChanged?.()
+    }
   }
 
   async function addTeam(e) {
@@ -465,7 +514,11 @@ function AdminPanel({ onMessage }) {
     })
     setBusy(false)
     if (error) return onMessage(`Team toevoegen mislukt: ${error.message}`)
-    setTeamForm({ name: '', sport: 'softbal', season_id: '' }); setShowTeamForm(false); onMessage('Team toegevoegd ✓'); loadAdminData()
+    setTeamForm({ name: '', sport: 'softbal', season_id: '' })
+    setShowTeamForm(false)
+    onMessage('Team toegevoegd ✓')
+    await loadAdminData()
+    onChanged?.()
   }
 
   async function toggleTeam(team) {
@@ -473,42 +526,174 @@ function AdminPanel({ onMessage }) {
     const { error } = await supabase.from('teams').update({ is_active: !team.is_active }).eq('id', team.id)
     setBusy(false)
     if (error) onMessage(`Team wijzigen mislukt: ${error.message}`)
-    else loadAdminData()
+    else {
+      await loadAdminData()
+      onChanged?.()
+    }
   }
 
-  if (loading) return <div className="subtle-loading">Beheer laden…</div>
+  async function addMember(profileId, role = 'player') {
+    if (!selectedTeamId) return
+    setBusy(true); onMessage('')
+    const { error } = await supabase.from('team_members').insert({
+      team_id: Number(selectedTeamId), profile_id: profileId, member_role: role
+    })
+    setBusy(false)
+    if (error) onMessage(`Lid toevoegen mislukt: ${error.message}`)
+    else {
+      onMessage(`Lid toegevoegd als ${role === 'coach' ? 'coach' : 'speler'} ✓`)
+      await loadAdminData()
+      onChanged?.()
+    }
+  }
+
+  async function changeMemberRole(membershipId, role) {
+    setBusy(true); onMessage('')
+    const { error } = await supabase.from('team_members').update({ member_role: role }).eq('id', membershipId)
+    setBusy(false)
+    if (error) onMessage(`Teamrol wijzigen mislukt: ${error.message}`)
+    else {
+      await loadAdminData()
+      onChanged?.()
+    }
+  }
+
+  async function removeMember(membership) {
+    const person = profiles.find(profile => profile.id === membership.profile_id)
+    const name = personName(person)
+    if (!window.confirm(`${name} uit dit team verwijderen?`)) return
+    setBusy(true); onMessage('')
+    const { error } = await supabase.from('team_members').delete().eq('id', membership.id)
+    setBusy(false)
+    if (error) onMessage(`Lid verwijderen mislukt: ${error.message}`)
+    else {
+      onMessage('Lid uit team verwijderd.')
+      await loadAdminData()
+      onChanged?.()
+    }
+  }
+
+  const seasonTeams = teams.filter(team => !selectedSeasonId || String(team.season_id) === String(selectedSeasonId))
+  const selectedTeam = teams.find(team => String(team.id) === String(selectedTeamId))
+  const currentMemberships = memberships.filter(row => String(row.team_id) === String(selectedTeamId))
+  const currentProfileIds = new Set(currentMemberships.map(row => row.profile_id))
+  const search = memberSearch.trim().toLowerCase()
+  const availableProfiles = profiles.filter(profile => {
+    if (currentProfileIds.has(profile.id)) return false
+    if (!search) return true
+    return `${personName(profile)} ${profile.jersey_number || ''}`.toLowerCase().includes(search)
+  })
 
   return (
-    <section className="admin-panel">
-      <div className="admin-heading"><div><p className="eyebrow orange">BEHEERDER</p><h2>Clubbeheer</h2></div><span className="admin-badge">Admin</span></div>
+    <>
+      <button className="admin-launcher" onClick={() => setOpen(true)}>
+        <span className="settings-icon"><Icon name="settings" /></span>
+        <span className="settings-copy"><strong>Clubbeheer</strong><small>Seizoenen, teams en teamindeling</small></span>
+        <span className="admin-badge">Admin</span>
+        <Icon name="chevron" />
+      </button>
 
-      <div className="admin-block">
-        <SectionTitle title="Seizoenen" action="+ Nieuw" onAction={() => setShowSeasonForm(v => !v)} />
-        {showSeasonForm && <form className="edit-panel form-stack" onSubmit={addSeason}>
-          <label>Naam<input placeholder="2027" value={seasonForm.name} onChange={e => setSeasonForm({...seasonForm, name:e.target.value})} required /></label>
-          <div className="admin-form-grid"><label>Startdatum<input type="date" value={seasonForm.starts_on} onChange={e => setSeasonForm({...seasonForm, starts_on:e.target.value})} /></label><label>Einddatum<input type="date" value={seasonForm.ends_on} onChange={e => setSeasonForm({...seasonForm, ends_on:e.target.value})} /></label></div>
-          <button className="primary" disabled={busy}>Seizoen toevoegen</button>
-        </form>}
-        <div className="admin-list">
-          {seasons.map(season => <article className="admin-row" key={season.id}><div><strong>{season.name}</strong><small>{season.starts_on || 'Geen startdatum'}{season.ends_on ? ` – ${season.ends_on}` : ''}</small></div>{season.is_active ? <span className="active-badge">Actief</span> : <button className="mini-action" disabled={busy} onClick={() => activateSeason(season.id)}>Actief maken</button>}</article>)}
-          {!seasons.length && <p className="muted">Nog geen seizoenen.</p>}
-        </div>
-      </div>
+      {open && (
+        <div className="sheet-backdrop" role="presentation" onMouseDown={e => { if (e.target === e.currentTarget) closeAdmin() }}>
+          <section className="admin-sheet" role="dialog" aria-modal="true" aria-label="Clubbeheer">
+            <div className="sheet-handle" aria-hidden="true" />
+            <header className="sheet-header">
+              {view !== 'menu' ? <button className="sheet-icon-button" onClick={() => setView('menu')} aria-label="Terug"><Icon name="back" /></button> : <span className="sheet-icon-spacer" />}
+              <div><p className="eyebrow orange">BEHEERDER</p><h2>{view === 'menu' ? 'Clubbeheer' : view === 'seasons' ? 'Seizoenen' : view === 'teams' ? 'Teams' : 'Teamindeling'}</h2></div>
+              <button className="sheet-icon-button" onClick={closeAdmin} aria-label="Sluiten"><Icon name="close" /></button>
+            </header>
 
-      <div className="admin-block">
-        <SectionTitle title="Teams" action="+ Team" onAction={() => setShowTeamForm(v => !v)} />
-        {showTeamForm && <form className="edit-panel form-stack" onSubmit={addTeam}>
-          <label>Teamnaam<input placeholder="Softbal Dames 1" value={teamForm.name} onChange={e => setTeamForm({...teamForm, name:e.target.value})} required /></label>
-          <div className="admin-form-grid"><label>Sport<select value={teamForm.sport} onChange={e => setTeamForm({...teamForm, sport:e.target.value})}><option value="softbal">Softbal</option><option value="honkbal">Honkbal</option></select></label><label>Seizoen<select value={teamForm.season_id} onChange={e => setTeamForm({...teamForm, season_id:e.target.value})} required><option value="">Kies seizoen</option>{seasons.map(s => <option value={s.id} key={s.id}>{s.name}{s.is_active ? ' (actief)' : ''}</option>)}</select></label></div>
-          <button className="primary" disabled={busy}>Team toevoegen</button>
-        </form>}
-        <div className="admin-list">
-          {teams.map(team => <article className={`admin-row${team.is_active ? '' : ' inactive'}`} key={team.id}><div><strong>{team.name}</strong><small>{capitalize(team.sport)} · {team.seasons?.name || 'Geen seizoen'}</small></div><button className="mini-action" disabled={busy} onClick={() => toggleTeam(team)}>{team.is_active ? 'Archiveren' : 'Activeren'}</button></article>)}
-          {!teams.length && <p className="muted">Nog geen teams.</p>}
+            {loading ? <div className="subtle-loading">Beheer laden…</div> : (
+              <div className="sheet-body">
+                {view === 'menu' && (
+                  <div className="admin-menu-list">
+                    <AdminMenuItem icon="calendar" title="Seizoenen" subtitle={`${seasons.length} seizoen${seasons.length === 1 ? '' : 'en'} · ${seasons.find(s => s.is_active)?.name || 'geen actief seizoen'}`} onClick={() => goTo('seasons')} />
+                    <AdminMenuItem icon="team" title="Teams" subtitle={`${teams.filter(t => t.is_active).length} actieve teams`} onClick={() => goTo('teams')} />
+                    <AdminMenuItem icon="people" title="Teamindeling" subtitle="Spelers en coaches koppelen" onClick={() => goTo('members')} />
+                  </div>
+                )}
+
+                {view === 'seasons' && (
+                  <div className="admin-block">
+                    <SectionTitle title="Alle seizoenen" action={showSeasonForm ? 'Sluiten' : '+ Nieuw'} onAction={() => setShowSeasonForm(v => !v)} />
+                    {showSeasonForm && <form className="sheet-form form-stack" onSubmit={addSeason}>
+                      <label>Naam<input placeholder="2027" value={seasonForm.name} onChange={e => setSeasonForm({...seasonForm, name:e.target.value})} required /></label>
+                      <div className="admin-form-grid"><label>Startdatum<input type="date" value={seasonForm.starts_on} onChange={e => setSeasonForm({...seasonForm, starts_on:e.target.value})} /></label><label>Einddatum<input type="date" value={seasonForm.ends_on} onChange={e => setSeasonForm({...seasonForm, ends_on:e.target.value})} /></label></div>
+                      <button className="primary" disabled={busy}>{busy ? 'Opslaan…' : 'Seizoen toevoegen'}</button>
+                    </form>}
+                    <div className="admin-list">
+                      {seasons.map(season => <article className="admin-row" key={season.id}><div><strong>{season.name}</strong><small>{formatSeasonRange(season)}</small></div>{season.is_active ? <span className="active-badge">Actief</span> : <button className="mini-action" disabled={busy} onClick={() => activateSeason(season.id)}>Actief maken</button>}</article>)}
+                      {!seasons.length && <div className="admin-empty">Nog geen seizoenen.</div>}
+                    </div>
+                  </div>
+                )}
+
+                {view === 'teams' && (
+                  <div className="admin-block">
+                    <div className="admin-filter-row">
+                      <label>Seizoen<select value={selectedSeasonId} onChange={e => setSelectedSeasonId(e.target.value)}>{seasons.map(s => <option value={s.id} key={s.id}>{s.name}{s.is_active ? ' · actief' : ''}</option>)}</select></label>
+                    </div>
+                    <SectionTitle title="Teams" action={showTeamForm ? 'Sluiten' : '+ Team'} onAction={() => { setTeamForm(form => ({...form, season_id: form.season_id || selectedSeasonId})); setShowTeamForm(v => !v) }} />
+                    {showTeamForm && <form className="sheet-form form-stack" onSubmit={addTeam}>
+                      <label>Teamnaam<input placeholder="Softbal Dames 1" value={teamForm.name} onChange={e => setTeamForm({...teamForm, name:e.target.value})} required /></label>
+                      <div className="admin-form-grid"><label>Sport<select value={teamForm.sport} onChange={e => setTeamForm({...teamForm, sport:e.target.value})}><option value="softbal">Softbal</option><option value="honkbal">Honkbal</option></select></label><label>Seizoen<select value={teamForm.season_id || selectedSeasonId} onChange={e => setTeamForm({...teamForm, season_id:e.target.value})} required>{seasons.map(s => <option value={s.id} key={s.id}>{s.name}</option>)}</select></label></div>
+                      <button className="primary" disabled={busy}>{busy ? 'Opslaan…' : 'Team toevoegen'}</button>
+                    </form>}
+                    <div className="admin-list">
+                      {seasonTeams.map(team => <article className={`admin-row${team.is_active ? '' : ' inactive'}`} key={team.id}><div><strong>{team.name}</strong><small>{capitalize(team.sport)} · {team.is_active ? 'Actief' : 'Gearchiveerd'}</small></div><button className="mini-action" disabled={busy} onClick={() => toggleTeam(team)}>{team.is_active ? 'Archiveren' : 'Activeren'}</button></article>)}
+                      {!seasonTeams.length && <div className="admin-empty">Geen teams in dit seizoen.</div>}
+                    </div>
+                  </div>
+                )}
+
+                {view === 'members' && (
+                  <div className="admin-block team-members-admin">
+                    <div className="admin-form-grid">
+                      <label>Seizoen<select value={selectedSeasonId} onChange={e => { const id=e.target.value; setSelectedSeasonId(id); const first=teams.find(t => String(t.season_id)===String(id) && t.is_active); setSelectedTeamId(first ? String(first.id) : '') }}>{seasons.map(s => <option value={s.id} key={s.id}>{s.name}{s.is_active ? ' · actief' : ''}</option>)}</select></label>
+                      <label>Team<select value={selectedTeamId} onChange={e => setSelectedTeamId(e.target.value)}><option value="">Kies team</option>{seasonTeams.filter(team => team.is_active).map(team => <option value={team.id} key={team.id}>{team.name}</option>)}</select></label>
+                    </div>
+
+                    {!selectedTeam ? <div className="admin-empty spacious">Kies eerst een team om de teamindeling te beheren.</div> : <>
+                      <div className="team-member-summary"><div><p className="eyebrow orange">TEAM</p><h3>{selectedTeam.name}</h3></div><span>{currentMemberships.length} leden</span></div>
+
+                      <SectionTitle title="Huidige teamleden" />
+                      <div className="member-list">
+                        {currentMemberships.map(membership => {
+                          const person = profiles.find(profile => profile.id === membership.profile_id)
+                          return <article className="member-row" key={membership.id}>
+                            <span className="member-avatar">{initials(person)}</span>
+                            <div className="member-copy"><strong>{personName(person)}</strong><small>{person?.jersey_number ? `#${person.jersey_number} · ` : ''}{person?.role === 'admin' ? 'Clubbeheerder' : 'Mijn OG-lid'}</small></div>
+                            <select aria-label={`Teamrol van ${personName(person)}`} value={membership.member_role} onChange={e => changeMemberRole(membership.id, e.target.value)} disabled={busy}><option value="player">Speler</option><option value="coach">Coach</option></select>
+                            <button className="remove-member" onClick={() => removeMember(membership)} disabled={busy} aria-label={`${personName(person)} verwijderen`}><Icon name="trash" /></button>
+                          </article>
+                        })}
+                        {!currentMemberships.length && <div className="admin-empty">Nog niemand aan dit team gekoppeld.</div>}
+                      </div>
+
+                      <SectionTitle title="Lid toevoegen" />
+                      <label className="member-search">Zoeken<input type="search" placeholder="Zoek op naam of rugnummer" value={memberSearch} onChange={e => setMemberSearch(e.target.value)} /></label>
+                      <div className="available-member-list">
+                        {availableProfiles.slice(0, 30).map(person => <article className="available-member-row" key={person.id}>
+                          <span className="member-avatar small">{initials(person)}</span>
+                          <div className="member-copy"><strong>{personName(person)}</strong><small>{person.jersey_number ? `#${person.jersey_number}` : 'Geen rugnummer'}</small></div>
+                          <div className="add-member-actions"><button className="mini-action" disabled={busy} onClick={() => addMember(person.id, 'player')}>+ Speler</button><button className="mini-action coach" disabled={busy} onClick={() => addMember(person.id, 'coach')}>+ Coach</button></div>
+                        </article>)}
+                        {!availableProfiles.length && <div className="admin-empty">Geen beschikbare leden gevonden.</div>}
+                      </div>
+                    </>}
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
         </div>
-      </div>
-    </section>
+      )}
+    </>
   )
+}
+
+function AdminMenuItem({ icon, title, subtitle, onClick }) {
+  return <button className="admin-menu-item" onClick={onClick}><span className="admin-menu-icon"><Icon name={icon} /></span><span><strong>{title}</strong><small>{subtitle}</small></span><Icon name="chevron" /></button>
 }
 
 function More({ session, profile, teams, calendar, onSaved, onMessage }) {
@@ -599,7 +784,7 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
         <SettingsRow icon="lock" title="Wachtwoord" subtitle="Reset via het inlogscherm" />
         <SettingsRow icon="bell" title="Notificaties" subtitle="Pushmeldingen komen later" disabled />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setShowCalendar(v => !v)} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.1" />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.3" />
       </div>
 
       {showCalendar && (
@@ -613,7 +798,7 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
         </section>
       )}
 
-      {profile?.role === 'admin' && <AdminPanel onMessage={onMessage} />}
+      {profile?.role === 'admin' && <AdminPanel onMessage={onMessage} onChanged={onSaved} />}
 
       <button className="logout-button" onClick={signOut}><Icon name="logout" /> Uitloggen</button>
     </section>
@@ -667,7 +852,12 @@ function Icon({ name }) {
     lock: <><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></>,
     link: <><path d="M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1"/><path d="M14 11a5 5 0 0 0-7.1-.1l-2 2A5 5 0 0 0 12 20l1.1-1.1"/></>,
     info: <><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></>,
-    logout: <><path d="M10 4H5v16h5M14 8l4 4-4 4M8 12h10"/></>
+    logout: <><path d="M10 4H5v16h5M14 8l4 4-4 4M8 12h10"/></>,
+    settings: <><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21h-4v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3.1 14H3v-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.5V3h4v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.5 1h.1v4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></>,
+    people: <><circle cx="8" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M2.5 20c0-4 2.3-6 5.5-6s5.5 2 5.5 6M14 15c3.5 0 6 1.6 6 5"/></>,
+    back: <><path d="m15 18-6-6 6-6"/></>,
+    close: <><path d="M6 6l12 12M18 6 6 18"/></>,
+    trash: <><path d="M4 7h16M9 7V4h6v3M7 7l1 14h8l1-14M10 11v6M14 11v6"/></>
   }
   return <svg className="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name] || paths.more}</svg>
 }
@@ -681,6 +871,25 @@ function translateRole(role) {
 }
 
 function capitalize(value = '') { return value ? value.charAt(0).toUpperCase() + value.slice(1) : '' }
+
+
+function personName(profile) {
+  if (!profile) return 'Onbekend lid'
+  return [profile.first_name, profile.last_name].filter(Boolean).join(' ').trim() || 'Naam nog niet ingesteld'
+}
+
+function initials(profile) {
+  const parts = [profile?.first_name, profile?.last_name].filter(Boolean)
+  if (!parts.length) return 'OG'
+  return parts.map(part => part[0]).join('').slice(0, 2).toUpperCase()
+}
+
+function formatSeasonRange(season) {
+  if (!season?.starts_on && !season?.ends_on) return 'Geen datums ingesteld'
+  const fmt = value => value ? new Date(`${value}T12:00:00`).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' }).replace('.', '') : null
+  if (season.starts_on && season.ends_on) return `${fmt(season.starts_on)} – ${fmt(season.ends_on)}`
+  return fmt(season.starts_on || season.ends_on)
+}
 
 function formatLongDate(value) {
   return capitalize(new Date(value).toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' }))
