@@ -5,7 +5,7 @@ export default function manifest() {
     description: 'Jouw team. Jouw stats. Jouw club.',
     start_url: '/',
     display: 'standalone',
-    background_color: '#ffffff',
+    background_color: '#f7f5f2',
     theme_color: '#f36f21',
     icons: [
       { src: '/og-logo.png', sizes: '512x512', type: 'image/png', purpose: 'any' },

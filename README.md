@@ -1,16 +1,17 @@
-# Mijn OG v2.5
+# Mijn OG v2.5.1 — Visual Refresh
 
-## Nieuw in 2.5
-- Een training kan aan meerdere teams gekoppeld worden.
-- Individuele gastspelers kunnen aan een training worden toegevoegd.
-- Aanwezigheidsoverzicht heeft filters per team en voor gasten.
-- Trainingdetails hebben een eigen nette modal.
-- Clubbeheer opent gecentreerd in plaats van als vaste bottom sheet.
-- Wisselen via de onderste navigatie scrollt de nieuwe pagina altijd naar boven.
-- Over Mijn OG toont versie 2.5.
+Visuele polish-release op basis van de goedgekeurde Mijn OG design-system richting.
 
-## Eenmalig nog uitvoeren in Supabase
-De hoofd-migratie voor v2.5 is al uitgevoerd. Voer daarnaast `supabase_v25_guest_profiles.sql` uit zodat coaches in de gastspelerzoeker clubleden op naam kunnen vinden.
+## Wat is aangepast
+- Barlow Condensed voor sportieve koppen en Inter voor UI/bodytekst.
+- Nieuw warm kleurpalet: OG Orange, warm canvas, ink/graphite, success/danger states.
+- Consistente horizontale padding, card-radii, knophoogtes en spacing.
+- Home hero, agenda, trainingdetails, aanwezigheid, profiel, login en Clubbeheer visueel geharmoniseerd.
+- Clubbeheer blijft gecentreerd als modal.
+- Geen demo-data toegevoegd; alle bestaande v2.5 databronnen en functionaliteit blijven behouden.
+- `Over Mijn OG` toont versie 2.5.1.
 
-## Uploaden
-Vervang de bestaande projectbestanden door deze versie, commit naar `main` en push naar GitHub. Vercel bouwt daarna automatisch opnieuw.
+## Deploy
+Vervang de huidige projectbestanden door deze map, commit naar `main` en push naar GitHub. Vercel deployt automatisch.
+
+Geen nieuwe Supabase-migratie nodig voor v2.5.1.
