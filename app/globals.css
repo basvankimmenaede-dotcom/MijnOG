@@ -307,8 +307,10 @@ details summary { font-size: 11px; margin-top: 7px; cursor: pointer; color: var(
 .training-sheet .sheet-header { text-align: center; }
 .sheet-title-center { text-align: center; }
 .training-form { padding-bottom: 8px; }
-.form-two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.training-form input, .training-form textarea, .training-form select { width: 100%; }
+.form-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; width: 100%; }
+.form-two > label { min-width: 0; width: 100%; }
+.training-form input, .training-form textarea, .training-form select { width: 100%; min-width: 0; max-width: 100%; }
+.training-form input[type="date"], .training-form input[type="time"] { display: block; inline-size: 100%; }
 
 .modal-backdrop { position: fixed; inset: 0; z-index: 130; background: rgba(17,19,24,.52); display: grid; place-items: center; padding: 20px; backdrop-filter: blur(5px); }
 .confirm-modal { width: min(100%, 420px); background: white; border-radius: 24px; padding: 22px; box-shadow: 0 22px 70px rgba(17,19,24,.22); text-align: center; display: grid; gap: 12px; }
