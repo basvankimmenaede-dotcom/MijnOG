@@ -18,6 +18,9 @@ export default function HomePage() {
   const [trainingEvents, setTrainingEvents] = useState([])
   const [attendance, setAttendance] = useState([])
   const [visibleProfiles, setVisibleProfiles] = useState([])
+  const [allMemberships, setAllMemberships] = useState([])
+  const [eventTeamLinks, setEventTeamLinks] = useState([])
+  const [eventParticipantLinks, setEventParticipantLinks] = useState([])
   const [calendarState, setCalendarState] = useState({ loading: false, error: '' })
   const [recoveryMode, setRecoveryMode] = useState(false)
   const [absenceEvent, setAbsenceEvent] = useState(null)
@@ -39,7 +42,7 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!session?.user?.id) {
-      setProfile(null); setTeams([]); setCalendarConnection(null); setCalendarEvents([]); setTrainingEvents([]); setAttendance([]); setVisibleProfiles([])
+      setProfile(null); setTeams([]); setCalendarConnection(null); setCalendarEvents([]); setTrainingEvents([]); setAttendance([]); setVisibleProfiles([]); setAllMemberships([]); setEventTeamLinks([]); setEventParticipantLinks([])
       return
     }
     loadUserData(session.user.id, session.access_token)
@@ -48,13 +51,16 @@ export default function HomePage() {
   async function loadUserData(userId, accessToken = session?.access_token) {
     setLoading(true)
     setMessage('')
-    const [profileResult, teamResult, calendarResult, eventResult, attendanceResult, profilesResult] = await Promise.all([
+    const [profileResult, teamResult, calendarResult, eventResult, attendanceResult, profilesResult, membershipResult, eventTeamsResult, eventParticipantsResult] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
       supabase.from('team_members').select('member_role, teams(id, name, sport, season_id, is_active)').eq('profile_id', userId),
       supabase.from('calendar_connections').select('*').eq('profile_id', userId).eq('provider', 'foys').maybeSingle(),
       supabase.from('events').select('*').order('start_at', { ascending: true }),
       supabase.from('attendance').select('*'),
-      supabase.from('profiles').select('id, first_name, last_name, jersey_number, role')
+      supabase.from('profiles').select('id, first_name, last_name, jersey_number, role'),
+      supabase.from('team_members').select('id,team_id,profile_id,member_role'),
+      supabase.from('event_teams').select('event_id,team_id,teams(id,name,sport)'),
+      supabase.from('event_participants').select('event_id,profile_id')
     ])
     if (profileResult.error) setMessage(`Profiel kon niet worden geladen: ${profileResult.error.message}`)
     else setProfile(profileResult.data)
@@ -67,14 +73,26 @@ export default function HomePage() {
       else setCalendarEvents([])
     }
     if (eventResult.error) setMessage(`Trainingen konden niet worden geladen: ${eventResult.error.message}`)
-    else setTrainingEvents((eventResult.data ?? []).map(normalizeTrainingEvent))
+    else {
+      const teamLinks = eventTeamsResult.data ?? []
+      const participantLinks = eventParticipantsResult.data ?? []
+      setEventTeamLinks(teamLinks)
+      setEventParticipantLinks(participantLinks)
+      setTrainingEvents((eventResult.data ?? []).map(row => normalizeTrainingEvent(row, teamLinks, participantLinks)))
+    }
     if (!attendanceResult.error) setAttendance(attendanceResult.data ?? [])
     if (!profilesResult.error) setVisibleProfiles(profilesResult.data ?? [])
+    if (!membershipResult.error) setAllMemberships(membershipResult.data ?? [])
     setLoading(false)
   }
 
   async function refreshAppData() {
     if (session?.user?.id) await loadUserData(session.user.id, session.access_token)
+  }
+
+  function navigate(tab) {
+    setActiveTab(tab)
+    requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: 'auto' }))
   }
 
   async function loadCalendar(accessToken = session?.access_token) {
@@ -126,13 +144,13 @@ export default function HomePage() {
       <section className="content">
         {message && <div className="notice">{message}</div>}
         {loading && <div className="subtle-loading">Gegevens bijwerken…</div>}
-        {activeTab === 'Home' && <Dashboard profile={profile} teams={teams} events={allEvents} calendarConnection={calendarConnection} calendarState={calendarState} ownAttendance={ownAttendance} onAttendance={setAttendanceStatus} attendanceBusy={attendanceBusy} onAgenda={() => setActiveTab('Agenda')} onTeam={() => setActiveTab('Team')} onStats={() => setActiveTab('Stats')} onMore={() => setActiveTab('Meer')} />}
-        {activeTab === 'Agenda' && <Agenda events={allEvents} connection={calendarConnection} state={calendarState} profile={profile} teams={teams} attendance={attendance} visibleProfiles={visibleProfiles} ownAttendance={ownAttendance} onAttendance={setAttendanceStatus} attendanceBusy={attendanceBusy} onRefresh={refreshAppData} onGoMore={() => setActiveTab('Meer')} />}
+        {activeTab === 'Home' && <Dashboard profile={profile} teams={teams} events={allEvents} calendarConnection={calendarConnection} calendarState={calendarState} ownAttendance={ownAttendance} onAttendance={setAttendanceStatus} attendanceBusy={attendanceBusy} onAgenda={() => navigate('Agenda')} onTeam={() => navigate('Team')} onStats={() => navigate('Stats')} onMore={() => navigate('Meer')} />}
+        {activeTab === 'Agenda' && <Agenda events={allEvents} connection={calendarConnection} state={calendarState} profile={profile} teams={teams} attendance={attendance} visibleProfiles={visibleProfiles} memberships={allMemberships} ownAttendance={ownAttendance} onAttendance={setAttendanceStatus} attendanceBusy={attendanceBusy} onRefresh={refreshAppData} onGoMore={() => navigate('Meer')} />}
         {activeTab === 'Stats' && <Stats />}
         {activeTab === 'Team' && <Team teams={teams} />}
         {activeTab === 'Meer' && <More session={session} profile={profile} teams={teams} calendar={calendarConnection} onSaved={refreshAppData} onMessage={setMessage} />}
       </section>
-      <nav className="bottom-nav" aria-label="Hoofdnavigatie">{tabs.map(tab => <button key={tab} className={activeTab === tab ? 'nav-item active' : 'nav-item'} onClick={() => setActiveTab(tab)}><Icon name={iconNameForTab(tab)} /><small>{tab}</small></button>)}</nav>
+      <nav className="bottom-nav" aria-label="Hoofdnavigatie">{tabs.map(tab => <button key={tab} className={activeTab === tab ? 'nav-item active' : 'nav-item'} onClick={() => navigate(tab)}><Icon name={iconNameForTab(tab)} /><small>{tab}</small></button>)}</nav>
       {absenceEvent && <AbsenceModal event={absenceEvent} reason={absenceReason} setReason={setAbsenceReason} busy={attendanceBusy} onCancel={() => { setAbsenceEvent(null); setAbsenceReason(''); setMessage('') }} onConfirm={confirmAbsence} />}
     </main>
   )
@@ -271,66 +289,166 @@ function CompactEvent({ event }) {
   return <article className="compact-event"><div className="compact-date"><strong>{date.getDate()}</strong><span>{date.toLocaleDateString('nl-NL', { month: 'short' }).replace('.', '').toUpperCase()}</span></div><div className="compact-event-copy"><strong>{event.title}</strong><span>{formatShortDate(event.start)}</span><small>{formatTimeRange(event.start,event.end)}{event.location ? ` · ${event.location}` : ''}</small></div><span className={`type-chip ${event.type === 'training' ? 'training-chip' : ''}`}>{eventTypeLabel(event)}</span></article>
 }
 
-function Agenda({ events, connection, state, profile, teams, attendance, visibleProfiles, ownAttendance, onAttendance, attendanceBusy, onRefresh, onGoMore }) {
+function Agenda({ events, connection, state, profile, teams, attendance, visibleProfiles, memberships, ownAttendance, onAttendance, attendanceBusy, onRefresh, onGoMore }) {
   const [filter, setFilter] = useState('all')
   const [editorOpen, setEditorOpen] = useState(false)
   const [editingEvent, setEditingEvent] = useState(null)
+  const [detailEvent, setDetailEvent] = useState(null)
   const canCreate = profile?.role === 'admin' || teams.some(team => team.member_role === 'coach')
+  const coachTeamIds = new Set(teams.filter(team => team.member_role === 'coach').map(team => Number(team.id)))
   const filtered = events.filter(event => filter === 'all' || (filter === 'games' ? event.type === 'game' : event.type === 'training'))
   const grouped = useMemo(() => groupByMonth(filtered), [filtered])
-  function canManage(event) { return event.type === 'training' && (profile?.role === 'admin' || teams.some(team => team.id === event.teamId && team.member_role === 'coach')) }
+  function canManage(event) {
+    return event.type === 'training' && (profile?.role === 'admin' || (event.teamIds ?? [event.teamId]).some(id => coachTeamIds.has(Number(id))))
+  }
   return <section>
     <ScreenHeader title="Komende activiteiten" action={canCreate ? '+ Training' : (connection ? 'Vernieuwen' : null)} onAction={() => canCreate ? setEditorOpen(true) : onRefresh()} />
     <div className="filter-row centered-filters"><button className={`filter-chip ${filter==='all'?'active':''}`} onClick={() => setFilter('all')}>Alles</button><button className={`filter-chip ${filter==='games'?'active':''}`} onClick={() => setFilter('games')}>Wedstrijden</button><button className={`filter-chip ${filter==='training'?'active':''}`} onClick={() => setFilter('training')}>Trainingen</button></div>
-    {!connection && events.every(event => event.type !== 'training') ? <EmptyState icon="link" title="KNBSB-agenda koppelen" text="Voeg onder Meer je persoonlijke FOYS ICS-link toe." action="Naar koppelingen" onAction={onGoMore} /> : state.loading && events.length===0 ? <EmptyState icon="calendar" title="Activiteiten laden…" text="We halen je programma op." /> : filtered.length===0 ? <EmptyState icon="calendar" title="Geen activiteiten gevonden" text="Er zijn binnen dit filter geen komende activiteiten." /> : <div className="agenda-timeline">{Object.entries(grouped).map(([month, monthEvents]) => <section key={month} className="timeline-month"><h2>{month}</h2>{monthEvents.map(event => <TimelineEvent key={event.uid || `${event.type}-${event.id}`} event={event} current={ownAttendance[String(event.id)]} onAttendance={onAttendance} busy={attendanceBusy} canManage={canManage(event)} onEdit={() => { setEditingEvent(event); setEditorOpen(true) }} attendance={attendance.filter(row => String(row.event_id)===String(event.id))} profiles={visibleProfiles} />)}</section>)}</div>}
-    {editorOpen && <TrainingEditor profile={profile} teams={teams} event={editingEvent} onClose={() => { setEditorOpen(false); setEditingEvent(null) }} onSaved={async () => { setEditorOpen(false); setEditingEvent(null); await onRefresh() }} />}
+    {!connection && events.every(event => event.type !== 'training') ? <EmptyState icon="link" title="KNBSB-agenda koppelen" text="Voeg onder Meer je persoonlijke FOYS ICS-link toe." action="Naar koppelingen" onAction={onGoMore} /> : state.loading && events.length===0 ? <EmptyState icon="calendar" title="Activiteiten laden…" text="We halen je programma op." /> : filtered.length===0 ? <EmptyState icon="calendar" title="Geen activiteiten gevonden" text="Er zijn binnen dit filter geen komende activiteiten." /> : <div className="agenda-timeline">{Object.entries(grouped).map(([month, monthEvents]) => <section key={month} className="timeline-month"><h2>{month}</h2>{monthEvents.map(event => <TimelineEvent key={event.uid || `${event.type}-${event.id}`} event={event} current={ownAttendance[String(event.id)]} onAttendance={onAttendance} busy={attendanceBusy} canManage={canManage(event)} onEdit={() => { setEditingEvent(event); setEditorOpen(true) }} onDetails={() => setDetailEvent(event)} attendance={attendance.filter(row => String(row.event_id)===String(event.id))} profiles={visibleProfiles} memberships={memberships} />)}</section>)}</div>}
+    {editorOpen && <TrainingEditor profile={profile} teams={teams} profiles={visibleProfiles} memberships={memberships} event={editingEvent} onClose={() => { setEditorOpen(false); setEditingEvent(null) }} onSaved={async () => { setEditorOpen(false); setEditingEvent(null); await onRefresh() }} />}
+    {detailEvent?.type === 'training' && <TrainingDetailModal event={detailEvent} current={ownAttendance[String(detailEvent.id)]} onAttendance={onAttendance} busy={attendanceBusy} canManage={canManage(detailEvent)} onEdit={() => { setDetailEvent(null); setEditingEvent(detailEvent); setEditorOpen(true) }} onClose={() => setDetailEvent(null)} attendance={attendance.filter(row => String(row.event_id)===String(detailEvent.id))} profiles={visibleProfiles} memberships={memberships} />}
   </section>
 }
 
-function TimelineEvent({ event, current, onAttendance, busy, canManage, onEdit, attendance, profiles }) {
+function TimelineEvent({ event, current, onAttendance, busy, canManage, onEdit, onDetails, attendance, profiles, memberships }) {
   const date = new Date(event.start)
-  return <article className="timeline-event"><div className="timeline-date"><strong>{date.getDate()}</strong><span>{date.toLocaleDateString('nl-NL',{month:'short'}).replace('.','').toUpperCase()}</span></div><div className="timeline-line" aria-hidden="true"><span /></div><div className="timeline-copy"><div className="timeline-title-row"><h3>{event.title}</h3><span className={`type-chip ${event.type==='training'?'training-chip':''}`}>{eventTypeLabel(event)}</span></div><p>{formatShortDate(event.start)}</p><p>{formatTimeRange(event.start,event.end)}{event.location ? ` · ${event.location}` : ''}</p>{event.meetAt && <p>Verzamelen: {formatClock(event.meetAt)}</p>}{event.description && <p className="event-description-inline">{event.description}</p>}{event.type==='training' && <AttendanceButtons current={current?.status} onSelect={status => onAttendance(event,status)} busy={busy} />}{canManage && <div className="coach-tools"><button className="mini-action" onClick={onEdit}>Training beheren</button><AttendanceSummary rows={attendance} profiles={profiles} /></div>}</div></article>
+  return <article className="timeline-event"><div className="timeline-date"><strong>{date.getDate()}</strong><span>{date.toLocaleDateString('nl-NL',{month:'short'}).replace('.','').toUpperCase()}</span></div><div className="timeline-line" aria-hidden="true"><span /></div><div className="timeline-copy"><div className="timeline-title-row"><h3>{event.title}</h3><span className={`type-chip ${event.type==='training'?'training-chip':''}`}>{eventTypeLabel(event)}</span></div><p>{formatShortDate(event.start)}</p><p>{formatTimeRange(event.start,event.end)}{event.location ? ` · ${event.location}` : ''}</p>{event.meetAt && <p>Verzamelen: {formatClock(event.meetAt)}</p>}{event.type==='training' && <EventAudience event={event} compact />}{event.description && <p className="event-description-inline">{event.description}</p>}{event.type==='training' && <AttendanceButtons current={current?.status} onSelect={status => onAttendance(event,status)} busy={busy} />}<div className="event-inline-actions"><button className="mini-action" onClick={onDetails}>Details</button>{canManage && <button className="mini-action coach" onClick={onEdit}>Beheren</button>}</div>{canManage && <AttendanceSummary event={event} rows={attendance} profiles={profiles} memberships={memberships} />}</div></article>
+}
+
+function EventAudience({ event, compact=false }) {
+  const teams = event.teams ?? []
+  const guestCount = event.guestProfileIds?.length ?? 0
+  if (!teams.length && !guestCount) return null
+  return <div className={`event-audience ${compact ? 'compact' : ''}`}>{teams.map(team => <span key={team.id}>{team.name}</span>)}{guestCount > 0 && <span>+ {guestCount} gast{guestCount === 1 ? '' : 'en'}</span>}</div>
+}
+
+function TrainingDetailModal({ event, current, onAttendance, busy, canManage, onEdit, onClose, attendance, profiles, memberships }) {
+  return <div className="modal-backdrop" onMouseDown={e => { if (e.target===e.currentTarget) onClose() }}><section className="detail-modal" role="dialog" aria-modal="true" aria-label="Trainingdetails"><header className="detail-modal-header"><div><p className="eyebrow orange">TRAINING</p><h2>{event.title}</h2></div><button className="sheet-icon-button" onClick={onClose} aria-label="Sluiten"><Icon name="close" /></button></header><div className="detail-modal-body"><div className="detail-meta-grid"><div><Icon name="calendar"/><span>{formatLongDate(event.start)}</span></div><div><Icon name="clock"/><span>{formatTimeRange(event.start,event.end)}</span></div>{event.meetAt && <div><Icon name="people"/><span>Verzamelen {formatClock(event.meetAt)}</span></div>}{event.location && <div><Icon name="pin"/><span>{event.location}</span></div>}</div><EventAudience event={event} />{event.description && <p className="detail-description">{event.description}</p>}<div className="detail-attendance"><h3>Ben je erbij?</h3><AttendanceButtons current={current?.status} onSelect={status => onAttendance(event,status)} busy={busy} /></div>{canManage && <><button className="primary detail-edit" onClick={onEdit}>Training aanpassen</button><AttendanceSummary event={event} rows={attendance} profiles={profiles} memberships={memberships} expanded /></>}</div></section></div>
 }
 
 function AttendanceButtons({ current, onSelect, busy, compact=false }) {
   return <div className={`attendance-buttons ${compact?'compact':''}`}><button className={current==='present'?'attendance-btn present active':'attendance-btn present'} disabled={busy} onClick={() => onSelect('present')}>✓ Aanwezig</button><button className={current==='maybe'?'attendance-btn maybe active':'attendance-btn maybe'} disabled={busy} onClick={() => onSelect('maybe')}>? Misschien</button><button className={current==='absent'?'attendance-btn absent active':'attendance-btn absent'} disabled={busy} onClick={() => onSelect('absent')}>✕ Afwezig</button></div>
 }
 
-function AttendanceSummary({ rows, profiles }) {
+function AttendanceSummary({ event, rows, profiles, memberships, expanded=false }) {
+  const [filter, setFilter] = useState('all')
   const profileMap = Object.fromEntries(profiles.map(p => [p.id,p]))
-  const groups = { present: [], maybe: [], absent: [] }
-  rows.forEach(row => groups[row.status]?.push(row))
-  return <details className="attendance-summary"><summary>{groups.present.length} aanwezig · {groups.maybe.length} misschien · {groups.absent.length} afwezig</summary><div className="attendance-groups">{[['present','Aanwezig'],['maybe','Misschien'],['absent','Afwezig']].map(([key,label]) => <div key={key}><strong>{label}</strong>{groups[key].length ? groups[key].map(row => <p key={row.id}>{personName(profileMap[row.profile_id])}{row.note ? ` — ${row.note}` : ''}</p>) : <p className="muted">Nog niemand</p>}</div>)}</div></details>
+  const teamIds = new Set((event.teamIds ?? []).map(Number))
+  const guestIds = new Set(event.guestProfileIds ?? [])
+  const invitedIds = new Set([
+    ...memberships.filter(m => teamIds.has(Number(m.team_id))).map(m => m.profile_id),
+    ...guestIds
+  ])
+  const responseMap = Object.fromEntries(rows.map(row => [row.profile_id,row]))
+  const filterIds = (() => {
+    if (filter === 'all') return invitedIds
+    if (filter === 'guests') return guestIds
+    const teamId = Number(filter.replace('team-',''))
+    return new Set(memberships.filter(m => Number(m.team_id)===teamId).map(m => m.profile_id))
+  })()
+  const eligible = [...filterIds].filter(id => invitedIds.has(id))
+  const groups = { present: [], maybe: [], absent: [], none: [] }
+  eligible.forEach(id => {
+    const row = responseMap[id]
+    if (!row) groups.none.push({ profile_id:id })
+    else groups[row.status]?.push(row)
+  })
+  const summaryText = `${groups.present.length} aanwezig · ${groups.maybe.length} misschien · ${groups.absent.length} afwezig · ${groups.none.length} geen reactie`
+  const content = <div className="attendance-summary-content"><div className="attendance-filter-row"><button className={filter==='all'?'active':''} onClick={() => setFilter('all')}>Iedereen</button>{(event.teams??[]).map(team => <button key={team.id} className={filter===`team-${team.id}`?'active':''} onClick={() => setFilter(`team-${team.id}`)}>{team.name}</button>)}{guestIds.size>0 && <button className={filter==='guests'?'active':''} onClick={() => setFilter('guests')}>Gasten</button>}</div><div className="attendance-groups">{[['present','Aanwezig'],['maybe','Misschien'],['absent','Afwezig'],['none','Geen reactie']].map(([key,label]) => <div key={key}><strong>{label} · {groups[key].length}</strong>{groups[key].length ? groups[key].map((row,i) => <p key={row.id || `${row.profile_id}-${i}`}>{personName(profileMap[row.profile_id])}{row.note ? ` — ${row.note}` : ''}</p>) : <p className="muted">Niemand</p>}</div>)}</div></div>
+  if (expanded) return <section className="attendance-expanded"><div className="attendance-counts"><strong>Aanwezigheid</strong><span>{summaryText}</span></div>{content}</section>
+  return <details className="attendance-summary"><summary>{summaryText}</summary>{content}</details>
 }
 
-function TrainingEditor({ profile, teams, event, onClose, onSaved }) {
-  const [allTeams, setAllTeams] = useState([])
+function TrainingEditor({ profile, teams, profiles, memberships, event, onClose, onSaved }) {
+  const [directoryTeams, setDirectoryTeams] = useState([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [guestSearch, setGuestSearch] = useState('')
+  const [selectedTeamIds, setSelectedTeamIds] = useState(() => (event?.teamIds?.length ? event.teamIds.map(String) : event?.teamId ? [String(event.teamId)] : []))
+  const [selectedGuests, setSelectedGuests] = useState(() => event?.guestProfileIds ?? [])
   const [form, setForm] = useState(() => event ? {
-    team_id: String(event.teamId), title:event.title||'Training', date:toDateInput(event.start), start:toTimeInput(event.start), end:toTimeInput(event.end), meet:toTimeInput(event.meetAt), location_name:event.location||'', location_address:event.locationAddress||'', description:event.description||''
-  } : { team_id:'', title:'Training', date:'', start:'', end:'', meet:'', location_name:'', location_address:'', description:'' })
+    title:event.title||'Training', date:toDateInput(event.start), start:toTimeInput(event.start), end:toTimeInput(event.end), meet:toTimeInput(event.meetAt), location_name:event.location||'', location_address:event.locationAddress||'', description:event.description||''
+  } : { title:'Training', date:'', start:'', end:'', meet:'', location_name:'', location_address:'', description:'' })
+
   useEffect(() => {
-    if (profile?.role === 'admin') supabase.from('teams').select('id,name,sport,is_active').eq('is_active',true).order('name').then(({data}) => setAllTeams(data??[]))
-    else setAllTeams(teams.filter(team => team.member_role==='coach'))
+    supabase.from('teams').select('id,name,sport,is_active,season_id').eq('is_active',true).order('name').then(({data}) => setDirectoryTeams(data??[]))
   }, [])
-  useEffect(() => { if (!form.team_id && allTeams[0]) setForm(v => ({...v,team_id:String(allTeams[0].id)})) }, [allTeams])
+
+  const selectableTeams = profile?.role === 'admin' ? directoryTeams : directoryTeams.filter(team => teams.some(own => Number(own.id)===Number(team.id) && own.member_role==='coach'))
+  useEffect(() => { if (!selectedTeamIds.length && selectableTeams[0]) setSelectedTeamIds([String(selectableTeams[0].id)]) }, [selectableTeams.length])
+
+  const selectedTeamMemberIds = new Set(memberships.filter(m => selectedTeamIds.includes(String(m.team_id))).map(m => m.profile_id))
+  const search = guestSearch.trim().toLowerCase()
+  const guestCandidates = profiles.filter(person => !selectedTeamMemberIds.has(person.id) && !selectedGuests.includes(person.id) && (!search || `${personName(person)} ${person.jersey_number||''}`.toLowerCase().includes(search)))
+  const invitedCount = new Set([...selectedTeamMemberIds, ...selectedGuests]).size
+  const teamMap = Object.fromEntries(directoryTeams.map(team => [String(team.id),team]))
+  function profileTeamNames(profileId) {
+    return memberships.filter(m => m.profile_id===profileId).map(m => teamMap[String(m.team_id)]?.name).filter(Boolean).slice(0,2).join(' · ') || 'Geen team'
+  }
+  function toggleTeam(id) {
+    const key=String(id)
+    setSelectedTeamIds(current => current.includes(key) ? (current.length===1 ? current : current.filter(v => v!==key)) : [...current,key])
+  }
+  function addGuest(id) { setSelectedGuests(current => [...current,id]); setGuestSearch('') }
+  function removeGuest(id) { setSelectedGuests(current => current.filter(v => v!==id)) }
+
+  async function syncRelations(eventId) {
+    const currentTeams = new Set((event?.teamIds ?? []).map(String))
+    const desiredTeams = new Set(selectedTeamIds)
+    const addTeams = [...desiredTeams].filter(id => !currentTeams.has(id))
+    const removeTeams = [...currentTeams].filter(id => !desiredTeams.has(id))
+    if (addTeams.length) {
+      const { error } = await supabase.from('event_teams').insert(addTeams.map(team_id => ({ event_id:eventId, team_id:Number(team_id) })))
+      if (error) throw error
+    }
+    for (const teamId of removeTeams) {
+      const { error } = await supabase.from('event_teams').delete().eq('event_id',eventId).eq('team_id',Number(teamId))
+      if (error) throw error
+    }
+    const currentGuests = new Set(event?.guestProfileIds ?? [])
+    const desiredGuests = new Set(selectedGuests)
+    const addGuests = [...desiredGuests].filter(id => !currentGuests.has(id))
+    const removeGuests = [...currentGuests].filter(id => !desiredGuests.has(id))
+    if (addGuests.length) {
+      const { error } = await supabase.from('event_participants').insert(addGuests.map(profile_id => ({ event_id:eventId, profile_id, added_by:profile.id })))
+      if (error) throw error
+    }
+    for (const profileId of removeGuests) {
+      const { error } = await supabase.from('event_participants').delete().eq('event_id',eventId).eq('profile_id',profileId)
+      if (error) throw error
+    }
+  }
+
   async function save() {
-    if (!form.team_id || !form.date || !form.start) return setError('Kies een team, datum en starttijd.')
+    if (!selectedTeamIds.length || !form.date || !form.start) return setError('Kies minimaal één team, een datum en starttijd.')
     setBusy(true); setError('')
-    const payload = { team_id:Number(form.team_id), type:'training', title:form.title.trim()||'Training', description:form.description.trim()||null, start_at:combineDateTime(form.date,form.start), end_at:form.end?combineDateTime(form.date,form.end):null, meet_at:form.meet?combineDateTime(form.date,form.meet):null, location_name:form.location_name.trim()||null, location_address:form.location_address.trim()||null, updated_at:new Date().toISOString() }
-    let result
-    if (event?.id) result = await supabase.from('events').update(payload).eq('id',event.id)
-    else result = await supabase.from('events').insert({ ...payload, created_by:profile.id })
-    setBusy(false)
-    if (result.error) setError(result.error.message); else onSaved()
+    const payload = { team_id:Number(selectedTeamIds[0]), type:'training', title:form.title.trim()||'Training', description:form.description.trim()||null, start_at:combineDateTime(form.date,form.start), end_at:form.end?combineDateTime(form.date,form.end):null, meet_at:form.meet?combineDateTime(form.date,form.meet):null, location_name:form.location_name.trim()||null, location_address:form.location_address.trim()||null, updated_at:new Date().toISOString() }
+    try {
+      let eventId = event?.id
+      if (eventId) {
+        const { error } = await supabase.from('events').update(payload).eq('id',eventId)
+        if (error) throw error
+        await syncRelations(eventId)
+      } else {
+        const { data, error } = await supabase.from('events').insert({ ...payload, created_by:profile.id }).select('id').single()
+        if (error) throw error
+        eventId = data.id
+        const { error: teamError } = await supabase.from('event_teams').insert(selectedTeamIds.map(team_id => ({ event_id:eventId, team_id:Number(team_id) })))
+        if (teamError) { await supabase.from('events').delete().eq('id',eventId); throw teamError }
+        if (selectedGuests.length) {
+          const { error: guestError } = await supabase.from('event_participants').insert(selectedGuests.map(profile_id => ({ event_id:eventId, profile_id, added_by:profile.id })))
+          if (guestError) throw guestError
+        }
+      }
+      setBusy(false); onSaved()
+    } catch (err) { setBusy(false); setError(err.message || 'Opslaan mislukt.') }
   }
   async function remove() {
     if (!event?.id || !window.confirm('Training verwijderen?')) return
     setBusy(true); const {error} = await supabase.from('events').delete().eq('id',event.id); setBusy(false)
     if (error) setError(error.message); else onSaved()
   }
-  return <div className="sheet-backdrop" onMouseDown={e => { if(e.target===e.currentTarget) onClose() }}><section className="admin-sheet training-sheet"><div className="sheet-handle"/><header className="sheet-header"><span className="sheet-icon-spacer"/><div className="sheet-title-center"><p className="eyebrow orange">{event?'TRAINING BEHEREN':'NIEUWE TRAINING'}</p><h2>{event?'Training aanpassen':'Training toevoegen'}</h2></div><button className="sheet-icon-button" onClick={onClose}><Icon name="close" /></button></header><div className="sheet-body"><div className="form-stack training-form"><label>Team<select value={form.team_id} onChange={e => setForm({...form,team_id:e.target.value})}>{allTeams.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}</select></label><label>Titel<input value={form.title} onChange={e => setForm({...form,title:e.target.value})}/></label><div className="form-two"><label>Datum<input type="date" value={form.date} onChange={e => setForm({...form,date:e.target.value})}/></label><label>Verzameltijd<input type="time" value={form.meet} onChange={e => setForm({...form,meet:e.target.value})}/></label></div><div className="form-two"><label>Starttijd<input type="time" value={form.start} onChange={e => setForm({...form,start:e.target.value})}/></label><label>Eindtijd<input type="time" value={form.end} onChange={e => setForm({...form,end:e.target.value})}/></label></div><label>Locatie<input value={form.location_name} onChange={e => setForm({...form,location_name:e.target.value})} placeholder="Bijv. Van der Aart Sportpark"/></label><label>Adres<input value={form.location_address} onChange={e => setForm({...form,location_address:e.target.value})} placeholder="Optioneel"/></label><label>Omschrijving<textarea rows="4" value={form.description} onChange={e => setForm({...form,description:e.target.value})} placeholder="Wat gaan we trainen?"/></label>{error && <div className="notice error">{error}</div>}<button className="primary" disabled={busy} onClick={save}>{busy?'Opslaan…':'Opslaan'}</button>{event && <button className="danger-link" disabled={busy} onClick={remove}>Training verwijderen</button>}</div></div></section></div>
+  return <div className="sheet-backdrop" onMouseDown={e => { if(e.target===e.currentTarget) onClose() }}><section className="admin-sheet training-sheet"><div className="sheet-handle"/><header className="sheet-header"><span className="sheet-icon-spacer"/><div className="sheet-title-center"><p className="eyebrow orange">{event?'TRAINING BEHEREN':'NIEUWE TRAINING'}</p><h2>{event?'Training aanpassen':'Training toevoegen'}</h2></div><button className="sheet-icon-button" onClick={onClose}><Icon name="close" /></button></header><div className="sheet-body"><div className="form-stack training-form"><section className="audience-picker"><div className="picker-heading"><div><strong>Teams & deelnemers</strong><small>{invitedCount} speler{invitedCount===1?'':'s'} uitgenodigd</small></div></div><div className="team-checkbox-list">{selectableTeams.map(team => <label className="team-check" key={team.id}><input type="checkbox" checked={selectedTeamIds.includes(String(team.id))} onChange={() => toggleTeam(team.id)} /><span><strong>{team.name}</strong><small>{capitalize(team.sport)}</small></span></label>)}</div>{!selectableTeams.length && <div className="admin-empty">Je hebt geen teams waarvoor je trainingen kunt beheren.</div>}<div className="guest-picker"><div className="picker-heading"><div><strong>Extra deelnemers</strong><small>Voor iemand die een keer meetraint</small></div></div>{selectedGuests.length>0 && <div className="selected-guests">{selectedGuests.map(id => { const person=profiles.find(p => p.id===id); return <button key={id} type="button" onClick={() => removeGuest(id)}>{personName(person)} <span>×</span></button> })}</div>}<label>Speler zoeken<input type="search" value={guestSearch} onChange={e => setGuestSearch(e.target.value)} placeholder="Zoek op naam of rugnummer" /></label>{guestSearch && <div className="guest-results">{guestCandidates.slice(0,10).map(person => <button type="button" key={person.id} onClick={() => addGuest(person.id)}><span className="member-avatar small">{initials(person)}</span><span><strong>{personName(person)}</strong><small>{profileTeamNames(person.id)}</small></span><span>+ Toevoegen</span></button>)}{!guestCandidates.length && <div className="admin-empty">Geen spelers gevonden.</div>}</div>}</div></section><label>Titel<input value={form.title} onChange={e => setForm({...form,title:e.target.value})}/></label><div className="form-two"><label>Datum<input type="date" value={form.date} onChange={e => setForm({...form,date:e.target.value})}/></label><label>Verzameltijd<input type="time" value={form.meet} onChange={e => setForm({...form,meet:e.target.value})}/></label></div><div className="form-two"><label>Starttijd<input type="time" value={form.start} onChange={e => setForm({...form,start:e.target.value})}/></label><label>Eindtijd<input type="time" value={form.end} onChange={e => setForm({...form,end:e.target.value})}/></label></div><label>Locatie<input value={form.location_name} onChange={e => setForm({...form,location_name:e.target.value})} placeholder="Bijv. Van der Aart Sportpark"/></label><label>Adres<input value={form.location_address} onChange={e => setForm({...form,location_address:e.target.value})} placeholder="Optioneel"/></label><label>Omschrijving<textarea rows="4" value={form.description} onChange={e => setForm({...form,description:e.target.value})} placeholder="Wat gaan we trainen?"/></label>{error && <div className="notice error">{error}</div>}<button className="primary" disabled={busy||!selectableTeams.length} onClick={save}>{busy?'Opslaan…':'Opslaan'}</button>{event && <button className="danger-link" disabled={busy} onClick={remove}>Training verwijderen</button>}</div></div></section></div>
 }
 
 function AbsenceModal({ event, reason, setReason, busy, onCancel, onConfirm }) {
@@ -530,9 +648,8 @@ function AdminPanel({ onMessage, onChanged }) {
       </button>
 
       {open && (
-        <div className="sheet-backdrop" role="presentation" onMouseDown={e => { if (e.target === e.currentTarget) closeAdmin() }}>
-          <section className="admin-sheet" role="dialog" aria-modal="true" aria-label="Clubbeheer">
-            <div className="sheet-handle" aria-hidden="true" />
+        <div className="admin-modal-backdrop" role="presentation" onMouseDown={e => { if (e.target === e.currentTarget) closeAdmin() }}>
+          <section className="club-admin-modal" role="dialog" aria-modal="true" aria-label="Clubbeheer">
             <header className="sheet-header">
               {view !== 'menu' ? <button className="sheet-icon-button" onClick={() => setView('menu')} aria-label="Terug"><Icon name="back" /></button> : <span className="sheet-icon-spacer" />}
               <div><p className="eyebrow orange">BEHEERDER</p><h2>{view === 'menu' ? 'Clubbeheer' : view === 'seasons' ? 'Seizoenen' : view === 'teams' ? 'Teams' : 'Teamindeling'}</h2></div>
@@ -720,7 +837,7 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
         <SettingsRow icon="lock" title="Wachtwoord" subtitle="Reset via het inlogscherm" />
         <SettingsRow icon="bell" title="Notificaties" subtitle="Pushmeldingen komen later" disabled />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setShowCalendar(v => !v)} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.4" />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.5" />
       </div>
 
       {showCalendar && (
@@ -851,13 +968,20 @@ function groupByMonth(events) {
   }, {})
 }
 
-function normalizeTrainingEvent(row) {
+function normalizeTrainingEvent(row, eventTeamLinks = [], participantLinks = []) {
+  const links = eventTeamLinks.filter(link => String(link.event_id) === String(row.id))
+  const linkedTeams = links.map(link => link.teams).filter(Boolean)
+  const teamIds = links.map(link => Number(link.team_id))
+  if (!teamIds.length && row.team_id) teamIds.push(Number(row.team_id))
   return {
     id: row.id,
     uid: `training-${row.id}`,
     type: 'training',
     source: 'supabase',
     teamId: row.team_id,
+    teamIds,
+    teams: linkedTeams,
+    guestProfileIds: participantLinks.filter(link => String(link.event_id) === String(row.id)).map(link => link.profile_id),
     title: row.title || 'Training',
     description: row.description || '',
     start: row.start_at,

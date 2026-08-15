@@ -1,23 +1,16 @@
-# Mijn OG v2.4
+# Mijn OG v2.5
 
-## Nieuw
-- Trainingen toevoegen, wijzigen en verwijderen voor admins en teamcoaches.
-- Trainingvelden: team, datum, starttijd, eindtijd, verzameltijd, locatie, adres en omschrijving.
-- Trainingen en FOYS-wedstrijden gecombineerd in Home en Agenda.
-- Aanwezigheidsstatus: Aanwezig, Misschien en Afwezig.
-- Afwezig vereist een reden en een expliciete bevestiging in een popup.
-- Coaches/admins zien per training een aanwezigheidsdashboard met reacties en redenen.
-- Agenda heeft filters voor alles, wedstrijden en trainingen.
-- Uitlijning, spacing en centrering verder aangescherpt.
-- Over Mijn OG toont versie 2.4.
+## Nieuw in 2.5
+- Een training kan aan meerdere teams gekoppeld worden.
+- Individuele gastspelers kunnen aan een training worden toegevoegd.
+- Aanwezigheidsoverzicht heeft filters per team en voor gasten.
+- Trainingdetails hebben een eigen nette modal.
+- Clubbeheer opent gecentreerd in plaats van als vaste bottom sheet.
+- Wisselen via de onderste navigatie scrollt de nieuwe pagina altijd naar boven.
+- Over Mijn OG toont versie 2.5.
 
-## Extra Supabase-policy
-Voer `supabase_v24_coach_profiles.sql` eenmalig uit in Supabase SQL Editor. Hierdoor kunnen coaches de namen van spelers uit hun eigen team zien in het aanwezigheidsoverzicht. Admins hadden dit recht al.
+## Eenmalig nog uitvoeren in Supabase
+De hoofd-migratie voor v2.5 is al uitgevoerd. Voer daarnaast `supabase_v25_guest_profiles.sql` uit zodat coaches in de gastspelerzoeker clubleden op naam kunnen vinden.
 
-## Deploy
-1. Pak de ZIP uit.
-2. Vervang de bestaande bestanden in je lokale GitHub repository.
-3. Commit naar `main` en Push origin.
-4. Vercel deployt automatisch.
-
-Bestaande Vercel environment variables blijven ongewijzigd.
+## Uploaden
+Vervang de bestaande projectbestanden door deze versie, commit naar `main` en push naar GitHub. Vercel bouwt daarna automatisch opnieuw.

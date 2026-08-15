@@ -327,3 +327,250 @@ details summary { font-size: 11px; margin-top: 7px; cursor: pointer; color: var(
   .form-two { grid-template-columns: 1fr; }
   .modal-actions { grid-template-columns: 1fr; }
 }
+
+/* =========================================================
+   Mijn OG v2.5
+   Gedeelde trainingen, gastspelers en modal polish
+   ========================================================= */
+
+/* Clubbeheer is vanaf v2.5 een gecentreerde modal. */
+.admin-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  background: rgba(17,19,24,.48);
+  backdrop-filter: blur(5px);
+}
+.club-admin-modal {
+  width: min(100%, 500px);
+  max-height: calc(100dvh - 44px);
+  overflow: hidden;
+  border-radius: 26px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(17,19,24,.24);
+  display: grid;
+  grid-template-rows: auto minmax(0,1fr);
+}
+.club-admin-modal .sheet-header {
+  padding-top: 14px;
+}
+.club-admin-modal .sheet-body {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: 24px;
+}
+
+.event-inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 10px;
+}
+.mini-action.coach {
+  border-color: #ffd5be;
+  background: #fff6f1;
+}
+
+.event-audience {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0 4px;
+}
+.event-audience.compact {
+  margin: 7px 0 3px;
+}
+.event-audience span {
+  border-radius: 999px;
+  background: #fff0e8;
+  color: var(--og-orange-dark);
+  padding: 5px 8px;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+/* Training details */
+.detail-modal {
+  width: min(calc(100% - 32px), 500px);
+  max-height: calc(100dvh - 48px);
+  overflow: hidden;
+  border-radius: 26px;
+  background: white;
+  box-shadow: 0 24px 70px rgba(17,19,24,.22);
+  display: grid;
+  grid-template-rows: auto minmax(0,1fr);
+}
+.detail-modal-header {
+  min-height: 72px;
+  display: grid;
+  grid-template-columns: minmax(0,1fr) 38px;
+  align-items: center;
+  gap: 12px;
+  padding: 15px 17px;
+  border-bottom: 1px solid var(--line);
+}
+.detail-modal-header h2 { margin: 2px 0 0; }
+.detail-modal-body {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 18px;
+}
+.detail-meta-grid {
+  display: grid;
+  gap: 10px;
+  padding: 15px;
+  border-radius: 18px;
+  background: #f7f7f8;
+}
+.detail-meta-grid > div {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 12px;
+}
+.detail-meta-grid .icon { width: 18px; height: 18px; color: var(--og-orange); }
+.detail-description {
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+.detail-attendance {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.detail-attendance h3 { text-align: center; margin-bottom: 10px; }
+.detail-edit { margin-top: 16px; }
+
+/* Gedeelde teams + gastspelers in training editor */
+.audience-picker {
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 15px;
+  background: #fafafa;
+  display: grid;
+  gap: 14px;
+}
+.picker-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.picker-heading > div { display: grid; gap: 2px; }
+.picker-heading strong { font-size: 13px; }
+.picker-heading small { color: var(--muted); font-size: 10px; }
+.team-checkbox-list {
+  display: grid;
+  gap: 7px;
+}
+.team-check {
+  min-height: 54px;
+  grid-template-columns: 20px minmax(0,1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: white;
+}
+.team-check input { width: 17px; height: 17px; margin: 0; accent-color: var(--og-orange); }
+.team-check > span { display: grid; gap: 2px; }
+.team-check strong { font-size: 12px; }
+.team-check small { color: var(--muted); font-size: 10px; }
+.guest-picker {
+  display: grid;
+  gap: 10px;
+  padding-top: 13px;
+  border-top: 1px solid var(--line);
+}
+.selected-guests {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.selected-guests button {
+  border: 0;
+  border-radius: 999px;
+  background: #fff0e8;
+  color: var(--og-orange-dark);
+  padding: 7px 9px;
+  font-size: 10px;
+  font-weight: 750;
+}
+.selected-guests button span { margin-left: 4px; }
+.guest-results {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: white;
+}
+.guest-results > button {
+  width: 100%;
+  min-height: 56px;
+  display: grid;
+  grid-template-columns: 34px minmax(0,1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: white;
+  color: var(--ink);
+  text-align: left;
+}
+.guest-results > button:last-child { border-bottom: 0; }
+.guest-results > button > span:nth-child(2) { display: grid; gap: 2px; min-width: 0; }
+.guest-results strong { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.guest-results small { font-size: 9px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.guest-results > button > span:last-child { font-size: 9px; color: var(--og-orange-dark); font-weight: 750; }
+
+/* Aanwezigheidsoverzicht met teamfilters */
+.attendance-summary-content {
+  display: grid;
+  gap: 12px;
+  margin-top: 11px;
+}
+.attendance-filter-row {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+.attendance-filter-row::-webkit-scrollbar { display: none; }
+.attendance-filter-row button {
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: white;
+  color: var(--muted);
+  padding: 6px 9px;
+  font-size: 9px;
+  font-weight: 750;
+}
+.attendance-filter-row button.active {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: white;
+}
+.attendance-expanded {
+  margin-top: 16px;
+  padding: 15px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #fafafa;
+}
+.attendance-counts { display: grid; gap: 3px; }
+.attendance-counts strong { font-size: 13px; }
+.attendance-counts span { color: var(--muted); font-size: 10px; }
+
+@media (max-width: 390px) {
+  .admin-modal-backdrop { padding: 14px; }
+  .club-admin-modal { max-height: calc(100dvh - 28px); border-radius: 22px; }
+  .detail-modal { width: calc(100% - 24px); max-height: calc(100dvh - 28px); }
+}
