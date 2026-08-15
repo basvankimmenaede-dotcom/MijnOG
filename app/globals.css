@@ -1281,3 +1281,8 @@ input:focus, textarea:focus, select:focus {
   .timeline-title-row { grid-template-columns:1fr; gap:6px; }
   .timeline-title-row .type-chip { justify-self:start; }
 }
+
+/* v2.5.4 — uitnodigen */
+.invite-intro { margin-bottom: 14px; }
+.invite-intro h3 { margin: 2px 0 6px; }
+.invite-intro p { margin: 0; }

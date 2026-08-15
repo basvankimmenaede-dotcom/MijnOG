@@ -23,11 +23,15 @@ export default function HomePage() {
   const [eventParticipantLinks, setEventParticipantLinks] = useState([])
   const [calendarState, setCalendarState] = useState({ loading: false, error: '' })
   const [recoveryMode, setRecoveryMode] = useState(false)
+  const [inviteMode, setInviteMode] = useState(false)
   const [absenceEvent, setAbsenceEvent] = useState(null)
   const [absenceReason, setAbsenceReason] = useState('')
   const [attendanceBusy, setAttendanceBusy] = useState(false)
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setInviteMode(new URLSearchParams(window.location.search).get('invite') === '1')
+    }
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session ?? null)
       setAuthReady(true)
@@ -133,6 +137,7 @@ export default function HomePage() {
 
   if (!authReady) return <main className="center"><div className="loader">Mijn OG laden…</div></main>
   if (recoveryMode) return <PasswordRecovery onDone={() => setRecoveryMode(false)} />
+  if (inviteMode && session) return <InviteSetup onDone={() => { if (typeof window !== 'undefined') window.history.replaceState({}, '', window.location.pathname); setInviteMode(false) }} />
   if (!session) return <Login onMessage={setMessage} message={message} />
 
   return (
@@ -181,7 +186,7 @@ function Login({ onMessage, message }) {
     setResetBusy(true)
     onMessage('')
     const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
-      redirectTo: window.location.origin
+      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'https://mijn-og-v2.vercel.app'}/`
     })
     setResetBusy(false)
     if (error) onMessage(error.message)
@@ -245,6 +250,44 @@ function PasswordRecovery({ onDone }) {
               <label>Nieuw wachtwoord<input type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="new-password" required /></label>
               <label>Herhaal wachtwoord<input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} autoComplete="new-password" required /></label>
               <button className="primary" disabled={busy}>{busy ? 'Opslaan…' : 'Wachtwoord wijzigen'}</button>
+              {message && <div className="notice error">{message}</div>}
+            </form>
+          )}
+        </div>
+      </div>
+    </main>
+  )
+}
+
+
+function InviteSetup({ onDone }) {
+  const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState('')
+  const [saved, setSaved] = useState(false)
+
+  async function finishInvite(e) {
+    e.preventDefault()
+    if (password.length < 8) return setMessage('Gebruik minimaal 8 tekens.')
+    if (password !== confirm) return setMessage('De wachtwoorden zijn niet gelijk.')
+    setBusy(true)
+    const { error } = await supabase.auth.updateUser({ password })
+    setBusy(false)
+    if (error) setMessage(error.message)
+    else { setMessage(''); setSaved(true) }
+  }
+
+  return (
+    <main className="login-page">
+      <div className="login-shell">
+        <div className="login-brand"><img src="/og-logo.png" className="login-logo" alt="Onze Gezellen" /><div><p className="eyebrow orange">WELKOM BIJ MIJN OG</p><h1>Activeer je account</h1><p className="muted no-margin">Kies een wachtwoord om je uitnodiging af te ronden.</p></div></div>
+        <div className="login-card">
+          {saved ? <><div className="notice success">Je account is klaar ✓</div><button className="primary" onClick={onDone}>Naar Mijn OG</button></> : (
+            <form onSubmit={finishInvite} className="form-stack">
+              <label>Wachtwoord<input type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="new-password" required /></label>
+              <label>Herhaal wachtwoord<input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} autoComplete="new-password" required /></label>
+              <button className="primary" disabled={busy}>{busy ? 'Account activeren…' : 'Account activeren'}</button>
               {message && <div className="notice error">{message}</div>}
             </form>
           )}
@@ -555,7 +598,7 @@ function TeamPeopleSection({ title, rows, admin, busy, onAvatar }) {
   </section>
 }
 
-function AdminPanel({ onMessage, onChanged }) {
+function AdminPanel({ session, onMessage, onChanged }) {
   const [open, setOpen] = useState(false)
   const [view, setView] = useState('menu')
   const [seasons, setSeasons] = useState([])
@@ -571,6 +614,8 @@ function AdminPanel({ onMessage, onChanged }) {
   const [selectedSeasonId, setSelectedSeasonId] = useState('')
   const [selectedTeamId, setSelectedTeamId] = useState('')
   const [memberSearch, setMemberSearch] = useState('')
+  const [inviteForm, setInviteForm] = useState({ first_name: '', last_name: '', email: '', team_id: '', member_role: 'player' })
+  const [inviteSent, setInviteSent] = useState(false)
 
   useEffect(() => {
     if (open) loadAdminData()
@@ -608,6 +653,7 @@ function AdminPanel({ onMessage, onChanged }) {
     setShowSeasonForm(false)
     setShowTeamForm(false)
     setMemberSearch('')
+    setInviteSent(false)
   }
 
   function goTo(nextView) {
@@ -615,6 +661,7 @@ function AdminPanel({ onMessage, onChanged }) {
     setShowSeasonForm(false)
     setShowTeamForm(false)
     setMemberSearch('')
+    setInviteSent(false)
     if (nextView === 'members' && !selectedTeamId) {
       const candidate = teams.find(team => String(team.season_id) === String(selectedSeasonId) && team.is_active)
       if (candidate) setSelectedTeamId(String(candidate.id))
@@ -725,6 +772,33 @@ function AdminPanel({ onMessage, onChanged }) {
     }
   }
 
+  async function sendInvite(e) {
+    e.preventDefault()
+    if (!inviteForm.email.trim() || !inviteForm.team_id) return
+    setBusy(true); setInviteSent(false); onMessage('')
+    try {
+      const response = await fetch('/api/admin/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({
+          email: inviteForm.email.trim(),
+          first_name: inviteForm.first_name.trim(),
+          last_name: inviteForm.last_name.trim(),
+          team_id: Number(inviteForm.team_id),
+          member_role: inviteForm.member_role
+        })
+      })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.error || 'Uitnodiging versturen mislukt.')
+      setInviteSent(true)
+      setInviteForm({ first_name: '', last_name: '', email: '', team_id: inviteForm.team_id, member_role: 'player' })
+      onMessage('Uitnodiging verstuurd ✓')
+      await loadAdminData()
+      onChanged?.()
+    } catch (error) { onMessage(error.message) }
+    setBusy(false)
+  }
+
   const seasonTeams = teams.filter(team => !selectedSeasonId || String(team.season_id) === String(selectedSeasonId))
   const selectedTeam = teams.find(team => String(team.id) === String(selectedTeamId))
   const currentMemberships = memberships.filter(row => String(row.team_id) === String(selectedTeamId))
@@ -750,7 +824,7 @@ function AdminPanel({ onMessage, onChanged }) {
           <section className="club-admin-modal" role="dialog" aria-modal="true" aria-label="Clubbeheer">
             <header className="sheet-header">
               {view !== 'menu' ? <button className="sheet-icon-button" onClick={() => setView('menu')} aria-label="Terug"><Icon name="back" /></button> : <span className="sheet-icon-spacer" />}
-              <div><p className="eyebrow orange">BEHEERDER</p><h2>{view === 'menu' ? 'Clubbeheer' : view === 'seasons' ? 'Seizoenen' : view === 'teams' ? 'Teams' : 'Teamindeling'}</h2></div>
+              <div><p className="eyebrow orange">BEHEERDER</p><h2>{view === 'menu' ? 'Clubbeheer' : view === 'seasons' ? 'Seizoenen' : view === 'teams' ? 'Teams' : view === 'members' ? 'Teamindeling' : 'Lid uitnodigen'}</h2></div>
               <button className="sheet-icon-button" onClick={closeAdmin} aria-label="Sluiten"><Icon name="close" /></button>
             </header>
 
@@ -761,6 +835,7 @@ function AdminPanel({ onMessage, onChanged }) {
                     <AdminMenuItem icon="calendar" title="Seizoenen" subtitle={`${seasons.length} seizoen${seasons.length === 1 ? '' : 'en'} · ${seasons.find(s => s.is_active)?.name || 'geen actief seizoen'}`} onClick={() => goTo('seasons')} />
                     <AdminMenuItem icon="team" title="Teams" subtitle={`${teams.filter(t => t.is_active).length} actieve teams`} onClick={() => goTo('teams')} />
                     <AdminMenuItem icon="people" title="Teamindeling" subtitle="Spelers en coaches koppelen" onClick={() => goTo('members')} />
+                    <AdminMenuItem icon="person" title="Lid uitnodigen" subtitle="Nieuw Mijn OG-account per e-mail" onClick={() => goTo('invite')} />
                   </div>
                 )}
 
@@ -794,6 +869,22 @@ function AdminPanel({ onMessage, onChanged }) {
                       {seasonTeams.map(team => <article className={`admin-row${team.is_active ? '' : ' inactive'}`} key={team.id}><div><strong>{team.name}</strong><small>{capitalize(team.sport)} · {team.is_active ? 'Actief' : 'Gearchiveerd'}</small></div><button className="mini-action" disabled={busy} onClick={() => toggleTeam(team)}>{team.is_active ? 'Archiveren' : 'Activeren'}</button></article>)}
                       {!seasonTeams.length && <div className="admin-empty">Geen teams in dit seizoen.</div>}
                     </div>
+                  </div>
+                )}
+
+                {view === 'invite' && (
+                  <div className="admin-block">
+                    <div className="invite-intro"><p className="eyebrow orange">NIEUW ACCOUNT</p><h3>Nodig een clublid uit</h3><p className="muted">De gebruiker ontvangt een e-mail, kiest zelf een wachtwoord en wordt automatisch aan het gekozen team gekoppeld.</p></div>
+                    <form className="sheet-form form-stack" onSubmit={sendInvite}>
+                      <div className="admin-form-grid"><label>Voornaam<input value={inviteForm.first_name} onChange={e => setInviteForm({...inviteForm, first_name:e.target.value})} required /></label><label>Achternaam<input value={inviteForm.last_name} onChange={e => setInviteForm({...inviteForm, last_name:e.target.value})} required /></label></div>
+                      <label>E-mailadres<input type="email" value={inviteForm.email} onChange={e => setInviteForm({...inviteForm, email:e.target.value})} autoComplete="off" required /></label>
+                      <div className="admin-form-grid">
+                        <label>Team<select value={inviteForm.team_id} onChange={e => setInviteForm({...inviteForm, team_id:e.target.value})} required><option value="">Kies team</option>{teams.filter(t => t.is_active).map(team => <option key={team.id} value={team.id}>{team.name}{team.seasons?.name ? ` · ${team.seasons.name}` : ''}</option>)}</select></label>
+                        <label>Rol<select value={inviteForm.member_role} onChange={e => setInviteForm({...inviteForm, member_role:e.target.value})}><option value="player">Speler</option><option value="coach">Coach</option><option value="staff">Staff</option></select></label>
+                      </div>
+                      <button className="primary" disabled={busy}>{busy ? 'Uitnodigen…' : 'Uitnodiging versturen'}</button>
+                      {inviteSent && <div className="notice success">Uitnodiging verstuurd. Het account verschijnt automatisch in de teamindeling.</div>}
+                    </form>
                   </div>
                 )}
 
@@ -972,7 +1063,7 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
         <SettingsRow icon="lock" title="Wachtwoord" subtitle="Reset via het inlogscherm" />
         <SettingsRow icon="bell" title="Notificaties" subtitle="Pushmeldingen komen later" disabled />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setShowCalendar(v => !v)} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.5.3.1" />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.5.4" />
       </div>
 
       {showCalendar && (
@@ -986,7 +1077,7 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
         </section>
       )}
 
-      {profile?.role === 'admin' && <AdminPanel onMessage={onMessage} onChanged={onSaved} />}
+      {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
 
       <button className="logout-button" onClick={signOut}><Icon name="logout" /> Uitloggen</button>
     </section>
