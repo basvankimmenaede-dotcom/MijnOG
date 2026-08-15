@@ -1,3 +1,5 @@
+# Mijn OG v2.6.5
+
 # Mijn OG v2.6 — Uitnodigen & registreren
 
 Nieuw in deze versie:
@@ -17,3 +19,9 @@ Voer `supabase_v254_invites.sql` eenmaal uit vóór gebruik.
 
 ## Pushmeldingen v2.6
 Zie `README_PUSH_V26.md` en voer `supabase_v26_push.sql` uit.
+
+
+## v2.6.5
+- Instellingen openen als gecentreerde popups.
+- Automatische 24-uurs push voor status Misschien via GitHub Actions.
+- Tijdelijke pushdiagnostiek verwijderd; admin-testmelding blijft beschikbaar.

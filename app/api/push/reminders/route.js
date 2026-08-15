@@ -5,13 +5,14 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(request) {
   try {
-    const secret = process.env.CRON_SECRET
-    if (secret && request.headers.get('authorization') !== `Bearer ${secret}`) return Response.json({ error: 'Niet toegestaan.' }, { status: 401 })
+    const secret = (process.env.CRON_SECRET || '').trim()
+    if (!secret) return Response.json({ error: 'CRON_SECRET ontbreekt.' }, { status: 500 })
+    if (request.headers.get('authorization') !== `Bearer ${secret}`) return Response.json({ error: 'Niet toegestaan.' }, { status: 401 })
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-    const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
-    const privateKey = process.env.VAPID_PRIVATE_KEY
-    const subject = process.env.VAPID_SUBJECT || 'mailto:info@onzegezellen.nl'
+    const publicKey = (process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || '').trim()
+    const privateKey = (process.env.VAPID_PRIVATE_KEY || '').trim()
+    const subject = (process.env.VAPID_SUBJECT || 'https://mijn-og-v2.vercel.app').trim()
     if (!supabaseUrl || !serviceRoleKey || !publicKey || !privateKey) return Response.json({ error: 'Push-serverconfiguratie ontbreekt.' }, { status: 500 })
     webpush.setVapidDetails(subject, publicKey, privateKey)
     const service = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } })
@@ -52,6 +53,14 @@ export async function GET(request) {
           delivered++
           sent++
         } catch (pushError) {
+          console.error('Automatic push reminder failed', {
+            subscriptionId: sub.id,
+            eventId: row.event_id,
+            profileId: row.profile_id,
+            statusCode: pushError?.statusCode || null,
+            body: pushError?.body || null,
+            message: pushError?.message || String(pushError)
+          })
           if ([404, 410].includes(pushError?.statusCode)) await service.from('push_subscriptions').delete().eq('id', sub.id)
         }
       }

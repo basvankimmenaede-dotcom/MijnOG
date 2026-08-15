@@ -30,7 +30,10 @@ export default function HomePage() {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      setInviteMode(new URLSearchParams(window.location.search).get('invite') === '1')
+      const params = new URLSearchParams(window.location.search)
+      setInviteMode(params.get('invite') === '1')
+      const requestedTab = params.get('tab')
+      if (requestedTab && tabs.includes(requestedTab)) setActiveTab(requestedTab)
     }
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session ?? null)
@@ -944,9 +947,8 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
   const [lastName, setLastName] = useState(profile?.last_name ?? '')
   const [calendarBusy, setCalendarBusy] = useState(false)
   const [profileBusy, setProfileBusy] = useState(false)
-  const [editingName, setEditingName] = useState(false)
-  const [showCalendar, setShowCalendar] = useState(false)
-  const [showNotifications, setShowNotifications] = useState(false)
+  const [passwordBusy, setPasswordBusy] = useState(false)
+  const [settingsView, setSettingsView] = useState(null)
   const [avatarBusy, setAvatarBusy] = useState(false)
   const [avatarCropFile, setAvatarCropFile] = useState(null)
 
@@ -962,13 +964,24 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
     const { error } = await supabase.from('profiles').update({ first_name: firstName.trim(), last_name: lastName.trim() }).eq('id', session.user.id)
     setProfileBusy(false)
     if (error) onMessage(`Profiel opslaan mislukt: ${error.message}`)
-    else { onMessage('Profiel opgeslagen ✓'); setEditingName(false); onSaved() }
+    else { onMessage('Profiel opgeslagen ✓'); setSettingsView(null); onSaved() }
   }
 
   function cancelProfileEdit() {
     setFirstName(profile?.first_name ?? '')
     setLastName(profile?.last_name ?? '')
-    setEditingName(false)
+    setSettingsView(null)
+  }
+
+  async function sendPasswordReset() {
+    setPasswordBusy(true)
+    onMessage('')
+    const { error } = await supabase.auth.resetPasswordForEmail(session.user.email, {
+      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'https://mijn-og-v2.vercel.app'}/`
+    })
+    setPasswordBusy(false)
+    if (error) onMessage(`Resetmail versturen mislukt: ${error.message}`)
+    else onMessage('Resetmail verstuurd. Controleer je e-mail.')
   }
 
   async function saveCalendar() {
@@ -988,7 +1001,7 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
     }, { onConflict: 'profile_id,provider' })
     setCalendarBusy(false)
     if (error) onMessage(`Opslaan mislukt: ${error.message}`)
-    else { onMessage('KNBSB-agenda gekoppeld ✓'); setShowCalendar(false); onSaved() }
+    else { onMessage('KNBSB-agenda gekoppeld ✓'); setSettingsView(null); onSaved() }
   }
 
   async function removeCalendar() {
@@ -998,7 +1011,7 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
     const { error } = await supabase.from('calendar_connections').delete().eq('id', calendar.id).eq('profile_id', session.user.id)
     setCalendarBusy(false)
     if (error) onMessage(`Koppeling verwijderen mislukt: ${error.message}`)
-    else { setIcsUrl(''); setShowCalendar(false); onMessage('KNBSB-agenda ontkoppeld.'); onSaved() }
+    else { setIcsUrl(''); setSettingsView(null); onMessage('KNBSB-agenda ontkoppeld.'); onSaved() }
   }
 
   async function uploadOwnAvatar(file) {
@@ -1020,22 +1033,10 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
     setAvatarBusy(false)
   }
 
-  async function removeOwnAvatar() {
-    setAvatarBusy(true)
-    onMessage('')
-    try {
-      await supabase.storage.from('avatars').remove([`${session.user.id}/profile.webp`])
-      const { error } = await supabase.rpc('set_profile_avatar', { target_profile_id: session.user.id, new_url: null })
-      if (error) throw error
-      onMessage('Profielfoto verwijderd.')
-      await onSaved()
-    } catch (error) { onMessage(`Profielfoto verwijderen mislukt: ${error.message}`) }
-    setAvatarBusy(false)
-  }
-
   async function signOut() { await supabase.auth.signOut() }
 
-  return (<>{avatarCropFile && <ImageCropModal file={avatarCropFile} shape="circle" onClose={() => setAvatarCropFile(null)} onSave={async blob => { setAvatarCropFile(null); await uploadOwnAvatar(blob) }} />} 
+  return (<>
+    {avatarCropFile && <ImageCropModal file={avatarCropFile} shape="circle" onClose={() => setAvatarCropFile(null)} onSave={async blob => { setAvatarCropFile(null); await uploadOwnAvatar(blob) }} />}
     <section>
       <ScreenHeader title="Profiel" />
 
@@ -1045,48 +1046,65 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
           <label className="avatar-change-button" title="Profielfoto aanpassen"><Icon name="camera" /><input type="file" accept="image/*" disabled={avatarBusy} onChange={e => { const file=e.target.files?.[0]; if(file) setAvatarCropFile(file); e.target.value='' }} /></label>
         </div>
         <div className="profile-copy"><h2>{displayName}</h2><p>{teamLine}</p><label className="text-button upload-text">{avatarBusy ? 'Uploaden…' : 'Foto aanpassen'}<input type="file" accept="image/*" disabled={avatarBusy} onChange={e => { const file=e.target.files?.[0]; if(file) setAvatarCropFile(file); e.target.value='' }} /></label></div>
-        <button className="profile-name-edit" onClick={() => setEditingName(true)} aria-label="Naam aanpassen"><Icon name="edit" /> Aanpassen</button>
+        <button className="profile-name-edit" onClick={() => setSettingsView('personal')} aria-label="Naam aanpassen"><Icon name="edit" /> Aanpassen</button>
       </article>
 
-      {editingName && (
-        <section className="edit-panel">
-          <div className="edit-panel-head"><h2>Naam aanpassen</h2><button className="text-button" onClick={cancelProfileEdit}>Annuleren</button></div>
-          <div className="form-stack">
-            <label>Voornaam<input value={firstName} onChange={e => setFirstName(e.target.value)} autoComplete="given-name" /></label>
-            <label>Achternaam<input value={lastName} onChange={e => setLastName(e.target.value)} autoComplete="family-name" /></label>
-            <button className="primary" onClick={saveProfile} disabled={profileBusy}>{profileBusy ? 'Opslaan…' : 'Opslaan'}</button>
-          </div>
-        </section>
-      )}
-
       <div className="settings-list">
-        <SettingsRow icon="person" title="Persoonlijke gegevens" subtitle={session.user.email} />
-        <SettingsRow icon="lock" title="Wachtwoord" subtitle="Reset via het inlogscherm" />
-        <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setShowNotifications(v => !v)} />
-        <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setShowCalendar(v => !v)} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.6.4" />
+        <SettingsRow icon="person" title="Persoonlijke gegevens" subtitle={session.user.email} onClick={() => setSettingsView('personal')} />
+        <SettingsRow icon="lock" title="Wachtwoord" subtitle="Wachtwoord wijzigen via resetmail" onClick={() => setSettingsView('password')} />
+        <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
+        <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.6.5" onClick={() => setSettingsView('about')} />
       </div>
-
-      {showNotifications && (
-        <PushSettings session={session} profile={profile} onMessage={onMessage} />
-      )}
-
-      {showCalendar && (
-        <section className="edit-panel calendar-panel">
-          <div className="edit-panel-head"><div><h2>KNBSB agenda</h2><p className="muted no-margin">Je persoonlijke FOYS-link is alleen voor jouw account.</p></div><button className="text-button" onClick={() => setShowCalendar(false)}>Sluiten</button></div>
-          <div className="form-stack">
-            <label>Persoonlijke ICS-link<textarea rows="4" value={icsUrl} onChange={e => setIcsUrl(e.target.value)} placeholder="https://api.foys.io/competition/public-api/v1/persons/.../ics" /></label>
-            <button className="primary" onClick={saveCalendar} disabled={calendarBusy}>{calendarBusy ? 'Opslaan…' : calendar ? 'Koppeling bijwerken' : 'Agenda koppelen'}</button>
-            {calendar && <button className="danger-link" onClick={removeCalendar} disabled={calendarBusy}>Koppeling verwijderen</button>}
-          </div>
-        </section>
-      )}
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
 
       <button className="logout-button" onClick={signOut}><Icon name="logout" /> Uitloggen</button>
     </section>
+
+    {settingsView && <SettingsModal title={settingsView === 'personal' ? 'Persoonlijke gegevens' : settingsView === 'password' ? 'Wachtwoord' : settingsView === 'notifications' ? 'Meldingen' : settingsView === 'calendar' ? 'Koppelingen' : 'Over Mijn OG'} onClose={() => { if (settingsView === 'personal') { setFirstName(profile?.first_name ?? ''); setLastName(profile?.last_name ?? '') } setSettingsView(null) }}>
+      {settingsView === 'personal' && <div className="form-stack">
+        <p className="settings-modal-intro">Pas hier je naam aan. Je e-mailadres blijft gekoppeld aan je account.</p>
+        <label>Voornaam<input value={firstName} onChange={e => setFirstName(e.target.value)} autoComplete="given-name" /></label>
+        <label>Achternaam<input value={lastName} onChange={e => setLastName(e.target.value)} autoComplete="family-name" /></label>
+        <label>E-mailadres<input value={session.user.email || ''} disabled /></label>
+        <button className="primary" onClick={saveProfile} disabled={profileBusy}>{profileBusy ? 'Opslaan…' : 'Opslaan'}</button>
+        <button className="secondary" onClick={cancelProfileEdit}>Annuleren</button>
+      </div>}
+
+      {settingsView === 'password' && <div className="settings-modal-stack">
+        <p className="settings-modal-intro">We sturen een beveiligde resetlink naar <strong>{session.user.email}</strong>. Via die link kies je een nieuw wachtwoord.</p>
+        <button className="primary" onClick={sendPasswordReset} disabled={passwordBusy}>{passwordBusy ? 'Versturen…' : 'Stuur resetmail'}</button>
+      </div>}
+
+      {settingsView === 'notifications' && <PushSettings session={session} profile={profile} onMessage={onMessage} />}
+
+      {settingsView === 'calendar' && <div className="form-stack">
+        <p className="settings-modal-intro">Je persoonlijke FOYS-link is alleen voor jouw account en vult jouw KNBSB-wedstrijden in de agenda.</p>
+        <label>Persoonlijke ICS-link<textarea rows="4" value={icsUrl} onChange={e => setIcsUrl(e.target.value)} placeholder="https://api.foys.io/competition/public-api/v1/persons/.../ics" /></label>
+        <button className="primary" onClick={saveCalendar} disabled={calendarBusy}>{calendarBusy ? 'Opslaan…' : calendar ? 'Koppeling bijwerken' : 'Agenda koppelen'}</button>
+        {calendar && <button className="danger-link" onClick={removeCalendar} disabled={calendarBusy}>Koppeling verwijderen</button>}
+      </div>}
+
+      {settingsView === 'about' && <div className="about-settings">
+        <img src="/og-logo.png" alt="Onze Gezellen" />
+        <p className="eyebrow orange">MIJN OG</p>
+        <h3>Versie 2.6.5</h3>
+        <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
+        <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
+        <div className="about-version-row"><span>FOYS agenda</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>
+      </div>}
+    </SettingsModal>}
   </>)
+}
+
+function SettingsModal({ title, onClose, children }) {
+  return <div className="settings-modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}>
+    <section className="settings-modal" role="dialog" aria-modal="true" aria-label={title}>
+      <header className="settings-modal-header"><h2>{title}</h2><button type="button" className="sheet-icon-button" onClick={onClose} aria-label="Sluiten"><Icon name="close" /></button></header>
+      <div className="settings-modal-body">{children}</div>
+    </section>
+  </div>
 }
 
 function PushSettings({ session, profile, onMessage }) {
@@ -1095,8 +1113,6 @@ function PushSettings({ session, profile, onMessage }) {
   const [enabled, setEnabled] = useState(false)
   const [busy, setBusy] = useState(false)
   const [testing, setTesting] = useState(false)
-  const [localTesting, setLocalTesting] = useState(false)
-  const [diagnosing, setDiagnosing] = useState(false)
   const [pushFeedback, setPushFeedback] = useState('')
   const [installed, setInstalled] = useState(true)
 
@@ -1184,47 +1200,14 @@ function PushSettings({ session, profile, onMessage }) {
     finally { setTesting(false) }
   }
 
-  async function sendLocalTest() {
-    setLocalTesting(true); setPushFeedback('Lokale notificatie wordt getest…'); onMessage('')
-    try {
-      if (Notification.permission !== 'granted') throw new Error('Meldingstoestemming is niet actief.')
-      const registration = await navigator.serviceWorker.getRegistration('/sw.js') || await navigator.serviceWorker.ready
-      await registration.showNotification('Mijn OG lokale test', {
-        body: 'Als je dit ziet, werken iOS-toestemming en de service worker.',
-        icon: '/og-logo.png',
-        badge: '/og-logo.png',
-        tag: 'mijn-og-local-test',
-        data: { url: '/?tab=Meer' }
-      })
-      const text = 'Lokale notificatie is door de service worker geaccepteerd. Verschijnt geen banner, controleer iOS-meldingsinstellingen.'
-      setPushFeedback(text); onMessage(text)
-    } catch (error) { const text = `Lokale test mislukt: ${error.message}`; setPushFeedback(text); onMessage(text) }
-    finally { setLocalTesting(false) }
-  }
 
-  async function runDiagnostics() {
-    setDiagnosing(true); setPushFeedback('Pushconfiguratie wordt gecontroleerd…'); onMessage('')
-    try {
-      const response = await fetch('/api/push/diagnostics', { headers: { Authorization: `Bearer ${session.access_token}` } })
-      const payload = await response.json()
-      if (!response.ok) throw new Error(payload.error || 'Diagnose mislukt.')
-      const pairText = payload.vapid?.pairMatches ? 'VAPID-keypair klopt.' : `VAPID-keypair klopt NIET: ${payload.vapid?.problem || 'onbekend probleem'}`
-      const subText = payload.subscription?.found ? ` Subscription gevonden (${payload.subscription.endpointOrigin}).` : ' Geen actieve subscription gevonden.'
-      const text = `${pairText}${subText}`
-      setPushFeedback(text); onMessage(text)
-    } catch (error) { const text = `Pushdiagnose mislukt: ${error.message}`; setPushFeedback(text); onMessage(text) }
-    finally { setDiagnosing(false) }
-  }
-
-  return <section className="edit-panel notification-panel">
-    <div className="edit-panel-head"><div><h2>Pushmeldingen</h2><p className="muted no-margin">Ontvang herinneringen over trainingen en aanwezigheid.</p></div></div>
+  return <section className="notification-panel settings-popup-content">
+    <p className="settings-modal-intro">Ontvang herinneringen over trainingen en aanwezigheid.</p>
     {!supported ? <div className="push-callout"><strong>Niet ondersteund</strong><p>Deze browser ondersteunt web-push niet.</p></div> : !installed ? <div className="push-callout"><strong>Installeer Mijn OG eerst</strong><p>Open Safari → Deel → Zet op beginscherm. Open Mijn OG daarna via het nieuwe icoon.</p></div> : <>
       <div className="push-status"><span className={`push-status-mark ${enabled ? 'on' : ''}`}><Icon name="bell" /></span><div><strong>{enabled ? 'Meldingen ingeschakeld' : 'Meldingen uitgeschakeld'}</strong><small>Toestemming: {translateNotificationPermission(permission)}</small></div></div>
       <div className="push-actions">
         {!enabled ? <button type="button" className="primary" onClick={enablePush} disabled={busy}>{busy ? 'Inschakelen…' : 'Meldingen inschakelen'}</button> : <button type="button" className="secondary" onClick={disablePush} disabled={busy}>{busy ? 'Uitschakelen…' : 'Meldingen uitschakelen'}</button>}
-        {enabled && <button type="button" className="secondary" onClick={sendLocalTest} disabled={localTesting}>{localTesting ? 'Testen…' : 'Test melding op dit apparaat'}</button>}
-        {enabled && profile?.role === 'admin' && <button type="button" className="secondary" onClick={runDiagnostics} disabled={diagnosing}>{diagnosing ? 'Controleren…' : 'Controleer pushconfiguratie'}</button>}
-        {enabled && profile?.role === 'admin' && <button type="button" className="secondary" onClick={sendTest} disabled={testing}>{testing ? 'Versturen…' : 'Stuur testpush via server'}</button>}
+        {enabled && profile?.role === 'admin' && <button type="button" className="secondary" onClick={sendTest} disabled={testing}>{testing ? 'Versturen…' : 'Stuur testmelding naar mij'}</button>}
       </div>
       {pushFeedback && <div className="push-feedback" role="status" aria-live="polite">{pushFeedback}</div>}
       <div className="push-info-list"><div><strong>Trainingen</strong><span>Belangrijke herinneringen en wijzigingen.</span></div><div><strong>Misschien</strong><span>24 uur voor aanvang een verzoek om definitief te kiezen.</span></div></div>

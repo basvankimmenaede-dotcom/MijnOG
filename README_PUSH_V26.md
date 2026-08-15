@@ -1,41 +1,41 @@
-# Mijn OG v2.6 - Push setup
+# Mijn OG v2.6.5 - Pushmeldingen
 
-## 1. Supabase
-Voer `supabase_v26_push.sql` eenmalig uit in de SQL Editor.
+## Wat werkt
+- PWA/Web Push op ondersteunde telefoons.
+- Push inschakelen/uitschakelen via **Meer > Meldingen**.
+- Admin kan een testmelding naar zichzelf sturen.
+- Automatische 24-uursherinnering voor spelers die bij een training nog op **Misschien** staan.
 
-## 2. VAPID keys genereren
-Op een computer met Node.js:
+## Vercel Environment Variables
+- `NEXT_PUBLIC_VAPID_PUBLIC_KEY`
+- `VAPID_PRIVATE_KEY`
+- `VAPID_SUBJECT`
+- `CRON_SECRET`
+- bestaande Supabase-variabelen blijven nodig.
 
-```bash
-npx web-push generate-vapid-keys
-```
+Verander de VAPID-keypair niet nadat gebruikers zich hebben geregistreerd voor push. Bij een nieuwe public key moeten bestaande push subscriptions opnieuw worden aangemaakt.
 
-Bewaar Public Key en Private Key.
+## Automatische herinnering
+Vercel Hobby ondersteunt geen uurlijkse Vercel Cron. Daarom staat in deze repository:
 
-## 3. Vercel Environment Variables
-Voeg toe:
+`.github/workflows/push-reminders.yml`
 
-- `NEXT_PUBLIC_VAPID_PUBLIC_KEY` = public key
-- `VAPID_PRIVATE_KEY` = private key
-- `VAPID_SUBJECT` = bijvoorbeeld `mailto:info@onzegezellen.nl`
-- `CRON_SECRET` = zelfgekozen lange willekeurige geheime tekst (voor de reminder-route)
+Deze GitHub Action draait ieder uur en roept de beveiligde reminder-route aan.
 
-Bestaande variabelen zoals Supabase URL, publishable key, service-role key en app URL blijven staan.
+### Eenmalig instellen in GitHub
+Ga naar **Repository > Settings > Secrets and variables > Actions > New repository secret**.
 
-## 4. Deploy
-Push naar GitHub en laat Vercel opnieuw deployen.
+Maak een secret:
+- Name: `CRON_SECRET`
+- Value: exact dezelfde waarde als `CRON_SECRET` in Vercel.
 
-## 5. iPhone
-Web Push op iPhone werkt in een geïnstalleerde webapp:
-Safari -> Deel -> Zet op beginscherm -> open Mijn OG via dat icoon -> Meer -> Meldingen -> Meldingen inschakelen.
+Optioneel kun je onder **Variables** instellen:
+- Name: `MIJN_OG_APP_URL`
+- Value: bijvoorbeeld `https://mijn-og-v2.vercel.app`
 
-## 6. Test
-Een admin ziet onder Meldingen de knop `Stuur testmelding naar mij`.
+Zonder die variable gebruikt de workflow automatisch bovenstaande Vercel-URL.
 
-## 7. 24-uursherinnering bij Misschien
-De route `/api/push/reminders` verwerkt de herinneringen en dedupliceert ze via `push_notification_log`.
-Deze route moet eenmaal per uur worden aangeroepen met:
+De workflow kan ook handmatig getest worden via **GitHub > Actions > Mijn OG push reminders > Run workflow**.
 
-`Authorization: Bearer <CRON_SECRET>`
-
-De app-code is hiervoor klaar. Je kunt later Vercel Cron of een andere scheduler koppelen.
+## 24-uursregel
+De route zoekt trainingen die ongeveer 23-25 uur in de toekomst beginnen. Alleen attendance met status `maybe` komt in aanmerking. `push_notification_log` voorkomt dat dezelfde 24-uursmelding voor dezelfde training meerdere keren wordt verstuurd.
