@@ -1,3 +1,4 @@
+// Mijn OG v2.6.2 build marker - fresh deployment after VAPID environment setup
 import './globals.css'
 
 export const metadata = {
