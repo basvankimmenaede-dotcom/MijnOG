@@ -380,6 +380,13 @@ function ActivityDetailModal({ event, profile, teams, profiles, memberships, clu
   return <div className="modal-backdrop" onMouseDown={e => { if(e.target===e.currentTarget) onClose() }}><section className="detail-modal" role="dialog" aria-modal="true"><header className="detail-modal-header"><div><p className="eyebrow orange">{eventTypeLabel(event).toUpperCase()}</p><h2>{event.title}</h2></div><button className="sheet-icon-button" onClick={onClose}><Icon name="close"/></button></header><div className="detail-modal-body"><div className="detail-meta-grid"><div><Icon name="calendar"/><span>{formatLongDate(event.start)}</span></div><div><Icon name="clock"/><span>{formatTimeRange(event.start,event.end)}</span></div>{event.location && <div><Icon name="pin"/><span>{event.location}</span></div>}</div>{configuredLocation && <LocationTravelCard location={configuredLocation} fallbackDestination={event.location} />}{event.description && <p className="detail-description">{event.description}</p>}<button className="transport-open-button" onClick={() => setTransportOpen(true)}><Icon name="car"/><span><strong>Vervoer</strong><small>{transportEvent ? transportStatusLabel(transportEvent, transportResponses) : (canConfigureTransport ? 'Vervoer instellen voor deze wedstrijd' : 'Nog niet ingesteld')}</small></span><Icon name="chevron"/></button><p className="muted detail-note">Aanwezigheid wordt voor KNBSB/FOYS-wedstrijden nog niet via Mijn OG bijgehouden.</p></div></section>{transportOpen && <TransportModal event={event} profile={profile} teams={teams} profiles={profiles} memberships={memberships} locations={clubLocations} transportEvent={transportEvent} responses={transportResponses} canConfigure={canConfigureTransport} onChanged={onChanged} onClose={() => setTransportOpen(false)} />}</div>
 }
 
+function EventAudience({ event, compact=false }) {
+  const teams = event.teams ?? []
+  const guestCount = event.guestProfileIds?.length ?? 0
+  if (!teams.length && !guestCount) return null
+  return <div className={`event-audience ${compact ? 'compact' : ''}`}>{teams.map(team => <span key={team.id}>{team.name}</span>)}{guestCount > 0 && <span>+ {guestCount} gast{guestCount === 1 ? '' : 'en'}</span>}</div>
+}
+
 function TrainingDetailModal({ event, current, onAttendance, busy, canManage, onEdit, onClose, attendance, profiles, memberships }) {
   return <div className="modal-backdrop" onMouseDown={e => { if (e.target===e.currentTarget) onClose() }}><section className="detail-modal" role="dialog" aria-modal="true" aria-label="Trainingdetails"><header className="detail-modal-header"><div><p className="eyebrow orange">TRAINING</p><h2>{event.title}</h2></div><button className="sheet-icon-button" onClick={onClose} aria-label="Sluiten"><Icon name="close" /></button></header><div className="detail-modal-body"><div className="detail-meta-grid"><div><Icon name="calendar"/><span>{formatLongDate(event.start)}</span></div><div><Icon name="clock"/><span>{formatTimeRange(event.start,event.end)}</span></div>{event.meetAt && <div><Icon name="people"/><span>Verzamelen {formatClock(event.meetAt)}</span></div>}{event.location && <div><Icon name="pin"/><span>{event.location}</span></div>}</div><EventAudience event={event} />{event.description && <p className="detail-description">{event.description}</p>}<div className="detail-attendance"><h3>Ben je erbij?</h3><AttendanceButtons current={current?.status} onSelect={status => onAttendance(event,status)} busy={busy} /></div>{canManage && <><button className="primary detail-edit" onClick={onEdit}>Training aanpassen</button><AttendanceSummary event={event} rows={attendance} profiles={profiles} memberships={memberships} expanded /></>}</div></section></div>
 }
@@ -1111,7 +1118,7 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
         <SettingsRow icon="lock" title="Wachtwoord" subtitle="Wachtwoord wijzigen via resetmail" onClick={() => setSettingsView('password')} />
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.7.1" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.7.2" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -1146,7 +1153,7 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 2.7.1</h3>
+        <h3>Versie 2.7.2</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS agenda</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>
