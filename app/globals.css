@@ -1635,3 +1635,84 @@ input:focus, textarea:focus, select:focus {
 .finalize-person>span{display:flex;flex-direction:column;gap:2px}
 .finalize-person small{font-size:11px;color:#b85b12}
 @media(max-width:640px){.detail-manage-actions{grid-template-columns:1fr}}
+
+/* v2.8.5 - account koppelen */
+.link-account-inline{display:block;margin-top:5px;padding:0;border:0;background:transparent;color:var(--og-orange,#f36f21);font:inherit;font-size:12px;font-weight:800;text-align:left;cursor:pointer}
+.link-account-inline:hover{text-decoration:underline}
+.link-player-identity{display:flex;align-items:center;gap:12px;padding:12px 0 4px}
+.link-player-identity>div{display:flex;flex-direction:column;gap:2px}
+.link-player-identity small{color:var(--muted,#77736f)}
+
+/* v2.8.5.1 - spelersprofiel & aanwezigheid */
+.profile-inline-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.profile-inline-actions button.text-button{padding:0;border:0;background:transparent}
+.team-person.profile-openable{cursor:pointer;transition:transform .15s ease,box-shadow .15s ease}
+.team-person.profile-openable:active{transform:scale(.985)}
+.profile-open-hint{display:block;margin-top:5px;color:var(--og-orange,#f36f21);font-size:11px;font-weight:800}
+.coach-player-profile-row{cursor:pointer}
+.player-profile-modal{display:flex;flex-direction:column;gap:18px}
+.player-profile-hero{display:flex;align-items:center;gap:16px;padding:4px 0 8px}
+.player-profile-hero h2{margin:2px 0 4px}
+.player-profile-hero p{margin:0;color:var(--muted,#77736f)}
+.player-profile-data{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.player-profile-data>div{padding:13px 14px;border-radius:14px;background:#faf7f3;display:flex;flex-direction:column;gap:4px}
+.player-profile-data span{font-size:11px;color:var(--muted,#77736f);text-transform:uppercase;font-weight:800;letter-spacing:.04em}
+.player-profile-data strong{font-size:14px}
+.player-attendance-card{padding:18px;border-radius:18px;background:#fff8f0;border:1px solid #f2dfcc}
+.player-attendance-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.player-attendance-heading h3{font-size:34px;margin:0;line-height:1}
+.player-attendance-heading>span{font-size:12px;color:var(--muted,#77736f);text-align:right}
+.attendance-progress{height:8px;border-radius:999px;background:#eadfd4;overflow:hidden;margin:14px 0}
+.attendance-progress>span{display:block;height:100%;border-radius:inherit;background:var(--og-orange,#f36f21)}
+.player-attendance-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.player-attendance-grid>div{padding:10px 7px;border-radius:12px;background:#fff;text-align:center}
+.player-attendance-grid strong{display:block;font-size:20px}
+.player-attendance-grid span{display:block;font-size:10px;color:var(--muted,#77736f);margin-top:2px}
+.player-attendance-grid .missed{grid-column:1/-1;display:flex;align-items:center;justify-content:center;gap:8px}
+.player-attendance-grid .missed strong{font-size:18px}
+.player-attendance-note{display:block;margin-top:12px;color:var(--muted,#77736f);line-height:1.4}
+@media(max-width:560px){.player-profile-data{grid-template-columns:1fr 1fr}.player-attendance-grid{grid-template-columns:repeat(2,1fr)}.player-attendance-grid .missed{grid-column:1/-1}}
+
+/* v2.8.5.2 - team popup alignment */
+.team-people-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(120px,150px));
+  justify-content:center;
+  gap:18px;
+}
+.team-person{
+  width:100%;
+  max-width:150px;
+  margin:0 auto;
+  text-align:center;
+  align-items:center;
+}
+.team-person .team-person-avatar-wrap{
+  margin-left:auto;
+  margin-right:auto;
+}
+.team-person>strong{
+  width:100%;
+  text-align:center;
+}
+.team-person>small{
+  width:100%;
+  text-align:center;
+  line-height:1.35;
+}
+.team-people-heading{
+  text-align:center;
+  justify-content:center;
+  position:relative;
+}
+.team-people-heading>span{
+  position:absolute;
+  right:0;
+}
+@media(max-width:420px){
+  .team-people-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    justify-content:center;
+  }
+  .team-person{max-width:140px}
+}

@@ -184,8 +184,8 @@ export default function HomePage() {
         {activeTab === 'Agenda' && <Agenda events={allEvents} connection={calendarConnection} transportEvents={transportEvents} transportResponses={transportResponses} clubLocations={clubLocations} state={calendarState} profile={profile} teams={teams} attendance={attendance} visibleProfiles={visibleProfiles} memberships={allMemberships} ownAttendance={ownAttendance} onAttendance={setAttendanceStatus} attendanceBusy={attendanceBusy} onRefresh={refreshAppData} onGoMore={() => navigate('Meer')} />}
         {activeTab === 'Stats' && <Stats />}
         {activeTab === 'Coach' && isCoachUser && <CoachDashboard session={session} profile={profile} teams={teams} trainingEvents={trainingEvents} calendarEvents={calendarEvents} attendance={attendance} gameAttendance={gameAttendance} profiles={visibleProfiles} memberships={allMemberships} messages={teamMessages} playerRequests={playerRequests} playerCandidates={playerRequestCandidates} pushSubscriptions={pushSubscriptions} ownAttendance={ownAttendance} onAttendance={setAttendanceStatus} attendanceBusy={attendanceBusy} clubLocations={clubLocations} transportEvents={transportEvents} transportResponses={transportResponses} onRefresh={refreshAppData} onMessage={setMessage} />}
-        {activeTab === 'Team' && <Team session={session} profile={profile} teams={teams} profiles={visibleProfiles} memberships={allMemberships} onSaved={refreshAppData} onMessage={setMessage} />}
-        {activeTab === 'Meer' && <More session={session} profile={profile} teams={teams} calendar={calendarConnection} onSaved={refreshAppData} onMessage={setMessage} />}
+        {activeTab === 'Team' && <Team session={session} profile={profile} teams={teams} profiles={visibleProfiles} memberships={allMemberships} attendance={attendance} gameAttendance={gameAttendance} trainingEvents={trainingEvents} calendarEvents={calendarEvents} onSaved={refreshAppData} onMessage={setMessage} />}
+        {activeTab === 'Meer' && <More session={session} profile={profile} teams={teams} calendar={calendarConnection} attendance={attendance} gameAttendance={gameAttendance} trainingEvents={trainingEvents} calendarEvents={calendarEvents} memberships={allMemberships} onSaved={refreshAppData} onMessage={setMessage} />}
       </section>
       <nav className="bottom-nav" aria-label="Hoofdnavigatie">{navTabs.map(tab => <button key={tab} className={activeTab === tab ? 'nav-item active' : 'nav-item'} onClick={() => navigate(tab)}><Icon name={iconNameForTab(tab)} /><small>{tab}</small></button>)}</nav>
       {notificationsOpen && <NotificationInbox messages={teamMessages} teams={teams} onClose={() => setNotificationsOpen(false)} />}
@@ -656,6 +656,7 @@ function CoachDashboard({ session, profile, teams, trainingEvents = [], calendar
   const [allTeams, setAllTeams] = useState(ownCoachTeams)
   const [detailEvent, setDetailEvent] = useState(null)
   const [requestDetail, setRequestDetail] = useState(null)
+  const [coachPlayerProfile, setCoachPlayerProfile] = useState(null)
 
   useEffect(() => {
     supabase.from('teams').select('id,name,sport,is_active,season_id,foys_match_text,seasons(is_active)').eq('is_active', true).then(({data}) => {
@@ -726,7 +727,7 @@ function CoachDashboard({ session, profile, teams, trainingEvents = [], calendar
       const rows=ev.type==='training'?attendance.filter(a=>String(a.event_id)===String(ev.id)):gameAttendance.filter(a=>a.event_key===eventTransportKey(ev))
       const c={present:0,absent:0,injured:0,late:0}; rows.forEach(r=>{if(c[r.status]!=null)c[r.status]++})
       return <button key={ev.uid||`${ev.type}-${ev.id}`} onClick={()=>setFinalizeSession(ev)}><div><strong>{ev.title}</strong><small>{formatShortDate(ev.start)} · {eventTypeLabel(ev)}</small></div><div className="history-statuses"><span>{c.present} aanwezig</span><span>{c.absent} afwezig</span><span>{c.injured} geblesseerd</span><span>{c.late} te laat</span></div><Icon name="chevron"/></button>
-    })}{!past.length&&<p className="muted coach-empty-line">Nog geen afgelopen activiteiten.</p>}</div> : <div className="coach-player-table"><div className="coach-player-head"><span>Speler</span><span>Gemist</span><span>Te laat</span></div>{historyRows.map(r=><article key={r.person.id}><span className="coach-player-name"><ProfileAvatar person={r.person} size="small"/><strong>{r.person.first_name || personName(r.person)}</strong></span><span><strong>{r.missed}</strong><small>{r.absent} afw · {r.injured} gebl</small></span><span><strong>{r.late}</strong></span></article>)}</div>}
+    })}{!past.length&&<p className="muted coach-empty-line">Nog geen afgelopen activiteiten.</p>}</div> : <div className="coach-player-table"><div className="coach-player-head"><span>Speler</span><span>Gemist</span><span>Te laat</span></div>{historyRows.map(r=><article key={r.person.id} className="coach-player-profile-row" onClick={()=>setCoachPlayerProfile(r.person)} role="button" tabIndex="0"><span className="coach-player-name"><ProfileAvatar person={r.person} size="small"/><strong>{r.person.first_name || personName(r.person)}</strong></span><span><strong>{r.missed}</strong><small>{r.absent} afw · {r.injured} gebl</small></span><span><strong>{r.late}</strong></span></article>)}</div>}
 
     <SectionTitle title="Invallers" />
     {incomingRequests.length > 0 && <div className="coach-request-list incoming-requests">{incomingRequests.map(req=>{const requestingTeam=allTeams.find(t=>Number(t.id)===Number(req.requesting_team_id));return <article key={`incoming-${req.id}`}><button type="button" className="request-main-button" onClick={()=>setRequestDetail(req)}><div><span className="coach-session-type">VERZOEK ONTVANGEN</span><strong>{requestingTeam?.name || 'Ander team'} zoekt {req.position}</strong><small>{req.event_title} · {formatShortDate(req.event_start)}</small><p>{req.note || 'Geen extra opmerking.'}</p></div><Icon name="chevron"/></button><button className="secondary orange-outline" onClick={()=>setNominateRequest(req)}>Speelsters voordragen</button></article>})}</div>}
@@ -747,6 +748,7 @@ function CoachDashboard({ session, profile, teams, trainingEvents = [], calendar
     {requestDetail && <PlayerRequestDetailModal request={requestDetail} selectedTeam={selectedTeam} allTeams={allTeams} profiles={profiles} candidates={playerCandidates.filter(c=>c.request_id===requestDetail.id)} onConfirm={confirmCandidate} onNominate={()=>{setNominateRequest(requestDetail);setRequestDetail(null)}} onClose={()=>setRequestDetail(null)} />}
     {detailEvent?.type === 'training' && <TrainingDetailModal event={detailEvent} current={ownAttendance[String(detailEvent.id)]} onAttendance={onAttendance} busy={attendanceBusy} canManage={true} onEdit={()=>{setEditingCoachEvent(detailEvent);setDetailEvent(null);setTrainingEditorOpen(true)}} onManageAttendance={()=>setFinalizeSession(detailEvent)} onClose={()=>setDetailEvent(null)} attendance={attendance.filter(row=>String(row.event_id)===String(detailEvent.id))} profiles={profiles} memberships={memberships} />}
     {detailEvent && detailEvent.type !== 'training' && <ActivityDetailModal event={detailEvent} profile={profile} teams={[selectedTeam]} profiles={profiles} memberships={memberships} clubLocations={clubLocations} transportEvent={findTransportEvent(detailEvent, transportEvents)} transportResponses={transportResponses} onChanged={onRefresh} onManageAttendance={()=>setFinalizeSession(detailEvent)} onClose={()=>setDetailEvent(null)} />}
+    {coachPlayerProfile && <PlayerProfileModal person={coachPlayerProfile} team={selectedTeam} viewerProfile={profile} viewerMembership={{member_role:'coach'}} attendance={attendance} gameAttendance={gameAttendance} trainingEvents={trainingEvents} calendarEvents={calendarEvents} memberships={memberships} onClose={()=>setCoachPlayerProfile(null)} />}
   </section>
 }
 
@@ -877,10 +879,74 @@ function NominatePlayersModal({ session, request, team, profiles, memberships, o
 }
 
 function Stats() { return <section><ScreenHeader title="Jouw stats" /><div className="segmented"><span className="active">Overzicht</span><span>Aanvallen</span><span>Verdedigen</span></div><EmptyState icon="stats" title="Nog geen statistieken beschikbaar" text="Hier tonen we alleen echte data. Zodra een statsbron is gekoppeld, verschijnt jouw persoonlijke overzicht hier." /></section> }
-function Team({ session, profile, teams, profiles, memberships, onSaved, onMessage }) {
+
+function attendanceStatsForPerson(personId, team, attendance = [], gameAttendance = [], trainingEvents = [], calendarEvents = []) {
+  const finalStatuses = new Set(['present','absent','injured','late'])
+  const trainingIds = new Set(
+    trainingEvents
+      .filter(ev => !team || (ev.teamIds || [ev.teamId]).map(Number).includes(Number(team.id)))
+      .map(ev => String(ev.id))
+  )
+  const gameKeys = new Set(
+    calendarEvents
+      .filter(ev => !team || eventTeamMatches(ev,[team]).includes(Number(team.id)))
+      .map(ev => eventTransportKey(ev))
+  )
+  const trainingRows = attendance.filter(row =>
+    row.profile_id === personId &&
+    finalStatuses.has(row.status) &&
+    (!team || trainingIds.has(String(row.event_id)))
+  )
+  const gameRows = gameAttendance.filter(row =>
+    row.profile_id === personId &&
+    finalStatuses.has(row.status) &&
+    (!team || gameKeys.has(row.event_key))
+  )
+  const rows=[...trainingRows,...gameRows]
+  const counts={present:0,absent:0,injured:0,late:0}
+  rows.forEach(row=>{ if(counts[row.status] != null) counts[row.status]++ })
+  const total=rows.length
+  const attended=counts.present+counts.late
+  return {...counts,total,attended,missed:counts.absent+counts.injured,percentage:total?Math.round((attended/total)*100):null}
+}
+
+function PlayerProfileModal({ person, team, viewerProfile, viewerMembership, attendance = [], gameAttendance = [], trainingEvents = [], calendarEvents = [], onClose }) {
+  const canSeeAttendance = viewerProfile?.id === person?.id || viewerProfile?.role === 'admin' || viewerMembership?.member_role === 'coach'
+  const stats = canSeeAttendance ? attendanceStatsForPerson(person?.id, team, attendance, gameAttendance, trainingEvents, calendarEvents) : null
+  const secondary=(person?.secondary_positions||[]).filter(Boolean)
+  const throwsLabel=person?.throws_hand==='L'?'Links':person?.throws_hand==='R'?'Rechts':'Niet ingevuld'
+  const batsLabel=person?.bats_side==='S'?'Switch':person?.bats_side==='L'?'Links':person?.bats_side==='R'?'Rechts':'Niet ingevuld'
+  return <SettingsModal title="Spelersprofiel" onClose={onClose}>
+    <div className="player-profile-modal">
+      <div className="player-profile-hero">
+        <ProfileAvatar person={person} size="profile"/>
+        <div><p className="eyebrow orange">{team?.name || 'MIJN OG'}</p><h2>{personName(person)}</h2><p>{person?.jersey_number ? `#${person.jersey_number}` : 'Geen rugnummer'}{person?.is_placeholder ? ' · Nog geen Mijn OG-account' : ''}</p></div>
+      </div>
+      <div className="player-profile-data">
+        <div><span>Primaire positie</span><strong>{person?.primary_position || 'Niet ingevuld'}</strong></div>
+        <div><span>Secundair</span><strong>{secondary.length ? secondary.join(', ') : 'Niet ingevuld'}</strong></div>
+        <div><span>Gooit</span><strong>{throwsLabel}</strong></div>
+        <div><span>Slaat</span><strong>{batsLabel}</strong></div>
+      </div>
+      {canSeeAttendance && <section className="player-attendance-card">
+        <div className="player-attendance-heading"><div><p className="eyebrow orange">AANWEZIGHEID</p><h3>{stats.percentage == null ? 'Nog geen percentage' : `${stats.percentage}%`}</h3></div><span>{stats.total} geregistreerde sessie{stats.total===1?'':'s'}</span></div>
+        {stats.total ? <><div className="attendance-progress"><span style={{width:`${stats.percentage}%`}} /></div><div className="player-attendance-grid">
+          <div><strong>{stats.present}</strong><span>Aanwezig</span></div>
+          <div><strong>{stats.absent}</strong><span>Afwezig</span></div>
+          <div><strong>{stats.injured}</strong><span>Geblesseerd</span></div>
+          <div><strong>{stats.late}</strong><span>Te laat</span></div>
+          <div className="missed"><strong>{stats.missed}</strong><span>Totaal gemist</span></div>
+        </div><small className="player-attendance-note">Percentage = Aanwezig + Te laat ten opzichte van alle definitief geregistreerde sessies.</small></> : <p className="muted">Er zijn nog geen definitief geregistreerde trainingen of wedstrijden.</p>}
+      </section>}
+    </div>
+  </SettingsModal>
+}
+
+function Team({ session, profile, teams, profiles, memberships, attendance = [], gameAttendance = [], trainingEvents = [], calendarEvents = [], onSaved, onMessage }) {
   const [selectedTeam, setSelectedTeam] = useState(null)
   const [cropRequest, setCropRequest] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [playerProfile, setPlayerProfile] = useState(null)
 
   const membersForTeam = teamId => memberships
     .filter(row => Number(row.team_id) === Number(teamId))
@@ -933,7 +999,8 @@ function Team({ session, profile, teams, profiles, memberships, onSaved, onMessa
     </button>)}</div> : <EmptyState icon="team" title="Nog geen team gekoppeld" text="Een beheerder kan jouw account aan het juiste team koppelen." />}
     <SectionTitle title="Teamgegevens" /><EmptyState icon="stats" title="Nog geen teamstatistieken beschikbaar" text="Teamstats verschijnen hier zodra we een echte statistiekbron koppelen." />
     {cropRequest && <ImageCropModal file={cropRequest.file} shape={cropRequest.kind==='avatar'?'circle':'wide'} onClose={() => setCropRequest(null)} onSave={async blob => { const request=cropRequest; setCropRequest(null); if(request.kind==='avatar') await uploadMemberAvatar(request.person,blob); else await uploadTeamPhoto(request.team,blob) }} />}
-    {selectedTeam && <TeamModal team={selectedTeam} currentProfile={profile} currentMembership={teams.find(t => Number(t.id)===Number(selectedTeam.id))} members={membersForTeam(selectedTeam.id)} busy={busy} onTeamPhoto={(team,file) => setCropRequest({ kind:'team', team, file })} onAvatar={(person,file) => setCropRequest({ kind:'avatar', person, file })} onClose={() => setSelectedTeam(null)} />}
+    {selectedTeam && <TeamModal team={selectedTeam} currentProfile={profile} currentMembership={teams.find(t => Number(t.id)===Number(selectedTeam.id))} members={membersForTeam(selectedTeam.id)} busy={busy} onTeamPhoto={(team,file) => setCropRequest({ kind:'team', team, file })} onAvatar={(person,file) => setCropRequest({ kind:'avatar', person, file })} onPerson={person => setPlayerProfile({ person, team:selectedTeam })} onClose={() => setSelectedTeam(null)} />}
+    {playerProfile && <PlayerProfileModal person={playerProfile.person} team={playerProfile.team} viewerProfile={profile} viewerMembership={teams.find(t=>Number(t.id)===Number(playerProfile.team.id))} attendance={attendance} gameAttendance={gameAttendance} trainingEvents={trainingEvents} calendarEvents={calendarEvents} memberships={memberships} onClose={()=>setPlayerProfile(null)} />}
   </section>
 }
 
@@ -941,7 +1008,22 @@ function TeamThumb({ team }) {
   return team?.team_photo_url ? <img className="team-thumb-image" src={team.team_photo_url} alt={`Teamfoto ${team.name}`} /> : <span className="soft-icon large"><Icon name="team" /></span>
 }
 
-function TeamModal({ team, currentProfile, currentMembership, members, busy, onTeamPhoto, onAvatar, onClose }) {
+
+function teamDisplayName(person) {
+  if (!person) return 'Onbekend'
+  const first=(person.first_name || '').trim()
+  const last=(person.last_name || '').trim()
+  if (!last) return first || 'Onbekend'
+  return `${first ? `${first.charAt(0).toUpperCase()}. ` : ''}${last}`
+}
+
+function teamPlayerMeta(person) {
+  const number=person?.jersey_number ? `#${person.jersey_number}` : 'Geen rugnummer'
+  const position=person?.primary_position || 'Geen positie'
+  return `${number} · ${position}`
+}
+
+function TeamModal({ team, currentProfile, currentMembership, members, busy, onTeamPhoto, onAvatar, onPerson, onClose }) {
   const players = members.filter(row => row.member_role === 'player')
   const staff = members.filter(row => row.member_role === 'coach' || row.member_role === 'staff')
   const canEditTeamPhoto = currentProfile?.role === 'admin' || currentMembership?.member_role === 'coach'
@@ -955,19 +1037,20 @@ function TeamModal({ team, currentProfile, currentMembership, members, busy, onT
       <div className="team-modal-body">
         <div className="team-modal-title"><p className="eyebrow orange">{capitalize(team.sport)}</p><h2>{team.name}</h2></div>
         <TeamPeopleSection title="Staff" rows={staff} admin={currentProfile?.role==='admin'} busy={busy} onAvatar={onAvatar} />
-        <TeamPeopleSection title="Spelers" rows={players} admin={currentProfile?.role==='admin'} busy={busy} onAvatar={onAvatar} />
+        <TeamPeopleSection title="Spelers" rows={players} admin={currentProfile?.role==='admin'} busy={busy} onAvatar={onAvatar} onPerson={onPerson} canOpenPerson={person => currentProfile?.role==='admin' || currentMembership?.member_role==='coach' || currentProfile?.id===person?.id} />
       </div>
     </section>
   </div>
 }
 
-function TeamPeopleSection({ title, rows, admin, busy, onAvatar }) {
+function TeamPeopleSection({ title, rows, admin, busy, onAvatar, onPerson, canOpenPerson }) {
   return <section className="team-people-section"><div className="team-people-heading"><h3>{title}</h3><span>{rows.length}</span></div>
-    {rows.length ? <div className="team-people-grid">{rows.map(row => <article className="team-person" key={row.id}>
-      <div className="team-person-avatar-wrap"><ProfileAvatar person={row.person} size="large" />{admin && <label className="avatar-admin-edit" title="Profielfoto aanpassen"><Icon name="edit" /><input type="file" accept="image/*" disabled={busy} onChange={e => { const file=e.target.files?.[0]; if(file) onAvatar(row.person,file); e.target.value='' }} /></label>}</div>
-      <strong>{row.person.first_name || personName(row.person)}</strong>
-      <small>{translateRole(row.member_role)}{row.person.jersey_number ? ` · #${row.person.jersey_number}` : ''}{row.member_role==='player' ? ` · ${playerSportLine(row.person)}` : ''}</small>
-    </article>)}</div> : <div className="admin-empty">Nog geen {title.toLowerCase()} gekoppeld.</div>}
+    {rows.length ? <div className="team-people-grid">{rows.map(row => { const openable=onPerson && canOpenPerson?.(row.person); return <article className={`team-person ${openable?'profile-openable':''}`} key={row.id} onClick={()=>openable&&onPerson(row.person)} role={openable?'button':undefined} tabIndex={openable?0:undefined} onKeyDown={e=>{if(openable&&(e.key==='Enter'||e.key===' ')){e.preventDefault();onPerson(row.person)}}}>
+      <div className="team-person-avatar-wrap"><ProfileAvatar person={row.person} size="large" />{admin && <label className="avatar-admin-edit" title="Profielfoto aanpassen" onClick={e=>e.stopPropagation()}><Icon name="edit" /><input type="file" accept="image/*" disabled={busy} onChange={e => { const file=e.target.files?.[0]; if(file) onAvatar(row.person,file); e.target.value='' }} /></label>}</div>
+      <strong>{row.member_role==='player' ? teamDisplayName(row.person) : personName(row.person)}</strong>
+      <small>{row.member_role==='player' ? teamPlayerMeta(row.person) : translateRole(row.member_role)}</small>
+      {openable && <span className="profile-open-hint">Bekijk profiel</span>}
+    </article>})}</div> : <div className="admin-empty">Nog geen {title.toLowerCase()} gekoppeld.</div>}
   </section>
 }
 
@@ -993,6 +1076,9 @@ function AdminPanel({ session, onMessage, onChanged }) {
   const [showPlaceholderForm, setShowPlaceholderForm] = useState(false)
   const [placeholderForm, setPlaceholderForm] = useState({ first_name:'', last_name:'', jersey_number:'', primary_position:'', secondary_positions:'', throws_hand:'R', bats_side:'R' })
   const [placeholderFeedback, setPlaceholderFeedback] = useState('')
+  const [linkPlayer, setLinkPlayer] = useState(null)
+  const [linkEmail, setLinkEmail] = useState('')
+  const [linkFeedback, setLinkFeedback] = useState('')
   const [locations, setLocations] = useState([])
   const [showLocationForm, setShowLocationForm] = useState(false)
   const [editingLocationId, setEditingLocationId] = useState(null)
@@ -1203,6 +1289,27 @@ function AdminPanel({ session, onMessage, onChanged }) {
     setBusy(false)
   }
 
+  async function linkPlaceholderAccount(e) {
+    e.preventDefault()
+    if (!linkPlayer?.id || !linkEmail.trim()) return
+    setBusy(true); setLinkFeedback('')
+    try {
+      const response = await fetch('/api/admin/link-player', {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${session.access_token}` },
+        body:JSON.stringify({ profile_id:linkPlayer.id, email:linkEmail.trim() })
+      })
+      const payload=await response.json().catch(()=>({}))
+      if(!response.ok) throw new Error(payload.error || 'Account koppelen mislukt.')
+      setLinkFeedback('E-mailadres gekoppeld. De speelster ontvangt een mail om haar wachtwoord in te stellen ✓')
+      await loadAdminData(); onChanged?.()
+      setTimeout(()=>{ setLinkPlayer(null); setLinkEmail(''); setLinkFeedback('') }, 900)
+    } catch(error) {
+      setLinkFeedback(error.message)
+    }
+    setBusy(false)
+  }
+
   async function sendInvite(e) {
     e.preventDefault()
     if (!inviteForm.email.trim() || !inviteForm.team_id) return
@@ -1397,7 +1504,7 @@ function AdminPanel({ session, onMessage, onChanged }) {
                           const person = profiles.find(profile => profile.id === membership.profile_id)
                           return <article className="member-row" key={membership.id}>
                             <span className="member-avatar">{initials(person)}</span>
-                            <div className="member-copy"><strong>{personName(person)}</strong><small>{person?.jersey_number ? `#${person.jersey_number} · ` : ''}{person?.is_placeholder ? 'Nog geen Mijn OG-account' : person?.role === 'admin' ? 'Clubbeheerder' : 'Mijn OG-lid'}</small></div>
+                            <div className="member-copy"><strong>{personName(person)}</strong><small>{person?.jersey_number ? `#${person.jersey_number} · ` : ''}{person?.is_placeholder ? 'Nog geen Mijn OG-account' : person?.role === 'admin' ? 'Clubbeheerder' : 'Mijn OG-lid'}</small>{person?.is_placeholder && <button type="button" className="link-account-inline" onClick={()=>{setLinkPlayer(person);setLinkEmail('');setLinkFeedback('')}}>Account koppelen</button>}</div>
                             <select aria-label={`Teamrol van ${personName(person)}`} value={membership.member_role} onChange={e => changeMemberRole(membership.id, e.target.value)} disabled={busy}><option value="player">Speler</option><option value="coach">Coach</option><option value="staff">Staff</option></select>
                             <button className="remove-member" onClick={() => removeMember(membership)} disabled={busy} aria-label={`${personName(person)} verwijderen`}><Icon name="trash" /></button>
                           </article>
@@ -1422,7 +1529,15 @@ function AdminPanel({ session, onMessage, onChanged }) {
             )}
           </section>
         </div>
-      )}
+      {linkPlayer && <SettingsModal title="Account koppelen" onClose={()=>{setLinkPlayer(null);setLinkEmail('');setLinkFeedback('')}}>
+        <form className="form-stack link-player-form" onSubmit={linkPlaceholderAccount}>
+          <div className="link-player-identity"><ProfileAvatar person={linkPlayer} size="small"/><div><strong>{personName(linkPlayer)}</strong><small>{playerSportLine(linkPlayer)}</small></div></div>
+          <p className="settings-modal-intro">Koppel een echt e-mailadres aan dit bestaande spelersprofiel. Team, rugnummer, historie en andere gegevens blijven behouden.</p>
+          <label>E-mailadres<input type="email" autoComplete="email" value={linkEmail} onChange={e=>setLinkEmail(e.target.value)} placeholder="naam@email.nl" required /></label>
+          {linkFeedback && <div className="push-feedback" role="status">{linkFeedback}</div>}
+          <button className="primary" disabled={busy}>{busy?'Koppelen…':'E-mailadres koppelen'}</button>
+        </form>
+      </SettingsModal>}
     </>
   )
 }
@@ -1431,7 +1546,7 @@ function AdminMenuItem({ icon, title, subtitle, onClick }) {
   return <button className="admin-menu-item" onClick={onClick}><span className="admin-menu-icon"><Icon name={icon} /></span><span><strong>{title}</strong><small>{subtitle}</small></span><Icon name="chevron" /></button>
 }
 
-function More({ session, profile, teams, calendar, onSaved, onMessage }) {
+function More({ session, profile, teams, calendar, attendance = [], gameAttendance = [], trainingEvents = [], calendarEvents = [], memberships = [], onSaved, onMessage }) {
   const [icsUrl, setIcsUrl] = useState(calendar?.ics_url ?? '')
   const [firstName, setFirstName] = useState(profile?.first_name ?? '')
   const [lastName, setLastName] = useState(profile?.last_name ?? '')
@@ -1446,6 +1561,7 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
   const [settingsView, setSettingsView] = useState(null)
   const [avatarBusy, setAvatarBusy] = useState(false)
   const [avatarCropFile, setAvatarCropFile] = useState(null)
+  const [ownProfileOpen, setOwnProfileOpen] = useState(false)
 
   useEffect(() => setIcsUrl(calendar?.ics_url ?? ''), [calendar])
   useEffect(() => { setFirstName(profile?.first_name ?? ''); setLastName(profile?.last_name ?? ''); setJerseyNumber(profile?.jersey_number ?? ''); setPrimaryPosition(profile?.primary_position ?? ''); setSecondaryPositions((profile?.secondary_positions ?? []).join(', ')); setThrowsHand(profile?.throws_hand ?? ''); setBatsSide(profile?.bats_side ?? '') }, [profile])
@@ -1540,7 +1656,7 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
           <ProfileAvatar person={profile} size="profile" />
           <label className="avatar-change-button" title="Profielfoto aanpassen"><Icon name="camera" /><input type="file" accept="image/*" disabled={avatarBusy} onChange={e => { const file=e.target.files?.[0]; if(file) setAvatarCropFile(file); e.target.value='' }} /></label>
         </div>
-        <div className="profile-copy"><h2>{displayName}</h2><p>{teamLine}</p><label className="text-button upload-text">{avatarBusy ? 'Uploaden…' : 'Foto aanpassen'}<input type="file" accept="image/*" disabled={avatarBusy} onChange={e => { const file=e.target.files?.[0]; if(file) setAvatarCropFile(file); e.target.value='' }} /></label></div>
+        <div className="profile-copy"><h2>{displayName}</h2><p>{teamLine}</p><div className="profile-inline-actions"><button type="button" className="text-button upload-text" onClick={()=>setOwnProfileOpen(true)}>Bekijk spelersprofiel</button><label className="text-button upload-text">{avatarBusy ? 'Uploaden…' : 'Foto aanpassen'}<input type="file" accept="image/*" disabled={avatarBusy} onChange={e => { const file=e.target.files?.[0]; if(file) setAvatarCropFile(file); e.target.value='' }} /></label></div></div>
         <button className="profile-name-edit" onClick={() => setSettingsView('personal')} aria-label="Naam aanpassen"><Icon name="edit" /> Aanpassen</button>
       </article>
 
@@ -1551,7 +1667,7 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
         <SettingsRow icon="lock" title="Wachtwoord" subtitle="Wachtwoord wijzigen via resetmail" onClick={() => setSettingsView('password')} />
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.8.4.2" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.8.5.2" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -1559,6 +1675,7 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
       <button className="logout-button" onClick={signOut}><Icon name="logout" /> Uitloggen</button>
     </section>
 
+    {ownProfileOpen && <PlayerProfileModal person={profile} team={null} viewerProfile={profile} viewerMembership={null} attendance={attendance} gameAttendance={gameAttendance} trainingEvents={trainingEvents} calendarEvents={calendarEvents} memberships={memberships} onClose={()=>setOwnProfileOpen(false)} />}
     {settingsView && <SettingsModal title={settingsView === 'personal' ? 'Persoonlijke gegevens' : settingsView === 'password' ? 'Wachtwoord' : settingsView === 'notifications' ? 'Meldingen' : settingsView === 'calendar' ? 'Koppelingen' : 'Over Mijn OG'} onClose={() => { if (settingsView === 'personal') { setFirstName(profile?.first_name ?? ''); setLastName(profile?.last_name ?? '') } setSettingsView(null) }}>
       {settingsView === 'personal' && <div className="form-stack">
         <p className="settings-modal-intro">Pas hier je naam aan. Je e-mailadres blijft gekoppeld aan je account.</p>
@@ -1589,7 +1706,7 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 2.8.4.2</h3>
+        <h3>Versie 2.8.5.2</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS agenda</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>
