@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
-const tabs = ['Home', 'Agenda', 'Stats', 'Team', 'Meer']
+const allTabs = ['Home', 'Agenda', 'Stats', 'Coach', 'Team', 'Meer']
 
 export default function HomePage() {
   const [session, setSession] = useState(null)
@@ -32,13 +32,16 @@ export default function HomePage() {
   const [transportResponses, setTransportResponses] = useState([])
   const [teamMessages, setTeamMessages] = useState([])
   const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [gameAttendance, setGameAttendance] = useState([])
+  const [playerRequests, setPlayerRequests] = useState([])
+  const [playerRequestCandidates, setPlayerRequestCandidates] = useState([])
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
       setInviteMode(params.get('invite') === '1')
       const requestedTab = params.get('tab')
-      if (requestedTab && tabs.includes(requestedTab)) setActiveTab(requestedTab)
+      if (requestedTab && allTabs.includes(requestedTab)) setActiveTab(requestedTab)
     }
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session ?? null)
@@ -54,7 +57,7 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!session?.user?.id) {
-      setProfile(null); setTeams([]); setCalendarConnection(null); setCalendarEvents([]); setTrainingEvents([]); setAttendance([]); setVisibleProfiles([]); setAllMemberships([]); setEventTeamLinks([]); setEventParticipantLinks([]); setClubLocations([]); setTransportEvents([]); setTransportResponses([]); setTeamMessages([])
+      setProfile(null); setTeams([]); setCalendarConnection(null); setCalendarEvents([]); setTrainingEvents([]); setAttendance([]); setVisibleProfiles([]); setAllMemberships([]); setEventTeamLinks([]); setEventParticipantLinks([]); setClubLocations([]); setTransportEvents([]); setTransportResponses([]); setTeamMessages([]); setGameAttendance([]); setPlayerRequests([]); setPlayerRequestCandidates([])
       return
     }
     loadUserData(session.user.id, session.access_token)
@@ -63,7 +66,7 @@ export default function HomePage() {
   async function loadUserData(userId, accessToken = session?.access_token) {
     setLoading(true)
     setMessage('')
-    const [profileResult, teamResult, calendarResult, eventResult, attendanceResult, profilesResult, membershipResult, eventTeamsResult, eventParticipantsResult, locationsResult, transportEventsResult, transportResponsesResult, messagesResult] = await Promise.all([
+    const [profileResult, teamResult, calendarResult, eventResult, attendanceResult, profilesResult, membershipResult, eventTeamsResult, eventParticipantsResult, locationsResult, transportEventsResult, transportResponsesResult, messagesResult, gameAttendanceResult, playerRequestsResult, playerCandidatesResult] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
       supabase.from('team_members').select('member_role, teams(id, name, sport, season_id, is_active, team_photo_url, seasons(is_active))').eq('profile_id', userId),
       supabase.from('calendar_connections').select('*').eq('profile_id', userId).eq('provider', 'foys').maybeSingle(),
@@ -76,7 +79,10 @@ export default function HomePage() {
       supabase.from('club_locations').select('*').eq('is_active', true).order('name'),
       supabase.from('transport_events').select('*'),
       supabase.from('transport_responses').select('*'),
-      supabase.from('team_messages').select('*').order('created_at', { ascending: false }).limit(50)
+      supabase.from('team_messages').select('*').order('created_at', { ascending: false }).limit(50),
+      supabase.from('game_attendance').select('*'),
+      supabase.from('player_requests').select('*').order('created_at', { ascending: false }),
+      supabase.from('player_request_candidates').select('*')
     ])
     if (profileResult.error) setMessage(`Profiel kon niet worden geladen: ${profileResult.error.message}`)
     else setProfile(profileResult.data)
@@ -103,6 +109,9 @@ export default function HomePage() {
     if (!transportEventsResult.error) setTransportEvents(transportEventsResult.data ?? [])
     if (!transportResponsesResult.error) setTransportResponses(transportResponsesResult.data ?? [])
     if (!messagesResult.error) setTeamMessages(messagesResult.data ?? [])
+    if (!gameAttendanceResult.error) setGameAttendance(gameAttendanceResult.data ?? [])
+    if (!playerRequestsResult.error) setPlayerRequests(playerRequestsResult.data ?? [])
+    if (!playerCandidatesResult.error) setPlayerRequestCandidates(playerCandidatesResult.data ?? [])
     setLoading(false)
   }
 
@@ -156,6 +165,9 @@ export default function HomePage() {
   if (inviteMode && session) return <InviteSetup onDone={() => { if (typeof window !== 'undefined') window.history.replaceState({}, '', window.location.pathname); setInviteMode(false) }} />
   if (!session) return <Login onMessage={setMessage} message={message} />
 
+  const isCoachUser = profile?.role === 'admin' || teams.some(team => team.member_role === 'coach')
+  const navTabs = isCoachUser ? ['Home', 'Agenda', 'Coach', 'Team', 'Meer'] : ['Home', 'Agenda', 'Stats', 'Team', 'Meer']
+
   return (
     <main className="app-shell">
       <header className="topbar">
@@ -165,13 +177,14 @@ export default function HomePage() {
       <section className="content">
         {message && <div className="notice">{message}</div>}
         {loading && <div className="subtle-loading">Gegevens bijwerken…</div>}
-        {activeTab === 'Home' && <Dashboard profile={profile} teams={teams} events={allEvents} messages={teamMessages} transportEvents={transportEvents} transportResponses={transportResponses} calendarConnection={calendarConnection} calendarState={calendarState} ownAttendance={ownAttendance} onAttendance={setAttendanceStatus} attendanceBusy={attendanceBusy} onAgenda={() => navigate('Agenda')} onTeam={() => navigate('Team')} onStats={() => navigate('Stats')} onMore={() => navigate('Meer')} />}
+        {activeTab === 'Home' && <Dashboard session={session} profile={profile} teams={teams} events={allEvents} messages={teamMessages} playerRequests={playerRequests} playerCandidates={playerRequestCandidates} onRefresh={refreshAppData} transportEvents={transportEvents} transportResponses={transportResponses} calendarConnection={calendarConnection} calendarState={calendarState} ownAttendance={ownAttendance} onAttendance={setAttendanceStatus} attendanceBusy={attendanceBusy} onAgenda={() => navigate('Agenda')} onTeam={() => navigate('Team')} onStats={() => navigate('Stats')} onMore={() => navigate('Meer')} />}
         {activeTab === 'Agenda' && <Agenda events={allEvents} connection={calendarConnection} transportEvents={transportEvents} transportResponses={transportResponses} clubLocations={clubLocations} state={calendarState} profile={profile} teams={teams} attendance={attendance} visibleProfiles={visibleProfiles} memberships={allMemberships} ownAttendance={ownAttendance} onAttendance={setAttendanceStatus} attendanceBusy={attendanceBusy} onRefresh={refreshAppData} onGoMore={() => navigate('Meer')} />}
         {activeTab === 'Stats' && <Stats />}
+        {activeTab === 'Coach' && isCoachUser && <CoachDashboard session={session} profile={profile} teams={teams} trainingEvents={trainingEvents} calendarEvents={calendarEvents} attendance={attendance} gameAttendance={gameAttendance} profiles={visibleProfiles} memberships={allMemberships} messages={teamMessages} playerRequests={playerRequests} playerCandidates={playerRequestCandidates} onRefresh={refreshAppData} onMessage={setMessage} />}
         {activeTab === 'Team' && <Team session={session} profile={profile} teams={teams} profiles={visibleProfiles} memberships={allMemberships} onSaved={refreshAppData} onMessage={setMessage} />}
         {activeTab === 'Meer' && <More session={session} profile={profile} teams={teams} calendar={calendarConnection} onSaved={refreshAppData} onMessage={setMessage} />}
       </section>
-      <nav className="bottom-nav" aria-label="Hoofdnavigatie">{tabs.map(tab => <button key={tab} className={activeTab === tab ? 'nav-item active' : 'nav-item'} onClick={() => navigate(tab)}><Icon name={iconNameForTab(tab)} /><small>{tab}</small></button>)}</nav>
+      <nav className="bottom-nav" aria-label="Hoofdnavigatie">{navTabs.map(tab => <button key={tab} className={activeTab === tab ? 'nav-item active' : 'nav-item'} onClick={() => navigate(tab)}><Icon name={iconNameForTab(tab)} /><small>{tab}</small></button>)}</nav>
       {notificationsOpen && <NotificationInbox messages={teamMessages} teams={teams} onClose={() => setNotificationsOpen(false)} />}
       {absenceEvent && <AbsenceModal event={absenceEvent} reason={absenceReason} setReason={setAbsenceReason} busy={attendanceBusy} onCancel={() => { setAbsenceEvent(null); setAbsenceReason(''); setMessage('') }} onConfirm={confirmAbsence} />}
     </main>
@@ -315,12 +328,13 @@ function InviteSetup({ onDone }) {
 }
 
 
-function Dashboard({ profile, teams, events, messages = [], transportEvents, transportResponses, calendarConnection, calendarState, ownAttendance, onAttendance, attendanceBusy, onAgenda, onTeam, onStats, onMore }) {
+function Dashboard({ session, profile, teams, events, messages = [], playerRequests = [], playerCandidates = [], onRefresh, transportEvents, transportResponses, calendarConnection, calendarState, ownAttendance, onAttendance, attendanceBusy, onAgenda, onTeam, onStats, onMore }) {
   const firstName = profile?.first_name?.trim() || ''
   const nextEvent = events[0] || null
   const upcoming = events.slice(0, 3)
   return <>
     <section className="home-intro centered-copy"><h1>{firstName ? `Hoi ${firstName}!` : 'Welkom bij Mijn OG'}</h1><p className="muted no-margin">Alles wat voor jou en je team belangrijk is, op één plek.</p></section>
+    <PlayerInvitationCards session={session} requests={playerRequests} candidates={playerCandidates} teams={teams} onRefresh={onRefresh} />
     <section className={`hero-event ${nextEvent?.type === 'training' ? 'training-hero' : ''}`}>
       <div className="hero-ball" aria-hidden="true" />
       <div className="hero-topline"><span>VOLGENDE ACTIVITEIT</span>{nextEvent && <span className="hero-badge">{eventTypeLabel(nextEvent)}</span>}</div>
@@ -348,7 +362,7 @@ function Dashboard({ profile, teams, events, messages = [], transportEvents, tra
 function CompactEvent({ event, transportEvent, responses = [] }) {
   const date = new Date(event.start)
   const summary = event.type === 'game' && transportEvent ? getTransportSummary(transportEvent, responses) : null
-  return <article className="compact-event"><div className="compact-date"><strong>{date.getDate()}</strong><span>{date.toLocaleDateString('nl-NL', { month: 'short' }).replace('.', '').toUpperCase()}</span></div><div className="compact-event-copy"><strong>{event.title}</strong><span>{formatShortDate(event.start)}</span><small>{formatTimeRange(event.start,event.end)}{event.location ? ` · ${event.location}` : ''}</small>{summary && <small className={summary.shortage > 0 ? 'transport-shortage-text' : 'transport-ok-text'}>{summary.shortage > 0 ? `! ${summary.shortage} PLEKKEN TEKORT` : 'VERVOER GEREGELD'}</small>}</div><span className={`type-chip ${event.type === 'training' ? 'training-chip' : ''}`}>{eventTypeLabel(event)}</span></article>
+  return <article className="compact-event"><div className="compact-date"><strong>{date.getDate()}</strong><span>{date.toLocaleDateString('nl-NL', { month: 'short' }).replace('.', '').toUpperCase()}</span></div><div className="compact-event-copy"><strong>{event.title}</strong><span>{formatShortDate(event.start)}</span><small>{formatTimeRange(event.start,event.end)}{event.location ? ` · ${event.location}` : ''}</small>{summary && <small className={summary.shortage > 0 ? 'transport-shortage-text' : 'transport-ok-text'}>{summary.shortage > 0 ? `${summary.shortage} PLEKKEN NODIG` : 'VERVOER GEREGELD'}</small>}</div><span className={`type-chip ${event.type === 'training' ? 'training-chip' : ''}`}>{eventTypeLabel(event)}</span></article>
 }
 
 function Agenda({ events, connection, state, profile, teams, attendance, visibleProfiles, memberships, ownAttendance, onAttendance, attendanceBusy, onRefresh, onGoMore, transportEvents, transportResponses, clubLocations }) {
@@ -365,8 +379,7 @@ function Agenda({ events, connection, state, profile, teams, attendance, visible
     return event.type === 'training' && (profile?.role === 'admin' || (event.teamIds ?? [event.teamId]).some(id => coachTeamIds.has(Number(id))))
   }
   return <section>
-    <ScreenHeader title="Komende activiteiten" action={canCreate ? '+ Training' : (connection ? 'Vernieuwen' : null)} onAction={() => canCreate ? setEditorOpen(true) : onRefresh()} />
-    <div className="agenda-tools"><button className="secondary" onClick={() => setOverviewOpen(true)}>Centraal trainingsoverzicht</button></div>
+    <ScreenHeader title="Agenda" action={connection ? 'Vernieuwen' : null} onAction={connection ? onRefresh : undefined} />
     <div className="filter-row centered-filters"><button className={`filter-chip ${filter==='all'?'active':''}`} onClick={() => setFilter('all')}>Alles</button><button className={`filter-chip ${filter==='games'?'active':''}`} onClick={() => setFilter('games')}>Wedstrijden</button><button className={`filter-chip ${filter==='training'?'active':''}`} onClick={() => setFilter('training')}>Trainingen</button></div>
     {!connection && events.every(event => event.type !== 'training') ? <EmptyState icon="link" title="KNBSB-agenda koppelen" text="Voeg onder Meer je persoonlijke FOYS ICS-link toe." action="Naar koppelingen" onAction={onGoMore} /> : state.loading && events.length===0 ? <EmptyState icon="calendar" title="Activiteiten laden…" text="We halen je programma op." /> : filtered.length===0 ? <EmptyState icon="calendar" title="Geen activiteiten gevonden" text="Er zijn binnen dit filter geen komende activiteiten." /> : <div className="agenda-timeline">{Object.entries(grouped).map(([month, monthEvents]) => <section key={month} className="timeline-month"><h2>{month}</h2>{monthEvents.map(event => <TimelineEvent key={event.uid || `${event.type}-${event.id}`} event={event} current={ownAttendance[String(event.id)]} onAttendance={onAttendance} busy={attendanceBusy} canManage={canManage(event)} onEdit={() => { setEditingEvent(event); setEditorOpen(true) }} onDetails={() => setDetailEvent(event)} attendance={attendance.filter(row => String(row.event_id)===String(event.id))} profiles={visibleProfiles} memberships={memberships} />)}</section>)}</div>}
     {overviewOpen && <TrainingOverview events={events.filter(e => e.type === 'training')} attendance={attendance} profiles={visibleProfiles} memberships={memberships} onClose={() => setOverviewOpen(false)} />}
@@ -541,11 +554,180 @@ function TrainingEditor({ profile, teams, profiles, memberships, event, onClose,
     setBusy(true); const {error} = await supabase.from('events').delete().eq('id',event.id); setBusy(false)
     if (error) setError(error.message); else onSaved()
   }
-  return <div className="sheet-backdrop" onMouseDown={e => { if(e.target===e.currentTarget) onClose() }}><section className="admin-sheet training-sheet"><div className="sheet-handle"/><header className="sheet-header"><span className="sheet-icon-spacer"/><div className="sheet-title-center"><p className="eyebrow orange">{event?'TRAINING BEHEREN':'NIEUWE TRAINING'}</p><h2>{event?'Training aanpassen':'Training toevoegen'}</h2></div><button className="sheet-icon-button" onClick={onClose}><Icon name="close" /></button></header><div className="sheet-body"><div className="form-stack training-form"><section className="audience-picker"><div className="picker-heading"><div><strong>Teams & deelnemers</strong><small>{invitedCount} deelnemer{invitedCount===1?'':'s'} uitgenodigd</small></div></div><div className="team-checkbox-list">{selectableTeams.map(team => <label className="team-check" key={team.id}><input type="checkbox" checked={selectedTeamIds.includes(String(team.id))} onChange={() => toggleTeam(team.id)} /><span><strong>{team.name}</strong><small>{capitalize(team.sport)}</small></span></label>)}</div>{!selectableTeams.length && <div className="admin-empty">Je hebt geen teams waarvoor je trainingen kunt beheren.</div>}<div className="guest-picker"><div className="picker-heading"><div><strong>Extra deelnemers</strong><small>Voor iemand die een keer meetraint</small></div></div>{selectedGuests.length>0 && <div className="selected-guests">{selectedGuests.map(id => { const person=profiles.find(p => p.id===id); return <button key={id} type="button" onClick={() => removeGuest(id)}>{personName(person)} <span>×</span></button> })}</div>}<label>Speler zoeken<input type="search" value={guestSearch} onChange={e => setGuestSearch(e.target.value)} placeholder="Zoek op naam of rugnummer" /></label>{guestSearch && <div className="guest-results">{guestCandidates.slice(0,10).map(person => <button type="button" key={person.id} onClick={() => addGuest(person.id)}><span className="member-avatar small">{initials(person)}</span><span><strong>{personName(person)}</strong><small>{profileTeamNames(person.id)}</small></span><span>+ Toevoegen</span></button>)}{!guestCandidates.length && <div className="admin-empty">Geen spelers gevonden.</div>}</div>}</div></section><label>Titel<input value={form.title} onChange={e => setForm({...form,title:e.target.value})}/></label><div className="form-two equal-fields"><label>Datum<input type="date" value={form.date} onChange={e => setForm({...form,date:e.target.value})}/></label><label>Verzameltijd<input type="time" value={form.meet} onChange={e => setForm({...form,meet:e.target.value})}/></label></div><div className="form-two equal-fields"><label>Starttijd<input type="time" value={form.start} onChange={e => setForm({...form,start:e.target.value})}/></label><label>Eindtijd<input type="time" value={form.end} onChange={e => setForm({...form,end:e.target.value})}/></label></div>{!event && <section className="repeat-card"><label className="repeat-toggle"><span><strong>Herhalen</strong><small>Maak automatisch meerdere trainingen aan</small></span><input type="checkbox" checked={repeat} onChange={e => setRepeat(e.target.checked)} /></label>{repeat && <div className="form-two equal-fields"><label>Herhaal elke<select value={repeatEvery} onChange={e => setRepeatEvery(e.target.value)}><option value="1">1 week</option><option value="2">2 weken</option><option value="3">3 weken</option><option value="4">4 weken</option></select></label><label>Eindigt<input type="date" value={repeatUntil} min={form.date} onChange={e => setRepeatUntil(e.target.value)} /></label></div>}</section>}<label>Locatie<input value={form.location_name} onChange={e => setForm({...form,location_name:e.target.value})} placeholder="Bijv. Van der Aart Sportpark"/></label><label>Adres<input value={form.location_address} onChange={e => setForm({...form,location_address:e.target.value})} placeholder="Optioneel"/></label><label>Omschrijving<textarea rows="4" value={form.description} onChange={e => setForm({...form,description:e.target.value})} placeholder="Wat gaan we trainen?"/></label>{error && <div className="notice error">{error}</div>}<button className="primary" disabled={busy||!selectableTeams.length} onClick={save}>{busy?'Opslaan…':'Opslaan'}</button>{event && <button className="danger-link" disabled={busy} onClick={remove}>Training verwijderen</button>}</div></div></section></div>
+  return <div className="sheet-backdrop" onMouseDown={e => { if(e.target===e.currentTarget) onClose() }}><section className="admin-sheet training-sheet"><div className="sheet-handle"/><header className="sheet-header"><span className="sheet-icon-spacer"/><div className="sheet-title-center"><p className="eyebrow orange">{event?'TRAINING BEHEREN':'NIEUWE TRAINING'}</p><h2>{event?'Training aanpassen':'Training toevoegen'}</h2></div><button className="sheet-icon-button" onClick={onClose}><Icon name="close" /></button></header><div className="sheet-body"><div className="form-stack training-form"><section className="audience-picker"><div className="picker-heading"><div><strong>Teams & deelnemers</strong><small>{invitedCount} deelnemer{invitedCount===1?'':'s'} uitgenodigd</small></div></div><div className="team-checkbox-list">{selectableTeams.map(team => <label className="team-check" key={team.id}><input type="checkbox" checked={selectedTeamIds.includes(String(team.id))} onChange={() => toggleTeam(team.id)} /><span><strong>{team.name}</strong><small>{capitalize(team.sport)}</small></span></label>)}</div>{!selectableTeams.length && <div className="admin-empty">Je hebt geen teams waarvoor je trainingen kunt beheren.</div>}<div className="guest-picker"><div className="picker-heading"><div><strong>Extra deelnemers</strong><small>Voor iemand die een keer meetraint</small></div></div>{selectedGuests.length>0 && <div className="selected-guests">{selectedGuests.map(id => { const person=profiles.find(p => p.id===id); return <button key={id} type="button" onClick={() => removeGuest(id)}>{personName(person)} <span>×</span></button> })}</div>}<label>Speler zoeken<input type="search" value={guestSearch} onChange={e => setGuestSearch(e.target.value)} placeholder="Zoek op naam of rugnummer" /></label>{guestSearch && <div className="guest-results">{guestCandidates.slice(0,10).map(person => <button type="button" key={person.id} onClick={() => addGuest(person.id)}><span className="member-avatar small">{initials(person)}</span><span><strong>{personName(person)}</strong><small>{profileTeamNames(person.id)}</small></span><span>+ Toevoegen</span></button>)}{!guestCandidates.length && <div className="admin-empty">Geen spelers gevonden.</div>}</div>}</div></section><label>Titel<input value={form.title} onChange={e => setForm({...form,title:e.target.value})}/></label><div className="form-two equal-fields"><label>Datum<input type="date" value={form.date} onChange={e => setForm({...form,date:e.target.value})}/></label><label>Verzameltijd<input type="time" value={form.meet} onChange={e => setForm({...form,meet:e.target.value})}/></label></div><div className="form-two equal-fields"><label>Starttijd<input type="time" value={form.start} onChange={e => setForm({...form,start:e.target.value})}/></label><label>Eindtijd<input type="time" value={form.end} onChange={e => setForm({...form,end:e.target.value})}/></label></div>{!event && <section className="repeat-card"><label className="repeat-toggle"><span><strong>Herhalen</strong><small>Maak automatisch meerdere trainingen aan</small></span><input type="checkbox" checked={repeat} onChange={e => setRepeat(e.target.checked)} /></label>{repeat && <div className="form-two equal-fields"><label>Herhaal elke<select value={repeatEvery} onChange={e => setRepeatEvery(e.target.value)}><option value="1">1 week</option><option value="2">2 weken</option><option value="3">3 weken</option><option value="4">4 weken</option></select></label><label>Eindigt<input type="date" value={repeatUntil} min={form.date} onChange={e => setRepeatUntil(e.target.value)} /></label></div>}</section>}<label>Locatie<input value={form.location_name} onChange={e => setForm({...form,location_name:e.target.value})} placeholder="Bijv. Van der Aart Sportpark"/></label><label>Adres<input value={form.location_address} onChange={e => setForm({...form,location_address:e.target.value})} placeholder="Optioneel"/></label><label>Omschrijving<textarea rows="4" value={form.description} onChange={e => setForm({...form,description:e.target.value})} placeholder="Wat gaan we trainen?"/></label>{error && <div className="notice error">{error}</div>}<button className="primary" disabled={busy||!selectableTeams.length} onClick={save}>{busy?'Opslaan…':'Opslaan'}</button>{event && <button className="secondary orange-outline" disabled={busy} onClick={remove}>Training verwijderen</button>}</div></div></section></div>
 }
 
 function AbsenceModal({ event, reason, setReason, busy, onCancel, onConfirm }) {
   return <div className="modal-backdrop"><section className="confirm-modal"><span className="confirm-icon"><Icon name="calendar" /></span><h2>Afmelden bevestigen</h2><p>Je meldt je af voor <strong>{event.title}</strong> op {formatShortDate(event.start)}.</p><label>Reden van afmelding<textarea rows="4" value={reason} onChange={e => setReason(e.target.value)} placeholder="Waarom kun je niet aanwezig zijn?" autoFocus required /></label><div className="modal-actions"><button className="secondary" onClick={onCancel} disabled={busy}>Annuleren</button><button className="danger-solid" onClick={onConfirm} disabled={busy}>{busy?'Opslaan…':'Afmelding bevestigen'}</button></div></section></div>
+}
+
+
+function PlayerInvitationCards({ session, requests = [], candidates = [], teams = [], onRefresh }) {
+  const mine=candidates.filter(c=>c.profile_id===session?.user?.id && ['invited','available','confirmed'].includes(c.response))
+  if(!mine.length) return null
+  async function respond(candidate,response){
+    await supabase.rpc('respond_player_request_candidate',{candidate_id: candidate.id, new_response: response})
+    await onRefresh?.()
+  }
+  return <section className="player-invite-stack"><p className="eyebrow orange">UITNODIGINGEN</p>{mine.map(c=>{const req=requests.find(r=>r.id===c.request_id);if(!req)return null;return <article className="player-invite-card" key={c.id}><div className="player-invite-copy"><span>Uitnodiging om mee te spelen</span><h3>{req.event_title}</h3><p><strong>{req.position}</strong>{req.note?` · ${req.note}`:''}</p><small>{formatLongDate(req.event_start)}</small></div>{c.response==='invited'?<div className="player-invite-actions"><button className="primary" onClick={()=>respond(c,'available')}>Ik kan</button><button className="secondary" onClick={()=>respond(c,'unavailable')}>Ik kan niet</button></div>:<div className="invite-response-state">{c.response==='confirmed'?'Je bent bevestigd voor deze activiteit.':'Je hebt aangegeven dat je kunt. De coach bevestigt wie meegaat.'}</div>}</article>})}</section>
+}
+
+function CoachDashboard({ session, profile, teams, trainingEvents = [], calendarEvents = [], attendance = [], gameAttendance = [], profiles = [], memberships = [], messages = [], playerRequests = [], playerCandidates = [], onRefresh, onMessage }) {
+  const ownCoachTeams = teams.filter(team => team.member_role === 'coach' || profile?.role === 'admin')
+  const [selectedTeamId, setSelectedTeamId] = useState(String(ownCoachTeams[0]?.id || ''))
+  const [trainingEditorOpen, setTrainingEditorOpen] = useState(false)
+  const [messageOpen, setMessageOpen] = useState(false)
+  const [requestOpen, setRequestOpen] = useState(false)
+  const [finalizeSession, setFinalizeSession] = useState(null)
+  const [historyView, setHistoryView] = useState('sessions')
+  const [allTeams, setAllTeams] = useState(ownCoachTeams)
+
+  useEffect(() => {
+    if (profile?.role !== 'admin') return
+    supabase.from('teams').select('id,name,sport,is_active,season_id,seasons(is_active)').eq('is_active', true).then(({data}) => {
+      const rows=(data||[]).filter(t=>t.seasons?.is_active!==false).map(t=>({...t,member_role:'coach'}))
+      setAllTeams(rows)
+      if (!selectedTeamId && rows[0]) setSelectedTeamId(String(rows[0].id))
+    })
+  }, [profile?.role])
+
+  const coachTeams = profile?.role === 'admin' ? allTeams : ownCoachTeams
+  const selectedTeam = coachTeams.find(t => String(t.id) === String(selectedTeamId)) || coachTeams[0]
+  const teamId = Number(selectedTeam?.id || 0)
+  const teamMemberRows = memberships.filter(m => Number(m.team_id) === teamId && m.member_role === 'player')
+  const teamMemberIds = teamMemberRows.map(m => m.profile_id)
+  const teamPlayers = teamMemberIds.map(id => profiles.find(p => p.id === id)).filter(Boolean)
+  const teamTrainingEvents = trainingEvents.filter(ev => (ev.teamIds || [ev.teamId]).map(Number).includes(teamId))
+  const teamGames = calendarEvents.filter(ev => selectedTeam && inferTransportTeam(ev, [selectedTeam])?.id === selectedTeam.id)
+  const now = Date.now()
+  const upcoming = [...teamTrainingEvents, ...teamGames].filter(ev => new Date(ev.start).getTime() >= now).sort((a,b)=>new Date(a.start)-new Date(b.start)).slice(0,8)
+  const past = [...teamTrainingEvents, ...teamGames].filter(ev => new Date(ev.start).getTime() < now).sort((a,b)=>new Date(b.start)-new Date(a.start)).slice(0,50)
+  const openRequests = playerRequests.filter(r => Number(r.requesting_team_id) === teamId && r.status !== 'closed')
+
+  const historyRows = teamPlayers.map(person => {
+    let present=0, absent=0, injured=0, late=0, total=0
+    teamTrainingEvents.filter(ev=>new Date(ev.start).getTime()<now).forEach(ev=>{
+      const row=attendance.find(a=>String(a.event_id)===String(ev.id)&&a.profile_id===person.id)
+      if(row){ total++; if(row.status==='present')present++; if(row.status==='absent')absent++; if(row.status==='injured')injured++; if(row.status==='late')late++; }
+    })
+    teamGames.filter(ev=>new Date(ev.start).getTime()<now).forEach(ev=>{
+      const key=eventTransportKey(ev)
+      const row=gameAttendance.find(a=>a.event_key===key&&a.profile_id===person.id)
+      if(row){ total++; if(row.status==='present')present++; if(row.status==='absent')absent++; if(row.status==='injured')injured++; if(row.status==='late')late++; }
+    })
+    return { person, total, present, absent, injured, late, missed:absent+injured }
+  })
+
+  async function confirmCandidate(candidate) {
+    const { error } = await supabase.rpc('confirm_player_request_candidate',{candidate_id: candidate.id})
+    if(error) return onMessage(`Bevestigen mislukt: ${error.message}`)
+    onMessage('Invaller bevestigd.'); await onRefresh()
+  }
+
+  if (!coachTeams.length) return <section><ScreenHeader title="Coach"/><EmptyState icon="team" title="Geen coachteam gekoppeld" text="Je coachomgeving verschijnt zodra je als coach aan een team bent gekoppeld." /></section>
+
+  return <section className="coach-page">
+    <div className="coach-heading"><div><p className="eyebrow orange">COACHOMGEVING</p><h1>Coach</h1></div>{coachTeams.length>1 && <select className="coach-team-select" value={selectedTeam?.id || ''} onChange={e=>setSelectedTeamId(e.target.value)}>{coachTeams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select>}</div>
+    <p className="coach-team-label">{selectedTeam?.name}</p>
+
+    <div className="coach-quick-grid">
+      <button onClick={()=>setTrainingEditorOpen(true)}><span><Icon name="calendar"/></span><strong>Training toevoegen</strong><small>Eenmalig of herhalend</small></button>
+      <button onClick={()=>setMessageOpen(true)}><span><Icon name="bell"/></span><strong>Teambericht</strong><small>Ook als pushmelding</small></button>
+      <button onClick={()=>setRequestOpen(true)}><span><Icon name="people"/></span><strong>Invaller zoeken</strong><small>Kies zelf geschikte speelsters</small></button>
+    </div>
+
+    <SectionTitle title="Komend" />
+    <div className="coach-session-list">{upcoming.length ? upcoming.map(ev=>{
+      const rows=ev.type==='training'?attendance.filter(a=>String(a.event_id)===String(ev.id)):gameAttendance.filter(a=>a.event_key===eventTransportKey(ev))
+      const yes=rows.filter(r=>r.status==='present').length, maybe=rows.filter(r=>r.status==='maybe').length
+      return <article key={ev.uid||`${ev.type}-${ev.id}`}><div><span className="coach-session-type">{eventTypeLabel(ev)}</span><strong>{ev.title}</strong><small>{formatShortDate(ev.start)} · {formatTimeRange(ev.start,ev.end)}</small></div><div className="coach-session-count"><strong>{yes}</strong><span>aanwezig</span>{maybe>0&&<small>{maybe} misschien</small>}</div></article>
+    }) : <p className="muted coach-empty-line">Geen komende activiteiten voor dit team.</p>}</div>
+
+    <SectionTitle title="Aanwezigheid & historie" />
+    <div className="coach-history-tabs"><button className={historyView==='sessions'?'active':''} onClick={()=>setHistoryView('sessions')}>Activiteiten</button><button className={historyView==='players'?'active':''} onClick={()=>setHistoryView('players')}>Per speler</button></div>
+    {historyView==='sessions' ? <div className="coach-history-list">{past.map(ev=>{
+      const rows=ev.type==='training'?attendance.filter(a=>String(a.event_id)===String(ev.id)):gameAttendance.filter(a=>a.event_key===eventTransportKey(ev))
+      const c={present:0,absent:0,injured:0,late:0}; rows.forEach(r=>{if(c[r.status]!=null)c[r.status]++})
+      return <button key={ev.uid||`${ev.type}-${ev.id}`} onClick={()=>setFinalizeSession(ev)}><div><strong>{ev.title}</strong><small>{formatShortDate(ev.start)} · {eventTypeLabel(ev)}</small></div><div className="history-statuses"><span>{c.present} aanwezig</span><span>{c.absent} afwezig</span><span>{c.injured} geblesseerd</span><span>{c.late} te laat</span></div><Icon name="chevron"/></button>
+    })}{!past.length&&<p className="muted coach-empty-line">Nog geen afgelopen activiteiten.</p>}</div> : <div className="coach-player-table"><div className="coach-player-head"><span>Speler</span><span>Gemist</span><span>Te laat</span></div>{historyRows.map(r=><article key={r.person.id}><span className="coach-player-name"><ProfileAvatar person={r.person} size="small"/><strong>{r.person.first_name || personName(r.person)}</strong></span><span><strong>{r.missed}</strong><small>{r.absent} afw · {r.injured} gebl</small></span><span><strong>{r.late}</strong></span></article>)}</div>}
+
+    <SectionTitle title="Invallers" />
+    <div className="coach-request-list">{openRequests.length ? openRequests.map(req=>{
+      const candidates=playerCandidates.filter(c=>c.request_id===req.id)
+      return <article key={req.id}><div><strong>{req.position || 'Speler gezocht'}</strong><small>{req.event_title} · {formatShortDate(req.event_start)}</small><p>{req.note || 'Geen extra opmerking.'}</p></div><div className="request-chips"><span>{candidates.length} uitgenodigd</span><span>{candidates.filter(c=>c.response==='available').length} beschikbaar</span><span>{candidates.filter(c=>c.response==='confirmed').length} bevestigd</span></div><div className="request-candidate-list">{candidates.filter(c=>['available','confirmed'].includes(c.response)).map(c=>{const person=profiles.find(p=>p.id===c.profile_id);return <div key={c.id}><span><ProfileAvatar person={person} size="small"/><strong>{person?.first_name||personName(person)}</strong><small>{c.response==='confirmed'?'Bevestigd':'Kan meedoen'}</small></span>{c.response==='available'&&<button className="mini-action" onClick={()=>confirmCandidate(c)}>Bevestigen</button>}</div>})}</div></article>
+    }) : <p className="muted coach-empty-line">Geen openstaande invallerverzoeken.</p>}</div>
+
+    {trainingEditorOpen && <TrainingEditor profile={profile} teams={coachTeams} profiles={profiles} memberships={memberships} event={null} onClose={()=>setTrainingEditorOpen(false)} onSaved={async()=>{setTrainingEditorOpen(false);await onRefresh()}} />}
+    {messageOpen && <CoachMessageModal session={session} team={selectedTeam} onClose={()=>setMessageOpen(false)} onSaved={async()=>{setMessageOpen(false);await onRefresh()}} onMessage={onMessage} />}
+    {requestOpen && <PlayerRequestModal session={session} team={selectedTeam} teams={coachTeams} profiles={profiles} memberships={memberships} calendarEvents={calendarEvents} trainingEvents={trainingEvents} onClose={()=>setRequestOpen(false)} onSaved={async()=>{setRequestOpen(false);await onRefresh()}} onMessage={onMessage} />}
+    {finalizeSession && <FinalizeAttendanceModal event={finalizeSession} team={selectedTeam} players={teamPlayers} attendance={attendance} gameAttendance={gameAttendance} onClose={()=>setFinalizeSession(null)} onSaved={onRefresh} onMessage={onMessage} />}
+  </section>
+}
+
+function CoachMessageModal({ session, team, onClose, onSaved, onMessage }) {
+  const [busy,setBusy]=useState(false)
+  const [form,setForm]=useState({kind:'general',title:'',body:'',push:true})
+  async function send(){
+    if(!form.title.trim()||!form.body.trim()) return onMessage('Vul een titel en bericht in.')
+    setBusy(true)
+    const {error}=await supabase.from('team_messages').insert({team_id:Number(team.id),kind:form.kind,title:form.title.trim(),body:form.body.trim(),created_by:session.user.id,push_sent:false})
+    if(error){setBusy(false);return onMessage(error.message)}
+    if(form.push){try{await fetch('/api/push/team-message',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${session.access_token}`},body:JSON.stringify({teamId:Number(team.id),title:form.title.trim(),body:form.body.trim()})})}catch{}}
+    setBusy(false); onMessage('Teambericht geplaatst.'); await onSaved()
+  }
+  return <SettingsModal title="Teambericht" onClose={onClose}><div className="form-stack"><p className="settings-modal-intro">Aan <strong>{team?.name}</strong></p><label>Soort<select value={form.kind} onChange={e=>setForm({...form,kind:e.target.value})}><option value="rain">Regen / locatie</option><option value="gear">Speciale spullen</option><option value="change">Wijziging</option><option value="cancel">Annulering</option><option value="general">Algemeen</option></select></label><label>Titel<input value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="Bijv. Neem binnenschoenen mee"/></label><label>Bericht<textarea rows="4" value={form.body} onChange={e=>setForm({...form,body:e.target.value})}/></label><label className="repeat-toggle"><span><strong>Stuur als pushmelding</strong><small>Direct naar spelers van dit team</small></span><input type="checkbox" checked={form.push} onChange={e=>setForm({...form,push:e.target.checked})}/></label><button className="primary" disabled={busy} onClick={send}>{busy?'Versturen…':'Bericht versturen'}</button></div></SettingsModal>
+}
+
+function FinalizeAttendanceModal({ event, team, players, attendance, gameAttendance, onClose, onSaved, onMessage }) {
+  const isGame=event.type==='game'
+  const key=eventTransportKey(event)
+  const initial=Object.fromEntries(players.map(p=>{
+    const r=isGame?gameAttendance.find(a=>a.event_key===key&&a.profile_id===p.id):attendance.find(a=>String(a.event_id)===String(event.id)&&a.profile_id===p.id)
+    return [p.id,r?.status||'present']
+  }))
+  const [statuses,setStatuses]=useState(initial), [busy,setBusy]=useState(false)
+  async function save(){
+    setBusy(true)
+    try{
+      if(isGame){
+        const rows=players.map(p=>({event_key:key,team_id:Number(team.id),profile_id:p.id,status:statuses[p.id]||'present',event_title:event.title,event_start:event.start,updated_at:new Date().toISOString()}))
+        const {error}=await supabase.from('game_attendance').upsert(rows,{onConflict:'event_key,profile_id'}); if(error)throw error
+      }else{
+        const rows=players.map(p=>({event_id:event.id,profile_id:p.id,status:statuses[p.id]||'present',updated_at:new Date().toISOString()}))
+        const {error}=await supabase.from('attendance').upsert(rows,{onConflict:'event_id,profile_id'}); if(error)throw error
+      }
+      onMessage('Aanwezigheid afgerond.'); await onSaved(); onClose()
+    }catch(e){onMessage(`Opslaan mislukt: ${e.message}`)}finally{setBusy(false)}
+  }
+  const options=[['present','Aanwezig'],['absent','Afwezig'],['injured','Geblesseerd'],['late','Te laat']]
+  return <SettingsModal title="Aanwezigheid afronden" onClose={onClose}><div className="finalize-session-head"><strong>{event.title}</strong><span>{formatLongDate(event.start)} · {team?.name}</span></div><div className="finalize-roster">{players.map(p=><article key={p.id}><span className="finalize-person"><ProfileAvatar person={p} size="small"/><strong>{p.first_name||personName(p)}</strong></span><div className="finalize-status-grid">{options.map(([value,label])=><button key={value} className={statuses[p.id]===value?'active':''} onClick={()=>setStatuses({...statuses,[p.id]:value})}>{label}</button>)}</div></article>)}</div><button className="primary" disabled={busy} onClick={save}>{busy?'Opslaan…':'Registratie opslaan'}</button></SettingsModal>
+}
+
+function PlayerRequestModal({ session, team, profiles, memberships, calendarEvents, trainingEvents, onClose, onSaved, onMessage }) {
+  const [busy,setBusy]=useState(false), [search,setSearch]=useState(''), [selected,setSelected]=useState([])
+  const future=[...calendarEvents,...trainingEvents].filter(e=>new Date(e.start)>new Date()).sort((a,b)=>new Date(a.start)-new Date(b.start))
+  const teamEvents=future.filter(e=>e.type==='training'?(e.teamIds||[e.teamId]).map(Number).includes(Number(team.id)):inferTransportTeam(e,[team])?.id===team.id)
+  const [form,setForm]=useState({eventKey:'',position:'',slots:'1',note:''})
+  const ownTeamIds=new Set(memberships.filter(m=>m.profile_id===session.user.id).map(m=>Number(m.team_id)))
+  const candidates=profiles.filter(p=>{
+    const memberRows=memberships.filter(m=>m.profile_id===p.id)
+    const inRequestTeam=memberRows.some(m=>Number(m.team_id)===Number(team.id))
+    const q=search.toLowerCase().trim(); const matches=!q||personName(p).toLowerCase().includes(q)
+    return !inRequestTeam && matches
+  })
+  function eventKeyFor(e){return e.type==='game'?eventTransportKey(e):`event:${e.id}`}
+  async function submit(){
+    const ev=teamEvents.find(e=>eventKeyFor(e)===form.eventKey)
+    if(!ev||!form.position.trim()||!selected.length)return onMessage('Kies een activiteit, positie en minimaal één speelster.')
+    setBusy(true)
+    try{
+      const {data:req,error}=await supabase.from('player_requests').insert({requesting_team_id:Number(team.id),event_key:form.eventKey,event_title:ev.title,event_start:ev.start,position:form.position.trim(),slots_needed:Math.max(1,Number(form.slots||1)),note:form.note.trim()||null,created_by:session.user.id,status:'open'}).select('*').single(); if(error)throw error
+      const rows=selected.map(id=>({request_id:req.id,profile_id:id,response:'invited'})); const {error:ce}=await supabase.from('player_request_candidates').insert(rows); if(ce)throw ce
+      try{await fetch('/api/push/player-invite',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${session.access_token}`},body:JSON.stringify({requestId:req.id,profileIds:selected,title:`Uitnodiging ${team.name}`,body:`${team.name} zoekt ${form.position} voor ${formatShortDate(ev.start)}.`})})}catch{}
+      onMessage('Uitnodigingen verstuurd.'); await onSaved()
+    }catch(e){onMessage(`Invallerverzoek mislukt: ${e.message}`)}finally{setBusy(false)}
+  }
+  return <SettingsModal title="Invaller zoeken" onClose={onClose}><div className="form-stack"><p className="settings-modal-intro">Alleen de speelsters die jij selecteert krijgen een uitnodiging.</p><label>Activiteit<select value={form.eventKey} onChange={e=>setForm({...form,eventKey:e.target.value})}><option value="">Kies wedstrijd of training</option>{teamEvents.map(e=><option key={eventKeyFor(e)} value={eventKeyFor(e)}>{formatShortDate(e.start)} · {e.title}</option>)}</select></label><div className="form-two equal-fields"><label>Positie / rol<input value={form.position} onChange={e=>setForm({...form,position:e.target.value})} placeholder="Bijv. Outfield, catcher, pitcher"/></label><label>Aantal nodig<input type="number" min="1" max="9" value={form.slots} onChange={e=>setForm({...form,slots:e.target.value})}/></label></div><label>Opmerking<textarea rows="3" value={form.note} onChange={e=>setForm({...form,note:e.target.value})} placeholder="Bijv. bij voorkeur CF/RF"/></label><label>Speelsters selecteren<input type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Zoek op naam"/></label><div className="candidate-select-list">{candidates.slice(0,40).map(p=>{const checked=selected.includes(p.id);const teamNames=memberships.filter(m=>m.profile_id===p.id).map(m=>m.team_id).map(id=>String(id)).join(', ');return <button type="button" key={p.id} className={checked?'selected':''} onClick={()=>setSelected(checked?selected.filter(id=>id!==p.id):[...selected,p.id])}><ProfileAvatar person={p} size="small"/><span><strong>{personName(p)}</strong><small>{checked?'Geselecteerd':'Tik om uit te nodigen'}</small></span><span className="candidate-check">{checked?'✓':'+'}</span></button>})}</div><button className="primary" disabled={busy} onClick={submit}>{busy?'Versturen…':`Nodig ${selected.length || ''} speelster${selected.length===1?'':'s'} uit`}</button></div></SettingsModal>
 }
 
 function Stats() { return <section><ScreenHeader title="Jouw stats" /><div className="segmented"><span className="active">Overzicht</span><span>Aanvallen</span><span>Verdedigen</span></div><EmptyState icon="stats" title="Nog geen statistieken beschikbaar" text="Hier tonen we alleen echte data. Zodra een statsbron is gekoppeld, verschijnt jouw persoonlijke overzicht hier." /></section> }
@@ -1142,12 +1324,11 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
       </article>
 
       <div className="settings-list">
-        {(profile?.role === 'admin' || teams.some(t => t.member_role === 'coach')) && <TeamMessageComposer session={session} teams={teams} onSaved={onSaved} onMessage={onMessage} />}
         <SettingsRow icon="person" title="Persoonlijke gegevens" subtitle={session.user.email} onClick={() => setSettingsView('personal')} />
         <SettingsRow icon="lock" title="Wachtwoord" subtitle="Wachtwoord wijzigen via resetmail" onClick={() => setSettingsView('password')} />
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.8.0" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.8.1" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -1182,7 +1363,7 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 2.8.0</h3>
+        <h3>Versie 2.8.1</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS agenda</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>
@@ -1287,7 +1468,7 @@ function PushSettings({ session, profile, onMessage }) {
       const response = await fetch('/api/push/test', { method: 'POST', headers: { Authorization: `Bearer ${session.access_token}` } })
       const payload = await response.json()
       if (!response.ok) throw new Error(payload.error || 'Testmelding kon niet worden verstuurd.')
-      const text = payload.sent ? 'Server accepteerde de testpush. Sluit Mijn OG even om hem als push te zien.' : 'Geen actieve pushinschrijving gevonden.'
+      const text = payload.sent ? 'Testmelding verstuurd.' : 'Geen actieve pushinschrijving gevonden.'
       setPushFeedback(text)
     } catch (error) { const text = `Testmelding mislukt: ${error.message}`; setPushFeedback(text); onMessage(text) }
     finally { setTesting(false) }
@@ -1367,7 +1548,7 @@ function transportStatusLabel(transportEvent, responses) {
 
 function TransportInlineStatus({ transportEvent, responses }) {
   const summary = getTransportSummary(transportEvent, responses)
-  return <div className={`transport-inline ${summary.shortage > 0 ? 'shortage' : 'ok'}`}><Icon name="car"/><strong>{summary.shortage > 0 ? `! ${summary.shortage} PLEKKEN TEKORT` : (summary.passengers || summary.seats ? 'VERVOER GEREGELD' : 'VERVOER')}</strong></div>
+  return <div className={`transport-inline ${summary.shortage > 0 ? 'shortage' : 'ok'}`}><Icon name="car"/><strong>{summary.shortage > 0 ? `${summary.shortage} PLEKKEN NODIG` : (summary.passengers || summary.seats ? 'VERVOER GEREGELD' : 'VERVOER')}</strong></div>
 }
 
 function matchClubLocation(event, locations = []) {
@@ -1454,7 +1635,7 @@ function TransportModal({ event, profile, teams, profiles, memberships, transpor
     if (!error) { setMode(nextMode); await onChanged?.() }
   }
 
-  return <div className="transport-modal-layer" onMouseDown={e => { if(e.target===e.currentTarget) onClose() }}><section className="transport-modal" role="dialog" aria-modal="true"><header className="detail-modal-header"><div><p className="eyebrow orange">VERVOER</p><h2>{event.title}</h2></div><button className="sheet-icon-button" onClick={onClose}><Icon name="close"/></button></header><div className="transport-modal-body">{event.location && <LocationTravelCard location={null} fallbackDestination={event.location}/>} {setupError ? <div className="transport-alert shortage"><strong>{setupError}</strong></div> : !config ? <div className="admin-empty spacious">Vervoersoverzicht laden…</div> : <><div className={`transport-alert ${summary.shortage > 0 ? 'shortage' : 'ok'}`}>{summary.shortage > 0 ? <><strong>! NOG {summary.shortage} PLEKKEN NODIG</strong><span>{summary.passengers} personen willen meerijden · {summary.seats} plekken beschikbaar</span></> : <><strong>{summary.passengers || summary.seats ? 'VERVOER GEREGELD' : 'VERVOER NOG OPEN'}</strong><span>{summary.passengers} meerijders · {summary.seats} plekken beschikbaar{summary.surplus > 0 ? ` · ${summary.surplus} plekken over` : ''}</span></>}</div><div className="transport-choice"><h3>Wat doe jij?</h3><button className={mode==='driver'?'active':''} onClick={() => setMode('driver')}><Icon name="car"/> Ik rijd</button><button className={mode==='passenger'?'active':''} onClick={() => saveResponse('passenger')}>Ik rijd mee</button><button className={mode==='self'?'active':''} onClick={() => saveResponse('self')}>Eigen vervoer</button></div>{mode==='driver' && <div className="driver-form"><label>Beschikbare passagiersplekken<div className="seat-stepper"><button type="button" onClick={() => setSeats(Math.max(0,Number(seats)-1))}>−</button><strong>{seats}</strong><button type="button" onClick={() => setSeats(Math.min(20,Number(seats)+1))}>+</button></div></label><label>Opmerking (optioneel)<input value={note} onChange={e => setNote(e.target.value)} placeholder="Bijv. vertrek vanaf clubhuis" /></label><button className="primary" onClick={() => saveResponse('driver')} disabled={busy}>{busy?'Opslaan…':'Ik rijd opslaan'}</button></div>}<TransportPeopleOverview responses={eventResponses} profiles={profiles} noResponseIds={noResponseIds} showNoResponse={true}/></>}</div></section></div>
+  return <div className="transport-modal-layer" onMouseDown={e => { if(e.target===e.currentTarget) onClose() }}><section className="transport-modal" role="dialog" aria-modal="true"><header className="detail-modal-header"><div><p className="eyebrow orange">VERVOER</p><h2>{event.title}</h2></div><button className="sheet-icon-button" onClick={onClose}><Icon name="close"/></button></header><div className="transport-modal-body">{event.location && <LocationTravelCard location={null} fallbackDestination={event.location}/>} {setupError ? <div className="transport-alert shortage"><strong>{setupError}</strong></div> : !config ? <div className="admin-empty spacious">Vervoersoverzicht laden…</div> : <><div className={`transport-alert ${summary.shortage > 0 ? 'shortage' : 'ok'}`}>{summary.shortage > 0 ? <><strong>NOG {summary.shortage} PLEKKEN NODIG</strong><span>{summary.passengers} personen willen meerijden · {summary.seats} plekken beschikbaar</span></> : <><strong>{summary.passengers || summary.seats ? 'VERVOER GEREGELD' : 'VERVOER NOG OPEN'}</strong><span>{summary.passengers} meerijders · {summary.seats} plekken beschikbaar{summary.surplus > 0 ? ` · ${summary.surplus} plekken over` : ''}</span></>}</div><div className="transport-choice"><h3>Wat doe jij?</h3><button className={mode==='driver'?'active':''} onClick={() => setMode('driver')}><Icon name="car"/> Ik rijd</button><button className={mode==='passenger'?'active':''} onClick={() => saveResponse('passenger')}>Ik rijd mee</button><button className={mode==='self'?'active':''} onClick={() => saveResponse('self')}>Eigen vervoer</button></div>{mode==='driver' && <div className="driver-form"><label>Beschikbare passagiersplekken<div className="seat-stepper"><button type="button" onClick={() => setSeats(Math.max(0,Number(seats)-1))}>−</button><strong>{seats}</strong><button type="button" onClick={() => setSeats(Math.min(20,Number(seats)+1))}>+</button></div></label><label>Opmerking (optioneel)<input value={note} onChange={e => setNote(e.target.value)} placeholder="Bijv. vertrek vanaf clubhuis" /></label><button className="primary" onClick={() => saveResponse('driver')} disabled={busy}>{busy?'Opslaan…':'Ik rijd opslaan'}</button></div>}<TransportPeopleOverview responses={eventResponses} profiles={profiles} noResponseIds={noResponseIds} showNoResponse={true}/></>}</div></section></div>
 }
 
 function TransportPeopleOverview({ responses, profiles, noResponseIds, showNoResponse }) {
@@ -1529,13 +1710,14 @@ function Icon({ name }) {
     close: <><path d="M6 6l12 12M18 6 6 18"/></>,
     trash: <><path d="M4 7h16M9 7V4h6v3M7 7l1 14h8l1-14M10 11v6M14 11v6"/></>,
     camera: <><path d="M4 8h3l1.5-2h7L17 8h3v11H4Z"/><circle cx="12" cy="13" r="3.5"/></>,
-    car: <><path d="M5 17h14l-1-6-2-4H8l-2 4-1 6Z"/><path d="M7 11h10M5 14h14"/><circle cx="8" cy="18" r="1.5"/><circle cx="16" cy="18" r="1.5"/></>
+    car: <><path d="M5 17h14l-1-6-2-4H8l-2 4-1 6Z"/><path d="M7 11h10M5 14h14"/><circle cx="8" cy="18" r="1.5"/><circle cx="16" cy="18" r="1.5"/></>,
+    clipboard: <><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4.5V3h6v1.5M8 9h8M8 13h8M8 17h5"/></>
   }
   return <svg className="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name] || paths.more}</svg>
 }
 
 function iconNameForTab(tab) {
-  return { Home: 'home', Agenda: 'calendar', Stats: 'stats', Team: 'team', Meer: 'more' }[tab]
+  return { Home: 'home', Agenda: 'calendar', Stats: 'stats', Coach: 'clipboard', Team: 'team', Meer: 'more' }[tab]
 }
 
 function translateRole(role) {

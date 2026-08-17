@@ -40,7 +40,7 @@ export async function GET(request) {
     })
     if (!response.ok) throw new Error(`FOYS gaf status ${response.status}`)
     const text = await response.text()
-    const now = Date.now() - 6 * 60 * 60 * 1000
+    const now = Date.now() - 370 * 24 * 60 * 60 * 1000
     const events = parseICS(text)
       .filter(event => new Date(event.end || event.start).getTime() >= now)
       .sort((a, b) => new Date(a.start) - new Date(b.start))
