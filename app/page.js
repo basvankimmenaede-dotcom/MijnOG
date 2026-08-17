@@ -804,7 +804,18 @@ function PlayerRequestModal({ session, team, calendarEvents, trainingEvents, onC
     if(!ev||!form.targetTeamId||!form.position.trim())return setFeedback('Kies activiteit, ontvangend team en positie.')
     setBusy(true);setFeedback('')
     try{
-      const {data:req,error}=await supabase.from('player_requests').insert({requesting_team_id:Number(team.id),target_team_id:Number(form.targetTeamId),event_key:form.eventKey,event_title:ev.title,event_start:ev.start,position:form.position.trim(),slots_needed:Math.max(1,Number(form.slots||1)),note:form.note.trim()||null,created_by:session.user.id,status:'open'}).select('*').single();if(error)throw error
+      const {data:rpcData,error}=await supabase.rpc('create_player_request',{
+        p_requesting_team_id:Number(team.id),
+        p_target_team_id:Number(form.targetTeamId),
+        p_event_key:form.eventKey,
+        p_event_title:ev.title,
+        p_event_start:ev.start,
+        p_position:form.position.trim(),
+        p_slots_needed:Math.max(1,Number(form.slots||1)),
+        p_note:form.note.trim()||''
+      });if(error)throw error
+      const req=Array.isArray(rpcData)?rpcData[0]:rpcData
+      if(!req?.id)throw new Error('Verzoek is opgeslagen, maar het verzoek-ID ontbreekt.')
       const response=await fetch('/api/push/coach-request',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${session.access_token}`},body:JSON.stringify({requestId:req.id})})
       const payload=await response.json().catch(()=>({}))
       if(!response.ok) throw new Error(payload.error||'Verzoek is opgeslagen, maar de coachmelding kon niet worden verstuurd.')
@@ -1468,7 +1479,7 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
         <SettingsRow icon="lock" title="Wachtwoord" subtitle="Wachtwoord wijzigen via resetmail" onClick={() => setSettingsView('password')} />
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.8.3" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.8.3.1" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -1506,7 +1517,7 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 2.8.3</h3>
+        <h3>Versie 2.8.3.1</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS agenda</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>

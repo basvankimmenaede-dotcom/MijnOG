@@ -1,4 +1,4 @@
-# Mijn OG v2.8.3
+# Mijn OG v2.8.2
 
 Agenda refresh met kaartweergave en team-aware FOYS filtering.
 
@@ -8,7 +8,7 @@ Agenda refresh met kaartweergave en team-aware FOYS filtering.
 - Typefilter Alles / Wedstrijden / Trainingen.
 - FOYS-herkenning per team via `teams.foys_match_text`.
 - Clubbeheer > Teams kan de FOYS-herkenning aanpassen.
-- Over Mijn OG: versie 2.8.3.
+- Over Mijn OG: versie 2.8.2.
 
 ## Supabase
 Voer de SQL uit die bij deze release in de ChatGPT-conversatie is meegeleverd voordat je de code deployt.
