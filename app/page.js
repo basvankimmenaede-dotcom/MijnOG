@@ -36,6 +36,8 @@ export default function HomePage() {
   const [playerRequests, setPlayerRequests] = useState([])
   const [playerRequestCandidates, setPlayerRequestCandidates] = useState([])
   const [pushSubscriptions, setPushSubscriptions] = useState([])
+  const [playerGameStats, setPlayerGameStats] = useState([])
+  const [playerMeasurements, setPlayerMeasurements] = useState([])
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -58,7 +60,7 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!session?.user?.id) {
-      setProfile(null); setTeams([]); setCalendarConnection(null); setCalendarEvents([]); setTrainingEvents([]); setAttendance([]); setVisibleProfiles([]); setAllMemberships([]); setEventTeamLinks([]); setEventParticipantLinks([]); setClubLocations([]); setTransportEvents([]); setTransportResponses([]); setTeamMessages([]); setGameAttendance([]); setPlayerRequests([]); setPlayerRequestCandidates([]); setPushSubscriptions([])
+      setProfile(null); setTeams([]); setCalendarConnection(null); setCalendarEvents([]); setTrainingEvents([]); setAttendance([]); setVisibleProfiles([]); setAllMemberships([]); setEventTeamLinks([]); setEventParticipantLinks([]); setClubLocations([]); setTransportEvents([]); setTransportResponses([]); setTeamMessages([]); setGameAttendance([]); setPlayerRequests([]); setPlayerRequestCandidates([]); setPushSubscriptions([]); setPlayerGameStats([]); setPlayerMeasurements([])
       return
     }
     loadUserData(session.user.id, session.access_token)
@@ -67,7 +69,7 @@ export default function HomePage() {
   async function loadUserData(userId, accessToken = session?.access_token) {
     setLoading(true)
     setMessage('')
-    const [profileResult, teamResult, calendarResult, eventResult, attendanceResult, profilesResult, membershipResult, eventTeamsResult, eventParticipantsResult, locationsResult, transportEventsResult, transportResponsesResult, messagesResult, gameAttendanceResult, playerRequestsResult, playerCandidatesResult, pushSubscriptionsResult] = await Promise.all([
+    const [profileResult, teamResult, calendarResult, eventResult, attendanceResult, profilesResult, membershipResult, eventTeamsResult, eventParticipantsResult, locationsResult, transportEventsResult, transportResponsesResult, messagesResult, gameAttendanceResult, playerRequestsResult, playerCandidatesResult, pushSubscriptionsResult, playerGameStatsResult, playerMeasurementsResult] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
       supabase.from('team_members').select('member_role, teams(id, name, sport, season_id, is_active, team_photo_url, foys_match_text, seasons(is_active))').eq('profile_id', userId),
       supabase.from('calendar_connections').select('*').eq('profile_id', userId).eq('provider', 'foys').maybeSingle(),
@@ -84,7 +86,9 @@ export default function HomePage() {
       supabase.from('game_attendance').select('*'),
       supabase.from('player_requests').select('*').order('created_at', { ascending: false }),
       supabase.from('player_request_candidates').select('*'),
-      supabase.from('push_subscriptions').select('profile_id,enabled').eq('enabled', true)
+      supabase.from('push_subscriptions').select('profile_id,enabled').eq('enabled', true),
+      supabase.from('player_game_stats').select('*').order('game_date', { ascending: true }),
+      supabase.from('player_measurements').select('*').order('measured_at', { ascending: true })
     ])
     if (profileResult.error) setMessage(`Profiel kon niet worden geladen: ${profileResult.error.message}`)
     else setProfile(profileResult.data)
@@ -115,6 +119,8 @@ export default function HomePage() {
     if (!playerRequestsResult.error) setPlayerRequests(playerRequestsResult.data ?? [])
     if (!playerCandidatesResult.error) setPlayerRequestCandidates(playerCandidatesResult.data ?? [])
     if (!pushSubscriptionsResult.error) setPushSubscriptions(pushSubscriptionsResult.data ?? [])
+    if (!playerGameStatsResult.error) setPlayerGameStats(playerGameStatsResult.data ?? [])
+    if (!playerMeasurementsResult.error) setPlayerMeasurements(playerMeasurementsResult.data ?? [])
     setLoading(false)
   }
 
@@ -182,7 +188,7 @@ export default function HomePage() {
         {loading && <div className="subtle-loading">Gegevens bijwerken…</div>}
         {activeTab === 'Home' && <Dashboard session={session} profile={profile} teams={teams} events={allEvents} messages={teamMessages} playerRequests={playerRequests} playerCandidates={playerRequestCandidates} pushSubscriptions={pushSubscriptions} onRefresh={refreshAppData} transportEvents={transportEvents} transportResponses={transportResponses} calendarConnection={calendarConnection} calendarState={calendarState} ownAttendance={ownAttendance} onAttendance={setAttendanceStatus} attendanceBusy={attendanceBusy} onAgenda={() => navigate('Agenda')} onTeam={() => navigate('Team')} onStats={() => navigate('Stats')} onMore={() => navigate('Meer')} />}
         {activeTab === 'Agenda' && <Agenda events={allEvents} connection={calendarConnection} transportEvents={transportEvents} transportResponses={transportResponses} clubLocations={clubLocations} state={calendarState} profile={profile} teams={teams} attendance={attendance} visibleProfiles={visibleProfiles} memberships={allMemberships} ownAttendance={ownAttendance} onAttendance={setAttendanceStatus} attendanceBusy={attendanceBusy} onRefresh={refreshAppData} onGoMore={() => navigate('Meer')} />}
-        {activeTab === 'Stats' && <Stats />}
+        {activeTab === 'Stats' && <Stats profile={profile} teams={teams} attendance={attendance} gameAttendance={gameAttendance} trainingEvents={trainingEvents} calendarEvents={calendarEvents} gameStats={playerGameStats} measurements={playerMeasurements} />}
         {activeTab === 'Coach' && isCoachUser && <CoachDashboard session={session} profile={profile} teams={teams} trainingEvents={trainingEvents} calendarEvents={calendarEvents} attendance={attendance} gameAttendance={gameAttendance} profiles={visibleProfiles} memberships={allMemberships} messages={teamMessages} playerRequests={playerRequests} playerCandidates={playerRequestCandidates} pushSubscriptions={pushSubscriptions} ownAttendance={ownAttendance} onAttendance={setAttendanceStatus} attendanceBusy={attendanceBusy} clubLocations={clubLocations} transportEvents={transportEvents} transportResponses={transportResponses} onRefresh={refreshAppData} onMessage={setMessage} />}
         {activeTab === 'Team' && <Team session={session} profile={profile} teams={teams} profiles={visibleProfiles} memberships={allMemberships} attendance={attendance} gameAttendance={gameAttendance} trainingEvents={trainingEvents} calendarEvents={calendarEvents} onSaved={refreshAppData} onMessage={setMessage} />}
         {activeTab === 'Meer' && <More session={session} profile={profile} teams={teams} calendar={calendarConnection} attendance={attendance} gameAttendance={gameAttendance} trainingEvents={trainingEvents} calendarEvents={calendarEvents} memberships={allMemberships} onSaved={refreshAppData} onMessage={setMessage} />}
@@ -878,7 +884,41 @@ function NominatePlayersModal({ session, request, team, profiles, memberships, o
   return <SettingsModal title="Speelsters voordragen" onClose={onClose}><div className="form-stack"><p className="settings-modal-intro"><strong>{request.position}</strong> gevraagd voor {request.event_title}. Selecteer alleen speelsters die volgens jou geschikt zijn.</p><label>Zoeken<input type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Naam, positie of slagzijde"/></label><div className="candidate-select-list">{candidates.map(p=>{const checked=selected.includes(p.id);return <button type="button" key={p.id} className={checked?'selected':''} onClick={()=>setSelected(checked?selected.filter(id=>id!==p.id):[...selected,p.id])}><ProfileAvatar person={p} size="small"/><span><strong>{personName(p)}{p.jersey_number?` · #${p.jersey_number}`:''}</strong><small>{playerSportLine(p)}</small></span><span className="candidate-check">{checked?'✓':'+'}</span></button>})}</div>{feedback&&<div className="push-feedback" role="status">{feedback}</div>}<button className="primary" disabled={busy} onClick={submit}>{busy?'Voordragen…':`Draag ${selected.length||''} speelster${selected.length===1?'':'s'} voor`}</button></div></SettingsModal>
 }
 
-function Stats() { return <section><ScreenHeader title="Jouw stats" /><div className="segmented"><span className="active">Overzicht</span><span>Aanvallen</span><span>Verdedigen</span></div><EmptyState icon="stats" title="Nog geen statistieken beschikbaar" text="Hier tonen we alleen echte data. Zodra een statsbron is gekoppeld, verschijnt jouw persoonlijke overzicht hier." /></section> }
+function Stats({ profile, teams = [], attendance = [], gameAttendance = [], trainingEvents = [], calendarEvents = [], gameStats = [], measurements = [] }) {
+  const ownGames=gameStats.filter(row=>row.profile_id===profile?.id)
+  const ownMeasurements=measurements.filter(row=>row.profile_id===profile?.id)
+  const sums=ownGames.reduce((acc,row)=>{
+    ;['ab','h','rbi','bb','hbp','sf','tb','sb'].forEach(k=>acc[k]=(acc[k]||0)+Number(row[k]||0))
+    return acc
+  },{})
+  const avg=sums.ab ? sums.h/sums.ab : null
+  const obpDen=(sums.ab||0)+(sums.bb||0)+(sums.hbp||0)+(sums.sf||0)
+  const obp=obpDen ? ((sums.h||0)+(sums.bb||0)+(sums.hbp||0))/obpDen : null
+  const slg=sums.ab ? (sums.tb||0)/sums.ab : null
+  const ops=obp!=null&&slg!=null ? obp+slg : null
+  const latestMetric=type=>[...ownMeasurements].filter(r=>r.metric_type===type).sort((a,b)=>new Date(b.measured_at)-new Date(a.measured_at))[0]
+  const exit=latestMetric('exit_velocity')
+  const home1=latestMetric('home_to_first')
+  const team=teams.find(t=>t.member_role==='player') || teams[0]
+  const att=attendanceStatsForPerson(profile?.id,team,attendance,gameAttendance,trainingEvents,calendarEvents)
+  const fmtRate=value=>value==null?'—':value.toFixed(3).replace(/^0/,'')
+  const cards=[
+    ['AVG',fmtRate(avg),'Slaggemiddelde'],
+    ['OPS',fmtRate(ops),'On-base + slugging'],
+    ['Hits',String(sums.h||0),'Totaal'],
+    ['RBI',String(sums.rbi||0),'Binnengeslagen punten'],
+    ['SB',String(sums.sb||0),'Gestolen honken'],
+    ['Exit velocity',exit?`${Number(exit.value).toFixed(0)} km/u`:'—','Laatste meting'],
+    ['Home → 1',home1?`${Number(home1.value).toFixed(2).replace('.',',')} sec`:'—','Laatste meting'],
+    ['Aanwezigheid',att.percentage==null?'—':`${att.percentage}%`,att.total?`${att.attended} / ${att.total} sessies`:'Nog geen registraties']
+  ]
+  return <section className="stats-page">
+    <ScreenHeader title="Mijn stats" />
+    <div className="stats-player-strip"><ProfileAvatar person={profile} size="small"/><div><strong>{personName(profile)}</strong><span>{team?.name || 'Mijn OG'}{profile?.jersey_number?` · #${profile.jersey_number}`:''}</span></div><span className="stats-season">Seizoen 2026</span></div>
+    <div className="stats-eight-grid">{cards.map(([label,value,sub])=><article className="stats-metric-card" key={label}><span>{label}</span><strong>{value}</strong><small>{sub}</small></article>)}</div>
+    <div className="stats-source-note"><strong>8 kernstats</strong><p>Wedstrijdstats komen uit iScore of handmatige wedstrijdinvoer. Exit velocity en Home → 1 komen uit losse metingen. Aanwezigheid wordt automatisch uit Mijn OG gehaald.</p></div>
+  </section>
+}
 
 function attendanceStatsForPerson(personId, team, attendance = [], gameAttendance = [], trainingEvents = [], calendarEvents = []) {
   const finalStatuses = new Set(['present','absent','injured','late'])
@@ -1675,7 +1715,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
         <SettingsRow icon="lock" title="Wachtwoord" subtitle="Wachtwoord wijzigen via resetmail" onClick={() => setSettingsView('password')} />
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.8.5.5" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.9.0" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -1714,7 +1754,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 2.8.5.5</h3>
+        <h3>Versie 2.9.0</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS agenda</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>
