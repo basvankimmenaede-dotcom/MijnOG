@@ -20,11 +20,12 @@ export async function POST(request) {
     if (!userData?.user) return Response.json({ error: 'Niet ingelogd.' }, { status: 401 })
 
     const service = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } })
-    const { data: requestRow } = await service.from('player_requests').select('requesting_team_id').eq('id', body.requestId).maybeSingle()
+    const { data: requestRow } = await service.from('player_requests').select('requesting_team_id,target_team_id').eq('id', body.requestId).maybeSingle()
     if (!requestRow) return Response.json({ error: 'Verzoek niet gevonden.' }, { status: 404 })
     const { data: profile } = await service.from('profiles').select('role').eq('id', userData.user.id).single()
-    const { data: membership } = await service.from('team_members').select('member_role').eq('profile_id', userData.user.id).eq('team_id', requestRow.requesting_team_id).maybeSingle()
-    if (profile?.role !== 'admin' && membership?.member_role !== 'coach') return Response.json({ error: 'Geen rechten.' }, { status: 403 })
+    const { data: requestingMembership } = await service.from('team_members').select('member_role').eq('profile_id', userData.user.id).eq('team_id', requestRow.requesting_team_id).maybeSingle()
+    const { data: targetMembership } = await service.from('team_members').select('member_role').eq('profile_id', userData.user.id).eq('team_id', requestRow.target_team_id).maybeSingle()
+    if (profile?.role !== 'admin' && requestingMembership?.member_role !== 'coach' && targetMembership?.member_role !== 'coach') return Response.json({ error: 'Geen rechten.' }, { status: 403 })
 
     const ids = [...new Set((body.profileIds || []).filter(Boolean))]
     const { data: subscriptions } = ids.length ? await service.from('push_subscriptions').select('*').in('profile_id', ids).eq('enabled', true) : { data: [] }

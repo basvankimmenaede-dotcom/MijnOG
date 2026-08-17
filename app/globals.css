@@ -1600,3 +1600,14 @@ input:focus, textarea:focus, select:focus {
   .agenda-date-block strong { font-size:25px; }
   .agenda-card-main h3 { font-size:19px; }
 }
+
+/* v2.8.3 - spelersprofielen, coach-to-coach invallers, push onboarding */
+.push-onboarding-card { width:100%; display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:14px; text-align:left; border:1px solid rgba(243,111,33,.26); background:#fff8f2; border-radius:16px; padding:16px; margin:0 0 16px; color:var(--ink); }
+.push-onboarding-card strong,.push-onboarding-card small { display:block; }
+.push-onboarding-card small { margin-top:3px; color:var(--muted); line-height:1.4; }
+.incoming-requests article { border-color:rgba(243,111,33,.35); background:#fffaf6; }
+.coach-push-list { display:grid; gap:8px; }
+.coach-push-list article { display:flex; align-items:center; justify-content:space-between; gap:14px; padding:11px 12px; border:1px solid var(--border,#e8e4df); border-radius:12px; background:white; }
+.coach-push-list article > span { display:flex; align-items:center; gap:10px; min-width:0; }
+.coach-push-list small { color:var(--muted); text-align:right; }
+.candidate-select-list button span:nth-child(2) small { line-height:1.35; }
