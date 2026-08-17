@@ -467,9 +467,9 @@ function shortTeamLabel(team) {
 }
 
 
-function ActivityDetailModal({ event, profile, teams, profiles, memberships, clubLocations, transportEvent, transportResponses, onChanged, onClose }) {
+function ActivityDetailModal({ event, profile, teams, profiles, memberships, clubLocations, transportEvent, transportResponses, onChanged, onManageAttendance, onClose }) {
   const [transportOpen, setTransportOpen] = useState(false)
-  return <div className="modal-backdrop" onMouseDown={e => { if(e.target===e.currentTarget) onClose() }}><section className="detail-modal" role="dialog" aria-modal="true"><header className="detail-modal-header"><div><p className="eyebrow orange">{eventTypeLabel(event).toUpperCase()}</p><h2>{event.title}</h2></div><button className="sheet-icon-button" onClick={onClose}><Icon name="close"/></button></header><div className="detail-modal-body"><div className="detail-meta-grid"><div><Icon name="calendar"/><span>{formatLongDate(event.start)}</span></div><div><Icon name="clock"/><span>{formatTimeRange(event.start,event.end)}</span></div>{event.location && <div><Icon name="pin"/><span>{event.location}</span></div>}</div>{event.location && <LocationTravelCard location={null} fallbackDestination={event.location} />}{event.description && <p className="detail-description">{event.description}</p>}<button className="transport-open-button" onClick={() => setTransportOpen(true)}><Icon name="car"/><span><strong>Vervoer</strong><small>{transportEvent ? transportStatusLabel(transportEvent, transportResponses) : 'Bekijk wie rijdt en wie mee moet'}</small></span><Icon name="chevron"/></button></div></section>{transportOpen && <TransportModal event={event} profile={profile} teams={teams} profiles={profiles} memberships={memberships} transportEvent={transportEvent} responses={transportResponses} onChanged={onChanged} onClose={() => setTransportOpen(false)} />}</div>
+  return <div className="modal-backdrop" onMouseDown={e => { if(e.target===e.currentTarget) onClose() }}><section className="detail-modal" role="dialog" aria-modal="true"><header className="detail-modal-header"><div><p className="eyebrow orange">{eventTypeLabel(event).toUpperCase()}</p><h2>{event.title}</h2></div><button className="sheet-icon-button" onClick={onClose}><Icon name="close"/></button></header><div className="detail-modal-body"><div className="detail-meta-grid"><div><Icon name="calendar"/><span>{formatLongDate(event.start)}</span></div><div><Icon name="clock"/><span>{formatTimeRange(event.start,event.end)}</span></div>{event.location && <div><Icon name="pin"/><span>{event.location}</span></div>}</div>{event.location && <LocationTravelCard location={null} fallbackDestination={event.location} />}{event.description && <p className="detail-description">{event.description}</p>}{onManageAttendance && <button className="secondary orange-outline coach-attendance-manage" onClick={onManageAttendance}>Aanwezigheid beheren</button>}<button className="transport-open-button" onClick={() => setTransportOpen(true)}><Icon name="car"/><span><strong>Vervoer</strong><small>{transportEvent ? transportStatusLabel(transportEvent, transportResponses) : 'Bekijk wie rijdt en wie mee moet'}</small></span><Icon name="chevron"/></button></div></section>{transportOpen && <TransportModal event={event} profile={profile} teams={teams} profiles={profiles} memberships={memberships} transportEvent={transportEvent} responses={transportResponses} onChanged={onChanged} onClose={() => setTransportOpen(false)} />}</div>
 }
 
 function EventAudience({ event, compact=false }) {
@@ -479,8 +479,8 @@ function EventAudience({ event, compact=false }) {
   return <div className={`event-audience ${compact ? 'compact' : ''}`}>{teams.map(team => <span key={team.id}>{team.name}</span>)}{guestCount > 0 && <span>+ {guestCount} gast{guestCount === 1 ? '' : 'en'}</span>}</div>
 }
 
-function TrainingDetailModal({ event, current, onAttendance, busy, canManage, onEdit, onClose, attendance, profiles, memberships }) {
-  return <div className="modal-backdrop" onMouseDown={e => { if (e.target===e.currentTarget) onClose() }}><section className="detail-modal" role="dialog" aria-modal="true" aria-label="Trainingdetails"><header className="detail-modal-header"><div><p className="eyebrow orange">TRAINING</p><h2>{event.title}</h2></div><button className="sheet-icon-button" onClick={onClose} aria-label="Sluiten"><Icon name="close" /></button></header><div className="detail-modal-body"><div className="detail-meta-grid"><div><Icon name="calendar"/><span>{formatLongDate(event.start)}</span></div><div><Icon name="clock"/><span>{formatTimeRange(event.start,event.end)}</span></div>{event.meetAt && <div><Icon name="people"/><span>Verzamelen {formatClock(event.meetAt)}</span></div>}{event.location && <div><Icon name="pin"/><span>{event.location}</span></div>}</div><EventAudience event={event} />{event.description && <p className="detail-description">{event.description}</p>}<div className="detail-attendance"><h3>Ben je erbij?</h3><AttendanceButtons current={current?.status} onSelect={status => onAttendance(event,status)} busy={busy} /></div>{canManage && <><button className="primary detail-edit" onClick={onEdit}>Training aanpassen</button><AttendanceSummary event={event} rows={attendance} profiles={profiles} memberships={memberships} expanded /></>}</div></section></div>
+function TrainingDetailModal({ event, current, onAttendance, busy, canManage, onEdit, onManageAttendance, onClose, attendance, profiles, memberships }) {
+  return <div className="modal-backdrop" onMouseDown={e => { if (e.target===e.currentTarget) onClose() }}><section className="detail-modal" role="dialog" aria-modal="true" aria-label="Trainingdetails"><header className="detail-modal-header"><div><p className="eyebrow orange">TRAINING</p><h2>{event.title}</h2></div><button className="sheet-icon-button" onClick={onClose} aria-label="Sluiten"><Icon name="close" /></button></header><div className="detail-modal-body"><div className="detail-meta-grid"><div><Icon name="calendar"/><span>{formatLongDate(event.start)}</span></div><div><Icon name="clock"/><span>{formatTimeRange(event.start,event.end)}</span></div>{event.meetAt && <div><Icon name="people"/><span>Verzamelen {formatClock(event.meetAt)}</span></div>}{event.location && <div><Icon name="pin"/><span>{event.location}</span></div>}</div><EventAudience event={event} />{event.description && <p className="detail-description">{event.description}</p>}<div className="detail-attendance"><h3>Ben je erbij?</h3><AttendanceButtons current={current?.status} onSelect={status => onAttendance(event,status)} busy={busy} /></div>{canManage && <><div className="detail-manage-actions"><button className="primary detail-edit" onClick={onEdit}>Training aanpassen</button>{onManageAttendance && <button className="secondary orange-outline" onClick={onManageAttendance}>Aanwezigheid beheren</button>}</div><AttendanceSummary event={event} rows={attendance} profiles={profiles} memberships={memberships} expanded /></>}</div></section></div>
 }
 
 function AttendanceButtons({ current, onSelect, busy, compact=false }) {
@@ -745,8 +745,8 @@ function CoachDashboard({ session, profile, teams, trainingEvents = [], calendar
     {nominateRequest && <NominatePlayersModal session={session} request={nominateRequest} team={selectedTeam} profiles={profiles} memberships={memberships} onClose={()=>setNominateRequest(null)} onSaved={async()=>{setNominateRequest(null);await onRefresh()}} onMessage={onMessage} />}
     {finalizeSession && <FinalizeAttendanceModal event={finalizeSession} team={selectedTeam} players={teamPlayers} attendance={attendance} gameAttendance={gameAttendance} onClose={()=>setFinalizeSession(null)} onSaved={onRefresh} onMessage={onMessage} />}
     {requestDetail && <PlayerRequestDetailModal request={requestDetail} selectedTeam={selectedTeam} allTeams={allTeams} profiles={profiles} candidates={playerCandidates.filter(c=>c.request_id===requestDetail.id)} onConfirm={confirmCandidate} onNominate={()=>{setNominateRequest(requestDetail);setRequestDetail(null)}} onClose={()=>setRequestDetail(null)} />}
-    {detailEvent?.type === 'training' && <TrainingDetailModal event={detailEvent} current={ownAttendance[String(detailEvent.id)]} onAttendance={onAttendance} busy={attendanceBusy} canManage={true} onEdit={()=>{setEditingCoachEvent(detailEvent);setDetailEvent(null);setTrainingEditorOpen(true)}} onClose={()=>setDetailEvent(null)} attendance={attendance.filter(row=>String(row.event_id)===String(detailEvent.id))} profiles={profiles} memberships={memberships} />}
-    {detailEvent && detailEvent.type !== 'training' && <ActivityDetailModal event={detailEvent} profile={profile} teams={[selectedTeam]} profiles={profiles} memberships={memberships} clubLocations={clubLocations} transportEvent={findTransportEvent(detailEvent, transportEvents)} transportResponses={transportResponses} onChanged={onRefresh} onClose={()=>setDetailEvent(null)} />}
+    {detailEvent?.type === 'training' && <TrainingDetailModal event={detailEvent} current={ownAttendance[String(detailEvent.id)]} onAttendance={onAttendance} busy={attendanceBusy} canManage={true} onEdit={()=>{setEditingCoachEvent(detailEvent);setDetailEvent(null);setTrainingEditorOpen(true)}} onManageAttendance={()=>setFinalizeSession(detailEvent)} onClose={()=>setDetailEvent(null)} attendance={attendance.filter(row=>String(row.event_id)===String(detailEvent.id))} profiles={profiles} memberships={memberships} />}
+    {detailEvent && detailEvent.type !== 'training' && <ActivityDetailModal event={detailEvent} profile={profile} teams={[selectedTeam]} profiles={profiles} memberships={memberships} clubLocations={clubLocations} transportEvent={findTransportEvent(detailEvent, transportEvents)} transportResponses={transportResponses} onChanged={onRefresh} onManageAttendance={()=>setFinalizeSession(detailEvent)} onClose={()=>setDetailEvent(null)} />}
   </section>
 }
 
@@ -791,27 +791,36 @@ function CoachMessageModal({ session, team, onClose, onSaved, onMessage }) {
 
 function FinalizeAttendanceModal({ event, team, players, attendance, gameAttendance, onClose, onSaved, onMessage }) {
   const isGame=event.type==='game'
+  const isPast=new Date(event.start).getTime() < Date.now()
   const key=eventTransportKey(event)
   const initial=Object.fromEntries(players.map(p=>{
     const r=isGame?gameAttendance.find(a=>a.event_key===key&&a.profile_id===p.id):attendance.find(a=>String(a.event_id)===String(event.id)&&a.profile_id===p.id)
-    return [p.id,r?.status||'present']
+    return [p.id,r?.status||'']
   }))
-  const [statuses,setStatuses]=useState(initial), [busy,setBusy]=useState(false)
+  const [statuses,setStatuses]=useState(initial), [busy,setBusy]=useState(false), [feedback,setFeedback]=useState('')
   async function save(){
-    setBusy(true)
+    const selectedPlayers=players.filter(p=>statuses[p.id])
+    if(!selectedPlayers.length){setFeedback('Kies minimaal voor één speelster een status.');return}
+    setBusy(true);setFeedback('')
     try{
       if(isGame){
-        const rows=players.map(p=>({event_key:key,team_id:Number(team.id),profile_id:p.id,status:statuses[p.id]||'present',event_title:event.title,event_start:event.start,updated_at:new Date().toISOString()}))
+        const rows=selectedPlayers.map(p=>({event_key:key,team_id:Number(team.id),profile_id:p.id,status:statuses[p.id],event_title:event.title,event_start:event.start,updated_at:new Date().toISOString()}))
         const {error}=await supabase.from('game_attendance').upsert(rows,{onConflict:'event_key,profile_id'}); if(error)throw error
       }else{
-        const rows=players.map(p=>({event_id:event.id,profile_id:p.id,status:statuses[p.id]||'present',updated_at:new Date().toISOString()}))
+        const rows=selectedPlayers.map(p=>({event_id:event.id,profile_id:p.id,status:statuses[p.id],updated_at:new Date().toISOString()}))
         const {error}=await supabase.from('attendance').upsert(rows,{onConflict:'event_id,profile_id'}); if(error)throw error
       }
-      onMessage('Aanwezigheid afgerond.'); await onSaved(); onClose()
-    }catch(e){onMessage(`Opslaan mislukt: ${e.message}`)}finally{setBusy(false)}
+      setFeedback('Aanwezigheid opgeslagen ✓')
+      await onSaved()
+      setTimeout(()=>onClose(),350)
+    }catch(e){setFeedback(`Opslaan mislukt: ${e.message}`)}finally{setBusy(false)}
   }
-  const options=[['present','Aanwezig'],['absent','Afwezig'],['injured','Geblesseerd'],['late','Te laat']]
-  return <SettingsModal title="Aanwezigheid afronden" onClose={onClose}><div className="finalize-session-head"><strong>{event.title}</strong><span>{formatLongDate(event.start)} · {team?.name}</span></div><div className="finalize-roster">{players.map(p=><article key={p.id}><span className="finalize-person"><ProfileAvatar person={p} size="small"/><strong>{p.first_name||personName(p)}</strong></span><div className="finalize-status-grid">{options.map(([value,label])=><button key={value} className={statuses[p.id]===value?'active':''} onClick={()=>setStatuses({...statuses,[p.id]:value})}>{label}</button>)}</div></article>)}</div><button className="primary" disabled={busy} onClick={save}>{busy?'Opslaan…':'Registratie opslaan'}</button></SettingsModal>
+  const options=isPast
+    ? [['present','Aanwezig'],['absent','Afwezig'],['injured','Geblesseerd'],['late','Te laat']]
+    : isGame
+      ? [['present','Aanwezig'],['absent','Afwezig']]
+      : [['present','Aanwezig'],['maybe','Misschien'],['absent','Afwezig']]
+  return <SettingsModal title={isPast?'Aanwezigheid afronden':'Aanwezigheid beheren'} onClose={onClose}><div className="finalize-session-head"><strong>{event.title}</strong><span>{formatLongDate(event.start)} · {team?.name}</span>{!isPast&&<small>Als coach kun je vooraf de status voor speelsters invullen of corrigeren.</small>}</div><div className="finalize-roster">{players.map(p=><article key={p.id}><span className="finalize-person"><ProfileAvatar person={p} size="small"/><span><strong>{p.first_name||personName(p)}</strong>{p.is_placeholder&&<small>Nog geen Mijn OG-account</small>}</span></span><div className="finalize-status-grid">{options.map(([value,label])=><button type="button" key={value} className={statuses[p.id]===value?'active':''} onClick={()=>setStatuses({...statuses,[p.id]:value})}>{label}</button>)}</div></article>)}</div>{feedback&&<div className="push-feedback" role="status">{feedback}</div>}<button className="primary" disabled={busy} onClick={save}>{busy?'Opslaan…':'Registratie opslaan'}</button></SettingsModal>
 }
 
 function PlayerRequestModal({ session, team, calendarEvents, trainingEvents, onClose, onSaved, onMessage }) {
@@ -1542,7 +1551,7 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
         <SettingsRow icon="lock" title="Wachtwoord" subtitle="Wachtwoord wijzigen via resetmail" onClick={() => setSettingsView('password')} />
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.8.4" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.8.4.2" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -1580,7 +1589,7 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 2.8.4</h3>
+        <h3>Versie 2.8.4.2</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS agenda</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>

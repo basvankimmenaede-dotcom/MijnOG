@@ -21,9 +21,23 @@ export async function POST(request) {
     const teamId=Number(body.team_id)
     if (!firstName || !lastName || !Number.isFinite(teamId)) return Response.json({ error:'Vul voornaam, achternaam en team in.' }, { status:400 })
 
-    // Auth-record zonder e-mailadres: de speler kan hiermee niet inloggen.
+    // Supabase Auth vereist een e-mailadres of telefoonnummer.
+    // Voor voorlopige speelsters gebruiken we daarom intern een uniek
+    // placeholder-adres. Dit adres wordt nergens in de app getoond en
+    // ontvangt geen e-mail.
+    const placeholderEmail = `placeholder-${crypto.randomUUID()}@players.mijn-og.invalid`
+    const placeholderPassword = crypto.randomUUID() + crypto.randomUUID()
+
     const { data:created, error:createError } = await service.auth.admin.createUser({
-      user_metadata:{ first_name:firstName, last_name:lastName, placeholder_player:true }
+      email: placeholderEmail,
+      password: placeholderPassword,
+      email_confirm: true,
+      user_metadata:{
+        first_name:firstName,
+        last_name:lastName,
+        placeholder_player:true,
+        placeholder_email:true
+      }
     })
     if (createError || !created?.user?.id) return Response.json({ error:createError?.message || 'Voorlopige speler aanmaken mislukt.' }, { status:400 })
     const id=created.user.id

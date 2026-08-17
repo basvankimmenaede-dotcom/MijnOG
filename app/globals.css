@@ -1626,3 +1626,12 @@ input:focus, textarea:focus, select:focus {
 .placeholder-badge{display:inline-flex;align-items:center;padding:7px 10px;border-radius:999px;background:#fff0df;color:#b85b12;font-size:12px;font-weight:800;white-space:nowrap}
 .member-row .member-copy small{line-height:1.35}
 @media(max-width:640px){.player-add-toolbar{justify-content:stretch}.primary.compact{width:100%}.placeholder-heading{flex-direction:column}}
+
+/* v2.8.4.2 - coach aanwezigheid vooraf beheren */
+.detail-manage-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px}
+.detail-manage-actions .detail-edit{margin:0}
+.coach-attendance-manage{width:100%;margin:14px 0 0}
+.finalize-session-head small{display:block;margin-top:6px;color:var(--muted,#77736f);line-height:1.4}
+.finalize-person>span{display:flex;flex-direction:column;gap:2px}
+.finalize-person small{font-size:11px;color:#b85b12}
+@media(max-width:640px){.detail-manage-actions{grid-template-columns:1fr}}
