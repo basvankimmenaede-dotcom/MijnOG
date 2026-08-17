@@ -68,7 +68,7 @@ export default function HomePage() {
     setMessage('')
     const [profileResult, teamResult, calendarResult, eventResult, attendanceResult, profilesResult, membershipResult, eventTeamsResult, eventParticipantsResult, locationsResult, transportEventsResult, transportResponsesResult, messagesResult, gameAttendanceResult, playerRequestsResult, playerCandidatesResult] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
-      supabase.from('team_members').select('member_role, teams(id, name, sport, season_id, is_active, team_photo_url, seasons(is_active))').eq('profile_id', userId),
+      supabase.from('team_members').select('member_role, teams(id, name, sport, season_id, is_active, team_photo_url, foys_match_text, seasons(is_active))').eq('profile_id', userId),
       supabase.from('calendar_connections').select('*').eq('profile_id', userId).eq('provider', 'foys').maybeSingle(),
       supabase.from('events').select('*').order('start_at', { ascending: true }),
       supabase.from('attendance').select('*'),
@@ -366,32 +366,101 @@ function CompactEvent({ event, transportEvent, responses = [] }) {
 }
 
 function Agenda({ events, connection, state, profile, teams, attendance, visibleProfiles, memberships, ownAttendance, onAttendance, attendanceBusy, onRefresh, onGoMore, transportEvents, transportResponses, clubLocations }) {
-  const [filter, setFilter] = useState('all')
+  const [typeFilter, setTypeFilter] = useState('all')
+  const [teamFilter, setTeamFilter] = useState('all')
   const [editorOpen, setEditorOpen] = useState(false)
   const [editingEvent, setEditingEvent] = useState(null)
   const [detailEvent, setDetailEvent] = useState(null)
-  const [overviewOpen, setOverviewOpen] = useState(false)
-  const canCreate = profile?.role === 'admin' || teams.some(team => team.member_role === 'coach')
   const coachTeamIds = new Set(teams.filter(team => team.member_role === 'coach').map(team => Number(team.id)))
-  const filtered = events.filter(event => filter === 'all' || (filter === 'games' ? event.type === 'game' : event.type === 'training'))
+
+  const matchedEvents = useMemo(() => events.map(event => ({ ...event, matchedTeamIds: eventTeamMatches(event, teams) })), [events, teams])
+  const filtered = matchedEvents.filter(event => {
+    const typeOk = typeFilter === 'all' || (typeFilter === 'games' ? event.type === 'game' : event.type === 'training')
+    const teamOk = teamFilter === 'all' || event.matchedTeamIds.includes(Number(teamFilter))
+    return typeOk && teamOk
+  })
   const grouped = useMemo(() => groupByMonth(filtered), [filtered])
+
   function canManage(event) {
     return event.type === 'training' && (profile?.role === 'admin' || (event.teamIds ?? [event.teamId]).some(id => coachTeamIds.has(Number(id))))
   }
-  return <section>
+
+  return <section className="agenda-page">
     <ScreenHeader title="Agenda" action={connection ? 'Vernieuwen' : null} onAction={connection ? onRefresh : undefined} />
-    <div className="filter-row centered-filters"><button className={`filter-chip ${filter==='all'?'active':''}`} onClick={() => setFilter('all')}>Alles</button><button className={`filter-chip ${filter==='games'?'active':''}`} onClick={() => setFilter('games')}>Wedstrijden</button><button className={`filter-chip ${filter==='training'?'active':''}`} onClick={() => setFilter('training')}>Trainingen</button></div>
-    {!connection && events.every(event => event.type !== 'training') ? <EmptyState icon="link" title="KNBSB-agenda koppelen" text="Voeg onder Meer je persoonlijke FOYS ICS-link toe." action="Naar koppelingen" onAction={onGoMore} /> : state.loading && events.length===0 ? <EmptyState icon="calendar" title="Activiteiten laden…" text="We halen je programma op." /> : filtered.length===0 ? <EmptyState icon="calendar" title="Geen activiteiten gevonden" text="Er zijn binnen dit filter geen komende activiteiten." /> : <div className="agenda-timeline">{Object.entries(grouped).map(([month, monthEvents]) => <section key={month} className="timeline-month"><h2>{month}</h2>{monthEvents.map(event => <TimelineEvent key={event.uid || `${event.type}-${event.id}`} event={event} current={ownAttendance[String(event.id)]} onAttendance={onAttendance} busy={attendanceBusy} canManage={canManage(event)} onEdit={() => { setEditingEvent(event); setEditorOpen(true) }} onDetails={() => setDetailEvent(event)} attendance={attendance.filter(row => String(row.event_id)===String(event.id))} profiles={visibleProfiles} memberships={memberships} />)}</section>)}</div>}
-    {overviewOpen && <TrainingOverview events={events.filter(e => e.type === 'training')} attendance={attendance} profiles={visibleProfiles} memberships={memberships} onClose={() => setOverviewOpen(false)} />}
+
+    {teams.length > 1 && <div className="agenda-filter-block"><span className="agenda-filter-label">Team</span><div className="filter-row agenda-team-filters"><button className={`filter-chip ${teamFilter==='all'?'active':''}`} onClick={() => setTeamFilter('all')}>Alles</button>{teams.map(team => <button key={team.id} className={`filter-chip ${String(teamFilter)===String(team.id)?'active':''}`} onClick={() => setTeamFilter(String(team.id))}>{shortTeamLabel(team)}</button>)}</div></div>}
+
+    <div className="agenda-filter-block"><span className="agenda-filter-label">Type</span><div className="filter-row centered-filters"><button className={`filter-chip ${typeFilter==='all'?'active':''}`} onClick={() => setTypeFilter('all')}>Alles</button><button className={`filter-chip ${typeFilter==='games'?'active':''}`} onClick={() => setTypeFilter('games')}>Wedstrijden</button><button className={`filter-chip ${typeFilter==='training'?'active':''}`} onClick={() => setTypeFilter('training')}>Trainingen</button></div></div>
+
+    {!connection && events.every(event => event.type !== 'training') ? <EmptyState icon="link" title="KNBSB-agenda koppelen" text="Voeg onder Meer je persoonlijke FOYS ICS-link toe." action="Naar koppelingen" onAction={onGoMore} /> : state.loading && events.length===0 ? <EmptyState icon="calendar" title="Activiteiten laden…" text="We halen je programma op." /> : filtered.length===0 ? <EmptyState icon="calendar" title="Geen activiteiten gevonden" text={teamFilter !== 'all' ? 'Geen activiteiten gevonden voor dit team. Controleer eventueel de FOYS-herkenning bij Clubbeheer → Teams.' : 'Er zijn binnen dit filter geen komende activiteiten.'} /> : <div className="agenda-card-list">{Object.entries(grouped).map(([month, monthEvents]) => <section key={month} className="agenda-month"><h2>{month}</h2><div className="agenda-month-cards">{monthEvents.map(event => <AgendaEventCard key={event.uid || `${event.type}-${event.id}`} event={event} current={ownAttendance[String(event.id)]} onAttendance={onAttendance} busy={attendanceBusy} canManage={canManage(event)} onEdit={() => { setEditingEvent(event); setEditorOpen(true) }} onDetails={() => setDetailEvent(event)} attendance={attendance.filter(row => String(row.event_id)===String(event.id))} transportEvent={findTransportEvent(event, transportEvents)} transportResponses={transportResponses} />)}</div></section>)}</div>}
+
     {editorOpen && <TrainingEditor profile={profile} teams={teams} profiles={visibleProfiles} memberships={memberships} event={editingEvent} onClose={() => { setEditorOpen(false); setEditingEvent(null) }} onSaved={async () => { setEditorOpen(false); setEditingEvent(null); await onRefresh() }} />}
     {detailEvent?.type === 'training' && <TrainingDetailModal event={detailEvent} current={ownAttendance[String(detailEvent.id)]} onAttendance={onAttendance} busy={attendanceBusy} canManage={canManage(detailEvent)} onEdit={() => { setDetailEvent(null); setEditingEvent(detailEvent); setEditorOpen(true) }} onClose={() => setDetailEvent(null)} attendance={attendance.filter(row => String(row.event_id)===String(detailEvent.id))} profiles={visibleProfiles} memberships={memberships} />}
     {detailEvent && detailEvent.type !== 'training' && <ActivityDetailModal event={detailEvent} profile={profile} teams={teams} profiles={visibleProfiles} memberships={memberships} clubLocations={clubLocations} transportEvent={findTransportEvent(detailEvent, transportEvents)} transportResponses={transportResponses} onChanged={onRefresh} onClose={() => setDetailEvent(null)} />}
   </section>
 }
 
-function TimelineEvent({ event, current, onAttendance, busy, canManage, onEdit, onDetails, attendance, profiles, memberships }) {
+function AgendaEventCard({ event, current, onAttendance, busy, canManage, onEdit, onDetails, attendance, transportEvent, transportResponses }) {
   const date = new Date(event.start)
-  return <article className="timeline-event"><div className="timeline-date"><strong>{date.getDate()}</strong><span>{date.toLocaleDateString('nl-NL',{month:'short'}).replace('.','').toUpperCase()}</span></div><div className="timeline-line" aria-hidden="true"><span /></div><div className="timeline-copy"><div className="timeline-title-row"><h3>{event.title}</h3><span className={`type-chip ${event.type==='training'?'training-chip':''}`}>{eventTypeLabel(event)}</span></div><p>{formatShortDate(event.start)}</p><p>{formatTimeRange(event.start,event.end)}{event.location ? ` · ${event.location}` : ''}</p>{event.meetAt && <p>Verzamelen: {formatClock(event.meetAt)}</p>}{event.type==='training' && <EventAudience event={event} compact />}{event.description && <p className="event-description-inline">{event.description}</p>}{event.type==='training' && <AttendanceButtons current={current?.status} onSelect={status => onAttendance(event,status)} busy={busy} />}<div className="event-inline-actions"><button className="mini-action" onClick={onDetails}>Details</button>{canManage && <button className="mini-action coach" onClick={onEdit}>Beheren</button>}</div></div></article>
+  const transport = event.type === 'game' && transportEvent ? getTransportSummary(transportEvent, transportResponses) : null
+  const coachSummary = event.type === 'training' && canManage ? attendanceCoachSummary(attendance, event) : ''
+  return <article className={`agenda-event-card ${event.type}`}>
+    <div className="agenda-date-block"><strong>{date.getDate()}</strong><span>{date.toLocaleDateString('nl-NL',{month:'short'}).replace('.','').toUpperCase()}</span></div>
+    <div className="agenda-card-main">
+      <span className="agenda-type-label">{eventTypeLabel(event).toUpperCase()}</span>
+      <h3>{event.title}</h3>
+      <div className="agenda-meta"><span><Icon name="clock" />{formatTimeRange(event.start,event.end)}</span>{event.location && <span><Icon name="pin" />{event.location}</span>}{event.meetAt && <span><Icon name="people" />Verzamelen {formatClock(event.meetAt)}</span>}</div>
+      {event.type === 'training' && <EventAudience event={event} compact />}
+      {event.type === 'training' && <div className="agenda-personal-status"><span>{attendanceStatusLabel(current?.status)}</span><button type="button" onClick={onDetails}>Details</button></div>}
+      {event.type === 'game' && <div className="agenda-personal-status"><span>{transport ? (transport.shortage > 0 ? `${transport.shortage} plekken nodig` : 'Vervoer geregeld') : 'Wedstrijddetails'}</span><button type="button" onClick={onDetails}>Details</button></div>}
+      {coachSummary && <small className="agenda-coach-summary">{coachSummary}</small>}
+      {canManage && <button className="agenda-manage-link" type="button" onClick={onEdit}>Training beheren</button>}
+    </div>
+    <button className="agenda-card-chevron" type="button" aria-label="Details openen" onClick={onDetails}><Icon name="chevron" /></button>
+  </article>
+}
+
+function attendanceStatusLabel(status) {
+  if (status === 'present') return 'Aanwezig'
+  if (status === 'maybe') return 'Misschien'
+  if (status === 'absent') return 'Afwezig'
+  if (status === 'injured') return 'Geblesseerd'
+  if (status === 'late') return 'Te laat'
+  return 'Nog reageren'
+}
+
+function attendanceCoachSummary(rows = [], event) {
+  const counts = { present:0, absent:0, injured:0, late:0, maybe:0 }
+  rows.forEach(row => { if (counts[row.status] !== undefined) counts[row.status] += 1 })
+  const parts = []
+  if (counts.present) parts.push(`${counts.present} aanwezig`)
+  if (counts.absent) parts.push(`${counts.absent} afwezig`)
+  if (counts.injured) parts.push(`${counts.injured} geblesseerd`)
+  if (counts.late) parts.push(`${counts.late} te laat`)
+  if (counts.maybe) parts.push(`${counts.maybe} misschien`)
+  return parts.join(' · ')
+}
+
+function eventTeamMatches(event, teams = []) {
+  if (event.type === 'training') {
+    const ids = (event.teamIds?.length ? event.teamIds : event.teamId ? [event.teamId] : []).map(Number)
+    return teams.filter(team => ids.includes(Number(team.id))).map(team => Number(team.id))
+  }
+  const haystack = normalizeMatchText([event.title, event.description, event.location].filter(Boolean).join(' | '))
+  return teams.filter(team => {
+    const configured = String(team.foys_match_text || '').split(/[,;|\n]+/).map(value => normalizeMatchText(value)).filter(Boolean)
+    const aliases = configured.length ? configured : [normalizeMatchText(team.name)].filter(Boolean)
+    return aliases.some(alias => alias && haystack.includes(alias))
+  }).map(team => Number(team.id))
+}
+
+function normalizeMatchText(value) {
+  return String(value || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').replace(/\s+/g,' ').trim()
+}
+
+function shortTeamLabel(team) {
+  const alias = String(team.foys_match_text || '').split(/[,;|\n]+/).map(v => v.trim()).filter(Boolean)[0]
+  return alias || team.name
 }
 
 
@@ -837,7 +906,8 @@ function AdminPanel({ session, onMessage, onChanged }) {
   const [showSeasonForm, setShowSeasonForm] = useState(false)
   const [showTeamForm, setShowTeamForm] = useState(false)
   const [seasonForm, setSeasonForm] = useState({ name: '', starts_on: '', ends_on: '' })
-  const [teamForm, setTeamForm] = useState({ name: '', sport: 'softbal', season_id: '' })
+  const [teamForm, setTeamForm] = useState({ name: '', sport: 'softbal', season_id: '', foys_match_text: '' })
+  const [editingTeamId, setEditingTeamId] = useState(null)
   const [selectedSeasonId, setSelectedSeasonId] = useState('')
   const [selectedTeamId, setSelectedTeamId] = useState('')
   const [memberSearch, setMemberSearch] = useState('')
@@ -856,7 +926,7 @@ function AdminPanel({ session, onMessage, onChanged }) {
     setLoading(true)
     const [seasonResult, teamResult, profileResult, memberResult, locationResult] = await Promise.all([
       supabase.from('seasons').select('*').order('starts_on', { ascending: false }),
-      supabase.from('teams').select('id,name,sport,is_active,season_id,seasons(name,is_active)').order('name'),
+      supabase.from('teams').select('id,name,sport,is_active,season_id,foys_match_text,seasons(name,is_active)').order('name'),
       supabase.from('profiles').select('id,first_name,last_name,jersey_number,role,avatar_url').order('first_name'),
       supabase.from('team_members').select('id,team_id,profile_id,member_role'),
       supabase.from('club_locations').select('*').order('name')
@@ -886,6 +956,7 @@ function AdminPanel({ session, onMessage, onChanged }) {
     setView('menu')
     setShowSeasonForm(false)
     setShowTeamForm(false)
+    setEditingTeamId(null)
     setMemberSearch('')
     setInviteSent(false)
   }
@@ -894,6 +965,7 @@ function AdminPanel({ session, onMessage, onChanged }) {
     setView(nextView)
     setShowSeasonForm(false)
     setShowTeamForm(false)
+    setEditingTeamId(null)
     setMemberSearch('')
     setInviteSent(false)
     setShowLocationForm(false)
@@ -940,20 +1012,39 @@ function AdminPanel({ session, onMessage, onChanged }) {
     }
   }
 
-  async function addTeam(e) {
+  async function saveTeam(e) {
     e.preventDefault()
     if (!teamForm.name.trim() || !teamForm.season_id) return
     setBusy(true); onMessage('')
-    const { error } = await supabase.from('teams').insert({
-      name: teamForm.name.trim(), sport: teamForm.sport, season_id: Number(teamForm.season_id), is_active: true
-    })
+    const payload = {
+      name: teamForm.name.trim(),
+      sport: teamForm.sport,
+      season_id: Number(teamForm.season_id),
+      foys_match_text: teamForm.foys_match_text.trim() || null,
+      is_active: true
+    }
+    const { error } = editingTeamId
+      ? await supabase.from('teams').update(payload).eq('id', editingTeamId)
+      : await supabase.from('teams').insert(payload)
     setBusy(false)
-    if (error) return onMessage(`Team toevoegen mislukt: ${error.message}`)
-    setTeamForm({ name: '', sport: 'softbal', season_id: '' })
+    if (error) return onMessage(`Team opslaan mislukt: ${error.message}`)
+    setTeamForm({ name: '', sport: 'softbal', season_id: '', foys_match_text: '' })
+    setEditingTeamId(null)
     setShowTeamForm(false)
-    onMessage('Team toegevoegd ✓')
+    onMessage(editingTeamId ? 'Team bijgewerkt ✓' : 'Team toegevoegd ✓')
     await loadAdminData()
     onChanged?.()
+  }
+
+  function editTeam(team) {
+    setEditingTeamId(team.id)
+    setTeamForm({
+      name: team.name || '',
+      sport: team.sport || 'softbal',
+      season_id: String(team.season_id || selectedSeasonId || ''),
+      foys_match_text: team.foys_match_text || ''
+    })
+    setShowTeamForm(true)
   }
 
   async function toggleTeam(team) {
@@ -1127,14 +1218,21 @@ function AdminPanel({ session, onMessage, onChanged }) {
                     <div className="admin-filter-row">
                       <label>Seizoen<select value={selectedSeasonId} onChange={e => setSelectedSeasonId(e.target.value)}>{seasons.map(s => <option value={s.id} key={s.id}>{s.name}{s.is_active ? ' · actief' : ''}</option>)}</select></label>
                     </div>
-                    <SectionTitle title="Teams" action={showTeamForm ? 'Sluiten' : '+ Team'} onAction={() => { setTeamForm(form => ({...form, season_id: form.season_id || selectedSeasonId})); setShowTeamForm(v => !v) }} />
-                    {showTeamForm && <form className="sheet-form form-stack" onSubmit={addTeam}>
-                      <label>Teamnaam<input placeholder="Softbal Dames 1" value={teamForm.name} onChange={e => setTeamForm({...teamForm, name:e.target.value})} required /></label>
+                    <SectionTitle title="Teams" action={showTeamForm ? 'Sluiten' : '+ Team'} onAction={() => {
+                      if (showTeamForm) {
+                        setShowTeamForm(false); setEditingTeamId(null); setTeamForm({ name:'', sport:'softbal', season_id:'', foys_match_text:'' })
+                      } else {
+                        setEditingTeamId(null); setTeamForm({ name:'', sport:'softbal', season_id:selectedSeasonId, foys_match_text:'' }); setShowTeamForm(true)
+                      }
+                    }} />
+                    {showTeamForm && <form className="sheet-form form-stack" onSubmit={saveTeam}>
+                      <label>Teamnaam<input placeholder="Honkbal U21" value={teamForm.name} onChange={e => setTeamForm({...teamForm, name:e.target.value})} required /></label>
                       <div className="admin-form-grid"><label>Sport<select value={teamForm.sport} onChange={e => setTeamForm({...teamForm, sport:e.target.value})}><option value="softbal">Softbal</option><option value="honkbal">Honkbal</option></select></label><label>Seizoen<select value={teamForm.season_id || selectedSeasonId} onChange={e => setTeamForm({...teamForm, season_id:e.target.value})} required>{seasons.map(s => <option value={s.id} key={s.id}>{s.name}</option>)}</select></label></div>
-                      <button className="primary" disabled={busy}>{busy ? 'Opslaan…' : 'Team toevoegen'}</button>
+                      <label>FOYS herkenning<input value={teamForm.foys_match_text} onChange={e => setTeamForm({...teamForm, foys_match_text:e.target.value})} placeholder="Bijv. U21, HSB 1" /><small className="field-help">Gebruik tekst die letterlijk in de FOYS-wedstrijdnaam voorkomt. Meerdere varianten mag je scheiden met een komma.</small></label>
+                      <button className="primary" disabled={busy}>{busy ? 'Opslaan…' : editingTeamId ? 'Team opslaan' : 'Team toevoegen'}</button>
                     </form>}
                     <div className="admin-list">
-                      {seasonTeams.map(team => <article className={`admin-row${team.is_active ? '' : ' inactive'}`} key={team.id}><div><strong>{team.name}</strong><small>{capitalize(team.sport)} · {team.is_active ? 'Actief' : 'Gearchiveerd'}</small></div><button className="mini-action" disabled={busy} onClick={() => toggleTeam(team)}>{team.is_active ? 'Archiveren' : 'Activeren'}</button></article>)}
+                      {seasonTeams.map(team => <article className={`admin-row team-admin-row${team.is_active ? '' : ' inactive'}`} key={team.id}><div><strong>{team.name}</strong><small>{capitalize(team.sport)} · {team.is_active ? 'Actief' : 'Gearchiveerd'}</small><small>FOYS: {team.foys_match_text || 'nog niet ingesteld'}</small></div><div className="admin-row-actions"><button className="mini-action" disabled={busy} onClick={() => editTeam(team)}>Aanpassen</button><button className="mini-action" disabled={busy} onClick={() => toggleTeam(team)}>{team.is_active ? 'Archiveren' : 'Activeren'}</button></div></article>)}
                       {!seasonTeams.length && <div className="admin-empty">Geen teams in dit seizoen.</div>}
                     </div>
                   </div>
@@ -1328,7 +1426,7 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
         <SettingsRow icon="lock" title="Wachtwoord" subtitle="Wachtwoord wijzigen via resetmail" onClick={() => setSettingsView('password')} />
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.8.1" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.8.2" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -1363,7 +1461,7 @@ function More({ session, profile, teams, calendar, onSaved, onMessage }) {
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 2.8.1</h3>
+        <h3>Versie 2.8.2</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS agenda</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>

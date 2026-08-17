@@ -1537,3 +1537,66 @@ input:focus, textarea:focus, select:focus {
 .player-invite-stack{margin:18px 0}.player-invite-stack>.eyebrow{margin-bottom:7px}.player-invite-card{padding:17px;border:1px solid #f1c8ad;border-radius:17px;background:#fff8f2}.player-invite-card+.player-invite-card{margin-top:8px}.player-invite-copy{display:grid;gap:4px}.player-invite-copy>span{font-size:11px;font-weight:800;color:var(--og-orange,#f36f21);text-transform:uppercase;letter-spacing:.08em}.player-invite-copy h3,.player-invite-copy p{margin:0}.player-invite-copy small{color:var(--muted,#77736f)}.player-invite-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:13px}.invite-response-state{margin-top:12px;padding:10px 12px;border-radius:11px;background:#fff;color:#5f5954;font-size:13px;font-weight:600}
 @media(max-width:640px){.coach-quick-grid{grid-template-columns:1fr 1fr}.coach-quick-grid>button:last-child{grid-column:1/-1;min-height:92px}.coach-team-select{max-width:58%}.coach-history-list>button{grid-template-columns:minmax(0,1fr) 18px}.history-statuses{grid-column:1/-1;grid-row:2;justify-content:flex-start}.coach-history-list>button>.icon{grid-column:2;grid-row:1}.finalize-roster article{grid-template-columns:1fr}.finalize-status-grid{grid-template-columns:1fr 1fr}.coach-player-head,.coach-player-table article{grid-template-columns:minmax(0,1fr) 78px 52px}.player-invite-actions{grid-template-columns:1fr}}
 .danger-solid{background:var(--og-orange,#f36f21)!important;color:#fff!important}
+
+/* =========================================================
+   MIJN OG v2.8.2 - Agenda cards + team filters
+   ========================================================= */
+.agenda-page { display:grid; gap:16px; }
+.agenda-filter-block { display:grid; gap:8px; }
+.agenda-filter-label { font-size:11px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); padding-left:2px; }
+.agenda-team-filters, .agenda-page .centered-filters { justify-content:flex-start; margin-bottom:0; overflow-x:auto; padding-bottom:2px; scrollbar-width:none; }
+.agenda-team-filters::-webkit-scrollbar, .agenda-page .centered-filters::-webkit-scrollbar { display:none; }
+.agenda-page .filter-chip { white-space:nowrap; flex:0 0 auto; }
+.agenda-card-list { display:grid; gap:22px; }
+.agenda-month { display:grid; gap:10px; }
+.agenda-month > h2 { margin:0; font-family:var(--font-display); font-size:18px; letter-spacing:.04em; text-transform:uppercase; }
+.agenda-month-cards { display:grid; gap:10px; }
+.agenda-event-card {
+  position:relative;
+  display:grid;
+  grid-template-columns:58px minmax(0,1fr) 26px;
+  gap:13px;
+  align-items:start;
+  background:var(--card, #fff);
+  border:1px solid var(--line);
+  border-radius:16px;
+  padding:14px;
+  box-shadow:0 7px 24px rgba(20,20,20,.04);
+}
+.agenda-event-card.training { border-left:3px solid var(--og-orange); }
+.agenda-date-block {
+  width:58px;
+  min-height:64px;
+  border-radius:13px;
+  background:var(--canvas, #f7f5f2);
+  display:grid;
+  place-content:center;
+  text-align:center;
+}
+.agenda-date-block strong { font-family:var(--font-display); font-size:28px; line-height:.9; }
+.agenda-date-block span { margin-top:5px; font-size:10px; font-weight:800; color:var(--muted); letter-spacing:.08em; }
+.agenda-card-main { min-width:0; display:grid; gap:6px; }
+.agenda-type-label { width:max-content; color:var(--og-orange); font-size:10px; line-height:1; font-weight:850; letter-spacing:.1em; }
+.agenda-card-main h3 { margin:0; font-family:var(--font-display); font-size:21px; line-height:1.08; overflow-wrap:anywhere; }
+.agenda-meta { display:grid; gap:5px; color:var(--graphite); font-size:12px; }
+.agenda-meta span { display:flex; align-items:flex-start; gap:6px; min-width:0; }
+.agenda-meta svg { width:14px; height:14px; flex:0 0 14px; margin-top:1px; color:var(--muted); }
+.agenda-personal-status { margin-top:4px; padding-top:9px; border-top:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.agenda-personal-status span { font-size:12px; font-weight:750; color:var(--graphite); }
+.agenda-personal-status button, .agenda-manage-link { border:0; background:none; color:var(--og-orange); font:inherit; font-size:12px; font-weight:800; padding:2px 0; cursor:pointer; }
+.agenda-manage-link { justify-self:start; }
+.agenda-coach-summary { display:block; color:var(--muted); line-height:1.45; }
+.agenda-card-chevron { align-self:center; border:0; background:transparent; color:var(--muted); padding:4px; display:grid; place-items:center; cursor:pointer; }
+.agenda-card-chevron svg { width:18px; height:18px; }
+.agenda-event-card .event-audience.compact { margin-top:1px; }
+.field-help { display:block; margin-top:5px; color:var(--muted); font-size:11px; line-height:1.4; }
+.team-admin-row { align-items:center; }
+.team-admin-row > div:first-child { min-width:0; }
+.team-admin-row .admin-row-actions { flex-wrap:wrap; justify-content:flex-end; }
+
+@media (max-width:420px) {
+  .agenda-event-card { grid-template-columns:52px minmax(0,1fr) 20px; gap:10px; padding:12px; }
+  .agenda-date-block { width:52px; min-height:60px; }
+  .agenda-date-block strong { font-size:25px; }
+  .agenda-card-main h3 { font-size:19px; }
+}
