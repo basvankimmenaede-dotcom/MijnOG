@@ -1746,3 +1746,23 @@ input:focus, textarea:focus, select:focus {
     width:140px;
   }
 }
+
+/* v2.8.5.5 - compacte avatars in coach/pushstatus */
+.profile-avatar-small {
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  min-height: 48px;
+  max-width: 48px;
+  max-height: 48px;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  font-size: 16px;
+  flex: 0 0 48px;
+}
+.coach-push-list .profile-avatar-small {
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  max-width: 48px;
+}
