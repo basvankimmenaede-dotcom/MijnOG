@@ -38,6 +38,7 @@ export default function HomePage() {
   const [pushSubscriptions, setPushSubscriptions] = useState([])
   const [playerGameStats, setPlayerGameStats] = useState([])
   const [playerMeasurements, setPlayerMeasurements] = useState([])
+  const [gameHighlights, setGameHighlights] = useState([])
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -60,7 +61,7 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!session?.user?.id) {
-      setProfile(null); setTeams([]); setCalendarConnection(null); setCalendarEvents([]); setTrainingEvents([]); setAttendance([]); setVisibleProfiles([]); setAllMemberships([]); setEventTeamLinks([]); setEventParticipantLinks([]); setClubLocations([]); setTransportEvents([]); setTransportResponses([]); setTeamMessages([]); setGameAttendance([]); setPlayerRequests([]); setPlayerRequestCandidates([]); setPushSubscriptions([]); setPlayerGameStats([]); setPlayerMeasurements([])
+      setProfile(null); setTeams([]); setCalendarConnection(null); setCalendarEvents([]); setTrainingEvents([]); setAttendance([]); setVisibleProfiles([]); setAllMemberships([]); setEventTeamLinks([]); setEventParticipantLinks([]); setClubLocations([]); setTransportEvents([]); setTransportResponses([]); setTeamMessages([]); setGameAttendance([]); setPlayerRequests([]); setPlayerRequestCandidates([]); setPushSubscriptions([]); setPlayerGameStats([]); setPlayerMeasurements([]); setGameHighlights([])
       return
     }
     loadUserData(session.user.id, session.access_token)
@@ -69,7 +70,7 @@ export default function HomePage() {
   async function loadUserData(userId, accessToken = session?.access_token) {
     setLoading(true)
     setMessage('')
-    const [profileResult, teamResult, calendarResult, eventResult, attendanceResult, profilesResult, membershipResult, eventTeamsResult, eventParticipantsResult, locationsResult, transportEventsResult, transportResponsesResult, messagesResult, gameAttendanceResult, playerRequestsResult, playerCandidatesResult, pushSubscriptionsResult, playerGameStatsResult, playerMeasurementsResult] = await Promise.all([
+    const [profileResult, teamResult, calendarResult, eventResult, attendanceResult, profilesResult, membershipResult, eventTeamsResult, eventParticipantsResult, locationsResult, transportEventsResult, transportResponsesResult, messagesResult, gameAttendanceResult, playerRequestsResult, playerCandidatesResult, pushSubscriptionsResult, playerGameStatsResult, playerMeasurementsResult, gameHighlightsResult] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
       supabase.from('team_members').select('member_role, teams(id, name, sport, season_id, is_active, team_photo_url, foys_match_text, seasons(is_active))').eq('profile_id', userId),
       supabase.from('calendar_connections').select('*').eq('profile_id', userId).eq('provider', 'foys').maybeSingle(),
@@ -88,7 +89,8 @@ export default function HomePage() {
       supabase.from('player_request_candidates').select('*'),
       supabase.from('push_subscriptions').select('profile_id,enabled').eq('enabled', true),
       supabase.from('player_game_stats').select('*').order('game_date', { ascending: true }),
-      supabase.from('player_measurements').select('*').order('measured_at', { ascending: true })
+      supabase.from('player_measurements').select('*').order('measured_at', { ascending: true }),
+      supabase.from('game_highlights').select('*').order('updated_at', { ascending: false })
     ])
     if (profileResult.error) setMessage(`Profiel kon niet worden geladen: ${profileResult.error.message}`)
     else setProfile(profileResult.data)
@@ -121,6 +123,7 @@ export default function HomePage() {
     if (!pushSubscriptionsResult.error) setPushSubscriptions(pushSubscriptionsResult.data ?? [])
     if (!playerGameStatsResult.error) setPlayerGameStats(playerGameStatsResult.data ?? [])
     if (!playerMeasurementsResult.error) setPlayerMeasurements(playerMeasurementsResult.data ?? [])
+    if (!gameHighlightsResult.error) setGameHighlights(gameHighlightsResult.data ?? [])
     setLoading(false)
   }
 
@@ -187,9 +190,9 @@ export default function HomePage() {
         {message && <div className="notice">{message}</div>}
         {loading && <div className="subtle-loading">Gegevens bijwerken…</div>}
         {activeTab === 'Home' && <Dashboard session={session} profile={profile} teams={teams} events={allEvents} messages={teamMessages} playerRequests={playerRequests} playerCandidates={playerRequestCandidates} pushSubscriptions={pushSubscriptions} onRefresh={refreshAppData} transportEvents={transportEvents} transportResponses={transportResponses} calendarConnection={calendarConnection} calendarState={calendarState} ownAttendance={ownAttendance} onAttendance={setAttendanceStatus} attendanceBusy={attendanceBusy} onAgenda={() => navigate('Agenda')} onTeam={() => navigate('Team')} onStats={() => navigate('Stats')} onMore={() => navigate('Meer')} />}
-        {activeTab === 'Agenda' && <Agenda events={allEvents} connection={calendarConnection} transportEvents={transportEvents} transportResponses={transportResponses} clubLocations={clubLocations} state={calendarState} profile={profile} teams={teams} attendance={attendance} visibleProfiles={visibleProfiles} memberships={allMemberships} ownAttendance={ownAttendance} onAttendance={setAttendanceStatus} attendanceBusy={attendanceBusy} onRefresh={refreshAppData} onGoMore={() => navigate('Meer')} />}
+        {activeTab === 'Agenda' && <Agenda events={allEvents} connection={calendarConnection} gameHighlights={gameHighlights} gameStats={playerGameStats} transportEvents={transportEvents} transportResponses={transportResponses} clubLocations={clubLocations} state={calendarState} profile={profile} teams={teams} attendance={attendance} visibleProfiles={visibleProfiles} memberships={allMemberships} ownAttendance={ownAttendance} onAttendance={setAttendanceStatus} attendanceBusy={attendanceBusy} onRefresh={refreshAppData} onGoMore={() => navigate('Meer')} />}
         {activeTab === 'Stats' && <Stats profile={profile} teams={teams} attendance={attendance} gameAttendance={gameAttendance} trainingEvents={trainingEvents} calendarEvents={calendarEvents} gameStats={playerGameStats} measurements={playerMeasurements} />}
-        {activeTab === 'Coach' && isCoachUser && <CoachDashboard session={session} profile={profile} teams={teams} trainingEvents={trainingEvents} calendarEvents={calendarEvents} attendance={attendance} gameAttendance={gameAttendance} profiles={visibleProfiles} memberships={allMemberships} messages={teamMessages} playerRequests={playerRequests} playerCandidates={playerRequestCandidates} pushSubscriptions={pushSubscriptions} ownAttendance={ownAttendance} onAttendance={setAttendanceStatus} attendanceBusy={attendanceBusy} clubLocations={clubLocations} transportEvents={transportEvents} transportResponses={transportResponses} onRefresh={refreshAppData} onMessage={setMessage} />}
+        {activeTab === 'Coach' && isCoachUser && <CoachDashboard session={session} profile={profile} teams={teams} gameStats={playerGameStats} measurements={playerMeasurements} trainingEvents={trainingEvents} calendarEvents={calendarEvents} attendance={attendance} gameAttendance={gameAttendance} profiles={visibleProfiles} memberships={allMemberships} messages={teamMessages} playerRequests={playerRequests} playerCandidates={playerRequestCandidates} pushSubscriptions={pushSubscriptions} ownAttendance={ownAttendance} onAttendance={setAttendanceStatus} attendanceBusy={attendanceBusy} clubLocations={clubLocations} transportEvents={transportEvents} transportResponses={transportResponses} onRefresh={refreshAppData} onMessage={setMessage} />}
         {activeTab === 'Team' && <Team session={session} profile={profile} teams={teams} profiles={visibleProfiles} memberships={allMemberships} attendance={attendance} gameAttendance={gameAttendance} trainingEvents={trainingEvents} calendarEvents={calendarEvents} onSaved={refreshAppData} onMessage={setMessage} />}
         {activeTab === 'Meer' && <More session={session} profile={profile} teams={teams} calendar={calendarConnection} attendance={attendance} gameAttendance={gameAttendance} trainingEvents={trainingEvents} calendarEvents={calendarEvents} memberships={allMemberships} onSaved={refreshAppData} onMessage={setMessage} />}
       </section>
@@ -374,19 +377,22 @@ function CompactEvent({ event, transportEvent, responses = [] }) {
   return <article className="compact-event"><div className="compact-date"><strong>{date.getDate()}</strong><span>{date.toLocaleDateString('nl-NL', { month: 'short' }).replace('.', '').toUpperCase()}</span></div><div className="compact-event-copy"><strong>{event.title}</strong><span>{formatShortDate(event.start)}</span><small>{formatTimeRange(event.start,event.end)}{event.location ? ` · ${event.location}` : ''}</small>{summary && <small className={summary.shortage > 0 ? 'transport-shortage-text' : 'transport-ok-text'}>{summary.shortage > 0 ? `${summary.shortage} PLEKKEN NODIG` : 'VERVOER GEREGELD'}</small>}</div><span className={`type-chip ${event.type === 'training' ? 'training-chip' : ''}`}>{eventTypeLabel(event)}</span></article>
 }
 
-function Agenda({ events, connection, state, profile, teams, attendance, visibleProfiles, memberships, ownAttendance, onAttendance, attendanceBusy, onRefresh, onGoMore, transportEvents, transportResponses, clubLocations }) {
+function Agenda({ events, connection, gameHighlights = [], gameStats = [], state, profile, teams, attendance, visibleProfiles, memberships, ownAttendance, onAttendance, attendanceBusy, onRefresh, onGoMore, transportEvents, transportResponses, clubLocations }) {
   const [typeFilter, setTypeFilter] = useState('all')
   const [teamFilter, setTeamFilter] = useState('all')
   const [editorOpen, setEditorOpen] = useState(false)
   const [editingEvent, setEditingEvent] = useState(null)
   const [detailEvent, setDetailEvent] = useState(null)
+  const [timeView, setTimeView] = useState('upcoming')
   const coachTeamIds = new Set(teams.filter(team => team.member_role === 'coach').map(team => Number(team.id)))
 
   const matchedEvents = useMemo(() => events.map(event => ({ ...event, matchedTeamIds: eventTeamMatches(event, teams) })), [events, teams])
   const filtered = matchedEvents.filter(event => {
     const typeOk = typeFilter === 'all' || (typeFilter === 'games' ? event.type === 'game' : event.type === 'training')
     const teamOk = teamFilter === 'all' || event.matchedTeamIds.includes(Number(teamFilter))
-    return typeOk && teamOk
+    const isPast = new Date(event.end || event.start).getTime() < Date.now()
+    const timeOk = timeView === 'played' ? isPast : !isPast
+    return typeOk && teamOk && timeOk
   })
   const grouped = useMemo(() => groupByMonth(filtered), [filtered])
 
@@ -397,19 +403,21 @@ function Agenda({ events, connection, state, profile, teams, attendance, visible
   return <section className="agenda-page">
     <ScreenHeader title="Agenda" action={connection ? 'Vernieuwen' : null} onAction={connection ? onRefresh : undefined} />
 
+    <div className="agenda-time-tabs"><button className={timeView==='upcoming'?'active':''} onClick={()=>setTimeView('upcoming')}>Komend</button><button className={timeView==='played'?'active':''} onClick={()=>setTimeView('played')}>Gespeeld</button></div>
+
     {teams.length > 1 && <div className="agenda-filter-block"><span className="agenda-filter-label">Team</span><div className="filter-row agenda-team-filters"><button className={`filter-chip ${teamFilter==='all'?'active':''}`} onClick={() => setTeamFilter('all')}>Alles</button>{teams.map(team => <button key={team.id} className={`filter-chip ${String(teamFilter)===String(team.id)?'active':''}`} onClick={() => setTeamFilter(String(team.id))}>{shortTeamLabel(team)}</button>)}</div></div>}
 
     <div className="agenda-filter-block"><span className="agenda-filter-label">Type</span><div className="filter-row centered-filters"><button className={`filter-chip ${typeFilter==='all'?'active':''}`} onClick={() => setTypeFilter('all')}>Alles</button><button className={`filter-chip ${typeFilter==='games'?'active':''}`} onClick={() => setTypeFilter('games')}>Wedstrijden</button><button className={`filter-chip ${typeFilter==='training'?'active':''}`} onClick={() => setTypeFilter('training')}>Trainingen</button></div></div>
 
-    {!connection && events.every(event => event.type !== 'training') ? <EmptyState icon="link" title="KNBSB-agenda koppelen" text="Voeg onder Meer je persoonlijke FOYS ICS-link toe." action="Naar koppelingen" onAction={onGoMore} /> : state.loading && events.length===0 ? <EmptyState icon="calendar" title="Activiteiten laden…" text="We halen je programma op." /> : filtered.length===0 ? <EmptyState icon="calendar" title="Geen activiteiten gevonden" text={teamFilter !== 'all' ? 'Geen activiteiten gevonden voor dit team. Controleer eventueel de FOYS-herkenning bij Clubbeheer → Teams.' : 'Er zijn binnen dit filter geen komende activiteiten.'} /> : <div className="agenda-card-list">{Object.entries(grouped).map(([month, monthEvents]) => <section key={month} className="agenda-month"><h2>{month}</h2><div className="agenda-month-cards">{monthEvents.map(event => <AgendaEventCard key={event.uid || `${event.type}-${event.id}`} event={event} current={ownAttendance[String(event.id)]} onAttendance={onAttendance} busy={attendanceBusy} canManage={canManage(event)} onEdit={() => { setEditingEvent(event); setEditorOpen(true) }} onDetails={() => setDetailEvent(event)} attendance={attendance.filter(row => String(row.event_id)===String(event.id))} transportEvent={findTransportEvent(event, transportEvents)} transportResponses={transportResponses} />)}</div></section>)}</div>}
+    {!connection && events.every(event => event.type !== 'training') ? <EmptyState icon="link" title="KNBSB-agenda koppelen" text="Voeg onder Meer je persoonlijke FOYS ICS-link toe." action="Naar koppelingen" onAction={onGoMore} /> : state.loading && events.length===0 ? <EmptyState icon="calendar" title="Activiteiten laden…" text="We halen je programma op." /> : filtered.length===0 ? <EmptyState icon="calendar" title="Geen activiteiten gevonden" text={teamFilter !== 'all' ? 'Geen activiteiten gevonden voor dit team. Controleer eventueel de FOYS-herkenning bij Clubbeheer → Teams.' : 'Er zijn binnen dit filter geen komende activiteiten.'} /> : <div className="agenda-card-list">{Object.entries(grouped).map(([month, monthEvents]) => <section key={month} className="agenda-month"><h2>{month}</h2><div className="agenda-month-cards">{monthEvents.map(event => <AgendaEventCard key={event.uid || `${event.type}-${event.id}`} event={event} current={ownAttendance[String(event.id)]} onAttendance={onAttendance} busy={attendanceBusy} canManage={canManage(event)} onEdit={() => { setEditingEvent(event); setEditorOpen(true) }} onDetails={() => setDetailEvent(event)} attendance={attendance.filter(row => String(row.event_id)===String(event.id))} transportEvent={findTransportEvent(event, transportEvents)} transportResponses={transportResponses} highlight={gameHighlights.find(h=>h.game_key===eventTransportKey(event))} hasStats={gameStats.some(s=>s.game_key===eventTransportKey(event))} played={timeView==='played'} />)}</div></section>)}</div>}
 
     {editorOpen && <TrainingEditor profile={profile} teams={teams} profiles={visibleProfiles} memberships={memberships} event={editingEvent} onClose={() => { setEditorOpen(false); setEditingEvent(null) }} onSaved={async () => { setEditorOpen(false); setEditingEvent(null); await onRefresh() }} />}
     {detailEvent?.type === 'training' && <TrainingDetailModal event={detailEvent} current={ownAttendance[String(detailEvent.id)]} onAttendance={onAttendance} busy={attendanceBusy} canManage={canManage(detailEvent)} onEdit={() => { setDetailEvent(null); setEditingEvent(detailEvent); setEditorOpen(true) }} onClose={() => setDetailEvent(null)} attendance={attendance.filter(row => String(row.event_id)===String(detailEvent.id))} profiles={visibleProfiles} memberships={memberships} />}
-    {detailEvent && detailEvent.type !== 'training' && <ActivityDetailModal event={detailEvent} profile={profile} teams={teams} profiles={visibleProfiles} memberships={memberships} clubLocations={clubLocations} transportEvent={findTransportEvent(detailEvent, transportEvents)} transportResponses={transportResponses} onChanged={onRefresh} onClose={() => setDetailEvent(null)} />}
+    {detailEvent && detailEvent.type !== 'training' && <ActivityDetailModal event={detailEvent} profile={profile} teams={teams} profiles={visibleProfiles} memberships={memberships} clubLocations={clubLocations} transportEvent={findTransportEvent(detailEvent, transportEvents)} transportResponses={transportResponses} highlight={gameHighlights.find(h=>h.game_key===eventTransportKey(detailEvent))} gameStats={gameStats.filter(s=>s.game_key===eventTransportKey(detailEvent))} onChanged={onRefresh} onClose={() => setDetailEvent(null)} />}
   </section>
 }
 
-function AgendaEventCard({ event, current, onAttendance, busy, canManage, onEdit, onDetails, attendance, transportEvent, transportResponses }) {
+function AgendaEventCard({ event, current, onAttendance, busy, canManage, onEdit, onDetails, attendance, transportEvent, transportResponses, highlight, hasStats=false, played=false }) {
   const date = new Date(event.start)
   const transport = event.type === 'game' && transportEvent ? getTransportSummary(transportEvent, transportResponses) : null
   const coachSummary = event.type === 'training' && canManage ? attendanceCoachSummary(attendance, event) : ''
@@ -421,7 +429,7 @@ function AgendaEventCard({ event, current, onAttendance, busy, canManage, onEdit
       <div className="agenda-meta"><span><Icon name="clock" />{formatTimeRange(event.start,event.end)}</span>{event.location && <span><Icon name="pin" />{event.location}</span>}{event.meetAt && <span><Icon name="people" />Verzamelen {formatClock(event.meetAt)}</span>}</div>
       {event.type === 'training' && <EventAudience event={event} compact />}
       {event.type === 'training' && <div className="agenda-personal-status"><span>{attendanceStatusLabel(current?.status)}</span><button type="button" onClick={onDetails}>Details</button></div>}
-      {event.type === 'game' && <div className="agenda-personal-status"><span>{transport ? (transport.shortage > 0 ? `${transport.shortage} plekken nodig` : 'Vervoer geregeld') : 'Wedstrijddetails'}</span><button type="button" onClick={onDetails}>Details</button></div>}
+      {event.type === 'game' && <div className="agenda-personal-status"><span>{played ? [highlight?.score_text, highlight?'Highlight ✓':null, hasStats?'Stats ✓':null].filter(Boolean).join(' · ') || 'Gespeelde wedstrijd' : transport ? (transport.shortage > 0 ? `${transport.shortage} plekken nodig` : 'Vervoer geregeld') : 'Wedstrijddetails'}</span><button type="button" onClick={onDetails}>Details</button></div>}
       {coachSummary && <small className="agenda-coach-summary">{coachSummary}</small>}
       {canManage && <button className="agenda-manage-link" type="button" onClick={onEdit}>Training beheren</button>}
     </div>
@@ -473,9 +481,50 @@ function shortTeamLabel(team) {
 }
 
 
-function ActivityDetailModal({ event, profile, teams, profiles, memberships, clubLocations, transportEvent, transportResponses, onChanged, onManageAttendance, onClose }) {
+function ActivityDetailModal({ event, profile, teams, profiles, memberships, clubLocations, transportEvent, transportResponses, highlight, gameStats = [], onChanged, onManageAttendance, onClose }) {
   const [transportOpen, setTransportOpen] = useState(false)
-  return <div className="modal-backdrop" onMouseDown={e => { if(e.target===e.currentTarget) onClose() }}><section className="detail-modal" role="dialog" aria-modal="true"><header className="detail-modal-header"><div><p className="eyebrow orange">{eventTypeLabel(event).toUpperCase()}</p><h2>{event.title}</h2></div><button className="sheet-icon-button" onClick={onClose}><Icon name="close"/></button></header><div className="detail-modal-body"><div className="detail-meta-grid"><div><Icon name="calendar"/><span>{formatLongDate(event.start)}</span></div><div><Icon name="clock"/><span>{formatTimeRange(event.start,event.end)}</span></div>{event.location && <div><Icon name="pin"/><span>{event.location}</span></div>}</div>{event.location && <LocationTravelCard location={null} fallbackDestination={event.location} />}{event.description && <p className="detail-description">{event.description}</p>}{onManageAttendance && <button className="secondary orange-outline coach-attendance-manage" onClick={onManageAttendance}>Aanwezigheid beheren</button>}<button className="transport-open-button" onClick={() => setTransportOpen(true)}><Icon name="car"/><span><strong>Vervoer</strong><small>{transportEvent ? transportStatusLabel(transportEvent, transportResponses) : 'Bekijk wie rijdt en wie mee moet'}</small></span><Icon name="chevron"/></button></div></section>{transportOpen && <TransportModal event={event} profile={profile} teams={teams} profiles={profiles} memberships={memberships} transportEvent={transportEvent} responses={transportResponses} onChanged={onChanged} onClose={() => setTransportOpen(false)} />}</div>
+  const [highlightOpen,setHighlightOpen]=useState(false)
+  const [statsOpen,setStatsOpen]=useState(false)
+  const isPast=new Date(event.end||event.start).getTime()<Date.now()
+  const matchedIds=eventTeamMatches(event,teams)
+  const managedTeam=teams.find(t=>matchedIds.includes(Number(t.id)) && (t.member_role==='coach'||profile?.role==='admin'))
+  const canPost=!!managedTeam || profile?.role==='admin'
+  const ownStat=gameStats.find(s=>s.profile_id===profile?.id)
+  return <div className="modal-backdrop" onMouseDown={e => { if(e.target===e.currentTarget) onClose() }}><section className="detail-modal" role="dialog" aria-modal="true"><header className="detail-modal-header"><div><p className="eyebrow orange">{eventTypeLabel(event).toUpperCase()}</p><h2>{event.title}</h2></div><button className="sheet-icon-button" onClick={onClose}><Icon name="close"/></button></header><div className="detail-modal-body"><div className="detail-meta-grid"><div><Icon name="calendar"/><span>{formatLongDate(event.start)}</span></div><div><Icon name="clock"/><span>{formatTimeRange(event.start,event.end)}</span></div>{event.location && <div><Icon name="pin"/><span>{event.location}</span></div>}</div>
+    {isPast && event.type==='game' && <section className="played-game-block"><p className="eyebrow orange">WEDSTRIJDARCHIEF</p>{highlight ? <><div className="played-score">{highlight.score_text||'Gespeeld'}</div><h3>{highlight.title||'Highlight'}</h3><p>{highlight.body}</p></> : <p className="muted">Er is nog geen highlight geschreven.</p>}{ownStat && <div className="own-game-stat"><strong>Jouw stats</strong><span>{ownStat.h||0} H · {ownStat.rbi||0} RBI · {ownStat.sb||0} SB</span></div>}<div className="played-actions">{canPost&&<button className="secondary orange-outline" onClick={()=>setHighlightOpen(true)}>{highlight?'Highlight aanpassen':'Highlight schrijven'}</button>}{canPost&&<button className="primary" onClick={()=>setStatsOpen(true)}>Stats invoeren</button>}</div></section>}
+    {event.location && !isPast && <LocationTravelCard location={null} fallbackDestination={event.location} />}{event.description && <p className="detail-description">{event.description}</p>}{onManageAttendance && <button className="secondary orange-outline coach-attendance-manage" onClick={onManageAttendance}>Aanwezigheid beheren</button>}{!isPast&&<button className="transport-open-button" onClick={() => setTransportOpen(true)}><Icon name="car"/><span><strong>Vervoer</strong><small>{transportEvent ? transportStatusLabel(transportEvent, transportResponses) : 'Bekijk wie rijdt en wie mee moet'}</small></span><Icon name="chevron"/></button>}</div></section>
+    {transportOpen && <TransportModal event={event} profile={profile} teams={teams} profiles={profiles} memberships={memberships} transportEvent={transportEvent} responses={transportResponses} onChanged={onChanged} onClose={() => setTransportOpen(false)} />}
+    {highlightOpen&&<GameHighlightModal event={event} team={managedTeam} highlight={highlight} onClose={()=>setHighlightOpen(false)} onSaved={async()=>{setHighlightOpen(false);await onChanged()}}/>}
+    {statsOpen&&<GameStatsEntryModal event={event} team={managedTeam} profiles={profiles} memberships={memberships} onClose={()=>setStatsOpen(false)} onSaved={async()=>{setStatsOpen(false);await onChanged()}}/>}
+  </div>
+}
+
+function GameHighlightModal({event,team,highlight,onClose,onSaved}){
+  const [form,setForm]=useState({score_text:highlight?.score_text||'',title:highlight?.title||'',body:highlight?.body||''})
+  const [busy,setBusy]=useState(false),[feedback,setFeedback]=useState('')
+  async function save(){
+    if(!form.body.trim())return setFeedback('Schrijf eerst een korte highlight.')
+    setBusy(true);setFeedback('')
+    const payload={game_key:eventTransportKey(event),team_id:Number(team?.id)||null,game_date:toDateInput(event.start),score_text:form.score_text.trim()||null,title:form.title.trim()||null,body:form.body.trim(),updated_at:new Date().toISOString()}
+    const {error}=await supabase.from('game_highlights').upsert(payload,{onConflict:'game_key'})
+    setBusy(false);if(error)return setFeedback(error.message);await onSaved()
+  }
+  return <SettingsModal title="Wedstrijdhighlight" onClose={onClose}><div className="form-stack"><label>Uitslag<input value={form.score_text} onChange={e=>setForm({...form,score_text:e.target.value})} placeholder="Bijv. 8 - 4"/></label><label>Titel<input value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="Sterke comeback in de 6e inning"/></label><label>Highlight<textarea rows="5" value={form.body} onChange={e=>setForm({...form,body:e.target.value})} placeholder="Schrijf een korte samenvatting van de wedstrijd…"/></label>{feedback&&<div className="push-feedback">{feedback}</div>}<button className="primary" disabled={busy} onClick={save}>{busy?'Opslaan…':'Highlight opslaan'}</button></div></SettingsModal>
+}
+function GameStatsEntryModal({event,team,profiles=[],memberships=[],onClose,onSaved}){
+  const players=memberships.filter(m=>Number(m.team_id)===Number(team?.id)&&m.member_role==='player').map(m=>profiles.find(p=>p.id===m.profile_id)).filter(Boolean).sort((a,b)=>(Number(a.jersey_number)||999)-(Number(b.jersey_number)||999))
+  const [rows,setRows]=useState(()=>Object.fromEntries(players.map(p=>[p.id,{ab:'',h:'',rbi:'',bb:'',hbp:'',sf:'',tb:'',sb:''}])))
+  const [busy,setBusy]=useState(false),[feedback,setFeedback]=useState('')
+  function change(id,k,v){setRows(cur=>({...cur,[id]:{...cur[id],[k]:v}}))}
+  async function save(){
+    setBusy(true);setFeedback('')
+    const game_key=eventTransportKey(event), game_date=toDateInput(event.start)
+    const payloads=players.filter(p=>Object.values(rows[p.id]||{}).some(v=>v!=='')).map(p=>{const r=rows[p.id];const x={profile_id:p.id,team_id:Number(team.id),game_key,game_date,opponent:event.title,source:'manual'};['ab','h','rbi','bb','hbp','sf','tb','sb'].forEach(k=>x[k]=Number(r[k]||0));return x})
+    if(!payloads.length){setBusy(false);return setFeedback('Vul minimaal één speelster in.')}
+    const {error}=await supabase.from('player_game_stats').upsert(payloads,{onConflict:'profile_id,game_key'})
+    setBusy(false);if(error)return setFeedback(error.message);await onSaved()
+  }
+  return <SettingsModal title="Wedstrijdstats invoeren" onClose={onClose}><div className="game-stats-entry"><p className="muted">Vul alleen speelsters in die hebben meegedaan. AVG en OPS worden automatisch berekend.</p>{players.map(p=><section className="game-stat-player" key={p.id}><strong>{teamDisplayName(p)}{p.jersey_number?` · #${p.jersey_number}`:''}</strong><div className="stat-entry-grid">{['ab','h','rbi','bb','hbp','sf','tb','sb'].map(k=><label key={k}>{k.toUpperCase()}<input type="number" min="0" value={rows[p.id]?.[k]||''} onChange={e=>change(p.id,k,e.target.value)}/></label>)}</div></section>)}{feedback&&<div className="push-feedback">{feedback}</div>}<button className="primary" disabled={busy} onClick={save}>{busy?'Opslaan…':'Alle stats opslaan'}</button></div></SettingsModal>
 }
 
 function EventAudience({ event, compact=false }) {
@@ -650,7 +699,7 @@ function PlayerInvitationCards({ session, requests = [], candidates = [], teams 
   return <section className="player-invite-stack"><p className="eyebrow orange">UITNODIGINGEN</p>{mine.map(c=>{const req=requests.find(r=>r.id===c.request_id);if(!req)return null;return <article className="player-invite-card" key={c.id}><div className="player-invite-copy"><span>Uitnodiging om mee te spelen</span><h3>{req.event_title}</h3><p><strong>{req.position}</strong>{req.note?` · ${req.note}`:''}</p><small>{formatLongDate(req.event_start)}</small></div>{c.response==='invited'?<div className="player-invite-actions"><button className="primary" onClick={()=>respond(c,'available')}>Ik kan</button><button className="secondary" onClick={()=>respond(c,'unavailable')}>Ik kan niet</button></div>:<div className="invite-response-state">{c.response==='confirmed'?'Je bent bevestigd voor deze activiteit.':'Je hebt aangegeven dat je kunt. De coach bevestigt wie meegaat.'}</div>}</article>})}</section>
 }
 
-function CoachDashboard({ session, profile, teams, trainingEvents = [], calendarEvents = [], attendance = [], gameAttendance = [], profiles = [], memberships = [], messages = [], playerRequests = [], playerCandidates = [], pushSubscriptions = [], ownAttendance = {}, onAttendance, attendanceBusy = false, clubLocations = [], transportEvents = [], transportResponses = [], onRefresh, onMessage }) {
+function CoachDashboard({ session, profile, teams, gameStats = [], measurements = [], trainingEvents = [], calendarEvents = [], attendance = [], gameAttendance = [], profiles = [], memberships = [], messages = [], playerRequests = [], playerCandidates = [], pushSubscriptions = [], ownAttendance = {}, onAttendance, attendanceBusy = false, clubLocations = [], transportEvents = [], transportResponses = [], onRefresh, onMessage }) {
   const ownCoachTeams = teams.filter(team => team.member_role === 'coach' || profile?.role === 'admin')
   const [selectedTeamId, setSelectedTeamId] = useState(String(ownCoachTeams[0]?.id || ''))
   const [trainingEditorOpen, setTrainingEditorOpen] = useState(false)
@@ -663,6 +712,9 @@ function CoachDashboard({ session, profile, teams, trainingEvents = [], calendar
   const [detailEvent, setDetailEvent] = useState(null)
   const [requestDetail, setRequestDetail] = useState(null)
   const [coachPlayerProfile, setCoachPlayerProfile] = useState(null)
+  const [coachStatsOpen, setCoachStatsOpen] = useState(false)
+  const [statsPlayer, setStatsPlayer] = useState(null)
+  const [statEntryOpen, setStatEntryOpen] = useState(null)
 
   useEffect(() => {
     supabase.from('teams').select('id,name,sport,is_active,season_id,foys_match_text,seasons(is_active)').eq('is_active', true).then(({data}) => {
@@ -718,6 +770,7 @@ function CoachDashboard({ session, profile, teams, trainingEvents = [], calendar
       <button onClick={()=>{setEditingCoachEvent(null);setTrainingEditorOpen(true)}}><span><Icon name="calendar"/></span><strong>Training toevoegen</strong><small>Eenmalig of herhalend</small></button>
       <button onClick={()=>setMessageOpen(true)}><span><Icon name="bell"/></span><strong>Teambericht</strong><small>Ook als pushmelding</small></button>
       <button onClick={()=>setRequestOpen(true)}><span><Icon name="people"/></span><strong>Invaller aanvragen</strong><small>Verzoek aan coach van ander team</small></button>
+      <button onClick={()=>setCoachStatsOpen(true)}><span><Icon name="stats"/></span><strong>Team stats</strong><small>Team & persoonlijke cijfers</small></button>
     </div>
 
     <SectionTitle title="Komend" />
@@ -754,8 +807,70 @@ function CoachDashboard({ session, profile, teams, trainingEvents = [], calendar
     {requestDetail && <PlayerRequestDetailModal request={requestDetail} selectedTeam={selectedTeam} allTeams={allTeams} profiles={profiles} candidates={playerCandidates.filter(c=>c.request_id===requestDetail.id)} onConfirm={confirmCandidate} onNominate={()=>{setNominateRequest(requestDetail);setRequestDetail(null)}} onClose={()=>setRequestDetail(null)} />}
     {detailEvent?.type === 'training' && <TrainingDetailModal event={detailEvent} current={ownAttendance[String(detailEvent.id)]} onAttendance={onAttendance} busy={attendanceBusy} canManage={true} onEdit={()=>{setEditingCoachEvent(detailEvent);setDetailEvent(null);setTrainingEditorOpen(true)}} onManageAttendance={()=>setFinalizeSession(detailEvent)} onClose={()=>setDetailEvent(null)} attendance={attendance.filter(row=>String(row.event_id)===String(detailEvent.id))} profiles={profiles} memberships={memberships} />}
     {detailEvent && detailEvent.type !== 'training' && <ActivityDetailModal event={detailEvent} profile={profile} teams={[selectedTeam]} profiles={profiles} memberships={memberships} clubLocations={clubLocations} transportEvent={findTransportEvent(detailEvent, transportEvents)} transportResponses={transportResponses} onChanged={onRefresh} onManageAttendance={()=>setFinalizeSession(detailEvent)} onClose={()=>setDetailEvent(null)} />}
+    {coachStatsOpen && <CoachStatsModal team={selectedTeam} players={teamPlayers} attendance={attendance} gameAttendance={gameAttendance} trainingEvents={teamTrainingEvents} calendarEvents={teamGames} gameStats={gameStats} measurements={measurements} onPlayer={person=>setStatsPlayer(person)} onAddGame={()=>setStatEntryOpen('game')} onAddMeasurement={()=>setStatEntryOpen('measurement')} onClose={()=>setCoachStatsOpen(false)} />}
+    {statsPlayer && <PlayerStatsModal person={statsPlayer} team={selectedTeam} attendance={attendance} gameAttendance={gameAttendance} trainingEvents={teamTrainingEvents} calendarEvents={teamGames} gameStats={gameStats} measurements={measurements} onClose={()=>setStatsPlayer(null)} />}
+    {statEntryOpen && <CoachStatEntryModal mode={statEntryOpen} team={selectedTeam} players={teamPlayers} onClose={()=>setStatEntryOpen(null)} onSaved={async()=>{setStatEntryOpen(null);await onRefresh()}} />}
     {coachPlayerProfile && <PlayerProfileModal person={coachPlayerProfile} team={selectedTeam} viewerProfile={profile} viewerMembership={{member_role:'coach'}} attendance={attendance} gameAttendance={gameAttendance} trainingEvents={trainingEvents} calendarEvents={calendarEvents} memberships={memberships} onClose={()=>setCoachPlayerProfile(null)} />}
   </section>
+}
+
+
+function coreStatsForPlayer(personId, team, attendance=[], gameAttendance=[], trainingEvents=[], calendarEvents=[], gameStats=[], measurements=[]) {
+  const games=gameStats.filter(r=>r.profile_id===personId && (!team || Number(r.team_id)===Number(team.id)))
+  const sums=games.reduce((a,r)=>{['ab','h','rbi','bb','hbp','sf','tb','sb'].forEach(k=>a[k]=(a[k]||0)+Number(r[k]||0));return a},{})
+  const avg=sums.ab?sums.h/sums.ab:null
+  const den=(sums.ab||0)+(sums.bb||0)+(sums.hbp||0)+(sums.sf||0)
+  const obp=den?((sums.h||0)+(sums.bb||0)+(sums.hbp||0))/den:null
+  const slg=sums.ab?(sums.tb||0)/sums.ab:null
+  const ops=obp!=null&&slg!=null?obp+slg:null
+  const own=measurements.filter(r=>r.profile_id===personId && (!team || Number(r.team_id)===Number(team.id)))
+  const latest=type=>[...own].filter(r=>r.metric_type===type).sort((a,b)=>new Date(b.measured_at)-new Date(a.measured_at))[0]
+  const att=attendanceStatsForPerson(personId,team,attendance,gameAttendance,trainingEvents,calendarEvents)
+  return {avg,ops,h:sums.h||0,rbi:sums.rbi||0,sb:sums.sb||0,exit:latest('exit_velocity'),home1:latest('home_to_first'),attendance:att}
+}
+function statRate(v){return v==null?'—':Number(v).toFixed(3).replace(/^0/,'')}
+function CoachStatsModal({team,players=[],attendance=[],gameAttendance=[],trainingEvents=[],calendarEvents=[],gameStats=[],measurements=[],onPlayer,onAddGame,onAddMeasurement,onClose}){
+  const rows=players.map(person=>({person,stats:coreStatsForPlayer(person.id,team,attendance,gameAttendance,trainingEvents,calendarEvents,gameStats,measurements)}))
+  const teamGames=gameStats.filter(r=>Number(r.team_id)===Number(team?.id))
+  const sum=teamGames.reduce((a,r)=>{['ab','h','rbi','bb','hbp','sf','tb','sb'].forEach(k=>a[k]=(a[k]||0)+Number(r[k]||0));return a},{})
+  const avg=sum.ab?sum.h/sum.ab:null, den=(sum.ab||0)+(sum.bb||0)+(sum.hbp||0)+(sum.sf||0), obp=den?((sum.h||0)+(sum.bb||0)+(sum.hbp||0))/den:null, slg=sum.ab?(sum.tb||0)/sum.ab:null, ops=obp!=null&&slg!=null?obp+slg:null
+  const ev=rows.map(r=>Number(r.stats.exit?.value)).filter(Number.isFinite), h1=rows.map(r=>Number(r.stats.home1?.value)).filter(Number.isFinite), atts=rows.map(r=>r.stats.attendance.percentage).filter(v=>v!=null)
+  const cards=[['AVG',statRate(avg)],['OPS',statRate(ops)],['Hits',sum.h||0],['RBI',sum.rbi||0],['SB',sum.sb||0],['Exit velo',ev.length?`${Math.round(ev.reduce((a,b)=>a+b,0)/ev.length)} km/u`:'—'],['Home → 1',h1.length?`${(h1.reduce((a,b)=>a+b,0)/h1.length).toFixed(2).replace('.',',')} s`:'—'],['Aanwezig',atts.length?`${Math.round(atts.reduce((a,b)=>a+b,0)/atts.length)}%`:'—']]
+  return <SettingsModal title={`${team?.name||'Team'} stats`} onClose={onClose}><div className="coach-stats-modal">
+    <div className="coach-stats-actions"><button className="primary" onClick={onAddGame}>+ Wedstrijd</button><button className="secondary orange-outline" onClick={onAddMeasurement}>+ Meting</button></div>
+    <p className="eyebrow orange">TEAMSTATISTIEKEN</p><div className="coach-team-stat-grid">{cards.map(([l,v])=><div key={l}><span>{l}</span><strong>{v}</strong></div>)}</div>
+    <div className="coach-stats-player-head"><strong>Persoonlijke stats</strong><small>Tik op een speelster</small></div>
+    <div className="coach-stats-players">{rows.map(({person,stats})=><button key={person.id} onClick={()=>onPlayer(person)}><span className="coach-stats-person"><ProfileAvatar person={person} size="small"/><span><strong>{teamDisplayName(person)}</strong><small>{person.jersey_number?`#${person.jersey_number} · `:''}${person.primary_position||'Geen positie'}</small></span></span><span className="coach-stats-mini"><strong>{statRate(stats.avg)}</strong><small>AVG</small></span><span className="coach-stats-mini"><strong>{stats.attendance.percentage==null?'—':`${stats.attendance.percentage}%`}</strong><small>Aanw.</small></span><Icon name="chevron"/></button>)}</div>
+  </div></SettingsModal>
+}
+function PlayerStatsModal({person,team,attendance=[],gameAttendance=[],trainingEvents=[],calendarEvents=[],gameStats=[],measurements=[],onClose}){
+  const s=coreStatsForPlayer(person.id,team,attendance,gameAttendance,trainingEvents,calendarEvents,gameStats,measurements)
+  const cards=[['AVG',statRate(s.avg)],['OPS',statRate(s.ops)],['Hits',s.h],['RBI',s.rbi],['SB',s.sb],['Exit velocity',s.exit?`${Number(s.exit.value).toFixed(0)} km/u`:'—'],['Home → 1',s.home1?`${Number(s.home1.value).toFixed(2).replace('.',',')} sec`:'—'],['Aanwezigheid',s.attendance.percentage==null?'—':`${s.attendance.percentage}%`]]
+  return <SettingsModal title="Persoonlijke stats" onClose={onClose}><div className="player-stats-coach"><div className="stats-player-strip"><ProfileAvatar person={person} size="small"/><div><strong>{personName(person)}</strong><span>{team?.name}{person.jersey_number?` · #${person.jersey_number}`:''}</span></div></div><div className="stats-eight-grid">{cards.map(([l,v])=><article className="stats-metric-card" key={l}><span>{l}</span><strong>{v}</strong></article>)}</div></div></SettingsModal>
+}
+function CoachStatEntryModal({mode,team,players=[],onClose,onSaved}){
+  const [busy,setBusy]=useState(false),[feedback,setFeedback]=useState('')
+  const [playerId,setPlayerId]=useState(players[0]?.id||'')
+  const [game,setGame]=useState({date:new Date().toISOString().slice(0,10),opponent:'',ab:'',h:'',rbi:'',bb:'',hbp:'',sf:'',tb:'',sb:''})
+  const [metric,setMetric]=useState({type:'exit_velocity',value:'',date:new Date().toISOString().slice(0,10)})
+  async function save(){
+    if(!playerId)return setFeedback('Kies een speelster.')
+    setBusy(true);setFeedback('')
+    try{
+      if(mode==='game'){
+        if(!game.date||!game.opponent.trim())throw new Error('Vul datum en tegenstander in.')
+        const key=`manual-${team.id}-${game.date}-${game.opponent.trim().toLowerCase().replace(/\s+/g,'-')}`
+        const payload={profile_id:playerId,team_id:Number(team.id),game_key:key,game_date:game.date,opponent:game.opponent.trim(),source:'manual'}
+        ;['ab','h','rbi','bb','hbp','sf','tb','sb'].forEach(k=>payload[k]=Number(game[k]||0))
+        const {error}=await supabase.from('player_game_stats').upsert(payload,{onConflict:'profile_id,game_key'});if(error)throw error
+      }else{
+        if(!metric.value)throw new Error('Vul een meting in.')
+        const {error}=await supabase.from('player_measurements').insert({profile_id:playerId,team_id:Number(team.id),metric_type:metric.type,value:Number(String(metric.value).replace(',','.')),unit:metric.type==='exit_velocity'?'km/u':'sec',measured_at:`${metric.date}T12:00:00`});if(error)throw error
+      }
+      await onSaved()
+    }catch(e){setFeedback(`Opslaan mislukt: ${e.message}`)}finally{setBusy(false)}
+  }
+  return <SettingsModal title={mode==='game'?'Wedstrijdstats invoeren':'Meting toevoegen'} onClose={onClose}><div className="form-stack coach-stat-entry"><label>Speelster<select value={playerId} onChange={e=>setPlayerId(e.target.value)}>{players.map(p=><option key={p.id} value={p.id}>{personName(p)}{p.jersey_number?` (#${p.jersey_number})`:''}</option>)}</select></label>{mode==='game'?<><label>Datum<input type="date" value={game.date} onChange={e=>setGame({...game,date:e.target.value})}/></label><label>Tegenstander<input value={game.opponent} onChange={e=>setGame({...game,opponent:e.target.value})}/></label><div className="stat-entry-grid">{['ab','h','rbi','bb','hbp','sf','tb','sb'].map(k=><label key={k}>{k.toUpperCase()}<input type="number" min="0" value={game[k]} onChange={e=>setGame({...game,[k]:e.target.value})}/></label>)}</div></>:<><label>Type<select value={metric.type} onChange={e=>setMetric({...metric,type:e.target.value})}><option value="exit_velocity">Exit velocity</option><option value="home_to_first">Home → 1</option></select></label><label>Waarde<input inputMode="decimal" value={metric.value} onChange={e=>setMetric({...metric,value:e.target.value})} placeholder={metric.type==='exit_velocity'?'92':'3,21'}/></label><label>Datum<input type="date" value={metric.date} onChange={e=>setMetric({...metric,date:e.target.value})}/></label></>}{feedback&&<div className="push-feedback">{feedback}</div>}<button className="primary" disabled={busy} onClick={save}>{busy?'Opslaan…':'Opslaan'}</button></div></SettingsModal>
 }
 
 function PlayerRequestDetailModal({ request, selectedTeam, allTeams = [], profiles = [], candidates = [], onConfirm, onNominate, onClose }) {
@@ -1108,6 +1223,7 @@ function AdminPanel({ session, onMessage, onChanged }) {
   const [teams, setTeams] = useState([])
   const [profiles, setProfiles] = useState([])
   const [memberships, setMemberships] = useState([])
+  const [adminPushSubscriptions, setAdminPushSubscriptions] = useState([])
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
   const [showSeasonForm, setShowSeasonForm] = useState(false)
@@ -1137,12 +1253,13 @@ function AdminPanel({ session, onMessage, onChanged }) {
 
   async function loadAdminData() {
     setLoading(true)
-    const [seasonResult, teamResult, profileResult, memberResult, locationResult] = await Promise.all([
+    const [seasonResult, teamResult, profileResult, memberResult, locationResult, pushResult] = await Promise.all([
       supabase.from('seasons').select('*').order('starts_on', { ascending: false }),
       supabase.from('teams').select('id,name,sport,is_active,season_id,foys_match_text,seasons(name,is_active)').order('name'),
       supabase.from('profiles').select('id,first_name,last_name,jersey_number,role,avatar_url,primary_position,secondary_positions,throws_hand,bats_side,is_placeholder').order('first_name'),
       supabase.from('team_members').select('id,team_id,profile_id,member_role'),
-      supabase.from('club_locations').select('*').order('name')
+      supabase.from('club_locations').select('*').order('name'),
+      supabase.from('push_subscriptions').select('profile_id,enabled').eq('enabled', true)
     ])
     if (seasonResult.error) onMessage(`Seizoenen laden mislukt: ${seasonResult.error.message}`)
     else {
@@ -1161,6 +1278,8 @@ function AdminPanel({ session, onMessage, onChanged }) {
     else setMemberships(memberResult.data ?? [])
     if (locationResult.error) onMessage(`Locaties laden mislukt: ${locationResult.error.message}`)
     else setLocations(locationResult.data ?? [])
+    if (pushResult.error) onMessage(`Pushstatus laden mislukt: ${pushResult.error.message}`)
+    else setAdminPushSubscriptions(pushResult.data ?? [])
     setLoading(false)
   }
 
@@ -1419,6 +1538,7 @@ function AdminPanel({ session, onMessage, onChanged }) {
   const selectedTeam = teams.find(team => String(team.id) === String(selectedTeamId))
   const currentMemberships = memberships.filter(row => String(row.team_id) === String(selectedTeamId))
   const currentProfileIds = new Set(currentMemberships.map(row => row.profile_id))
+  const adminPushEnabledIds = new Set(adminPushSubscriptions.filter(row => row.enabled !== false).map(row => row.profile_id))
   const search = memberSearch.trim().toLowerCase()
   const availableProfiles = profiles.filter(profile => {
     if (currentProfileIds.has(profile.id)) return false
@@ -1551,7 +1671,7 @@ function AdminPanel({ session, onMessage, onChanged }) {
                           const person = profiles.find(profile => profile.id === membership.profile_id)
                           return <article className="member-row" key={membership.id}>
                             <span className="member-avatar">{initials(person)}</span>
-                            <div className="member-copy"><strong>{personName(person)}</strong><small>{person?.jersey_number ? `#${person.jersey_number} · ` : ''}{person?.is_placeholder ? 'Nog geen Mijn OG-account' : person?.role === 'admin' ? 'Clubbeheerder' : 'Mijn OG-lid'}</small>{person?.is_placeholder && <button type="button" className="link-account-inline" onClick={()=>{setLinkPlayer(person);setLinkEmail('');setLinkFeedback('')}}>Account koppelen</button>}</div>
+                            <div className="member-copy"><strong>{personName(person)}</strong><small>{person?.jersey_number ? `#${person.jersey_number} · ` : ''}{person?.is_placeholder ? 'Nog geen Mijn OG-account' : person?.role === 'admin' ? 'Clubbeheerder' : 'Mijn OG-lid'}</small>{membership.member_role==='coach' && <span className={`admin-coach-push ${adminPushEnabledIds.has(person?.id)?'active':'inactive'}`}>{adminPushEnabledIds.has(person?.id)?'Meldingen actief':'Meldingen nog niet ingeschakeld'}</span>}{person?.is_placeholder && <button type="button" className="link-account-inline" onClick={()=>{setLinkPlayer(person);setLinkEmail('');setLinkFeedback('')}}>Account koppelen</button>}</div>
                             <select aria-label={`Teamrol van ${personName(person)}`} value={membership.member_role} onChange={e => changeMemberRole(membership.id, e.target.value)} disabled={busy}><option value="player">Speler</option><option value="coach">Coach</option><option value="staff">Staff</option></select>
                             <button className="remove-member" onClick={() => removeMember(membership)} disabled={busy} aria-label={`${personName(person)} verwijderen`}><Icon name="trash" /></button>
                           </article>
@@ -1715,7 +1835,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
         <SettingsRow icon="lock" title="Wachtwoord" subtitle="Wachtwoord wijzigen via resetmail" onClick={() => setSettingsView('password')} />
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.9.0" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.9.2" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -1754,7 +1874,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 2.9.0</h3>
+        <h3>Versie 2.9.2</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS agenda</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>

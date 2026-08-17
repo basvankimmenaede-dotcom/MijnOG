@@ -1781,3 +1781,90 @@ input:focus, textarea:focus, select:focus {
 .stats-source-note{margin-top:14px;padding:16px 18px;border-radius:18px;background:#fff8f0;border:1px solid #f2dfcc}
 .stats-source-note p{margin:5px 0 0;color:var(--muted,#77736f);font-size:13px;line-height:1.5}
 @media(min-width:760px){.stats-eight-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.stats-metric-card{min-height:140px}}
+
+/* v2.9.1 - Coach Stats */
+.coach-stats-modal{display:flex;flex-direction:column;gap:16px}
+.coach-stats-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.coach-team-stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.coach-team-stat-grid>div{padding:12px 6px;border-radius:14px;background:#fff8f0;text-align:center}
+.coach-team-stat-grid span{display:block;font-size:10px;color:var(--muted,#77736f);font-weight:800}
+.coach-team-stat-grid strong{display:block;margin-top:4px;font-size:18px;color:var(--og-orange,#f36f21)}
+.coach-stats-player-head{display:flex;align-items:center;justify-content:space-between;margin-top:4px}
+.coach-stats-player-head small{color:var(--muted,#77736f)}
+.coach-stats-players{display:flex;flex-direction:column;gap:8px}
+.coach-stats-players>button{display:grid;grid-template-columns:minmax(0,1fr) 54px 58px 18px;align-items:center;gap:8px;width:100%;padding:10px;border:1px solid var(--line,#e8e2dc);border-radius:15px;background:#fff;text-align:left}
+.coach-stats-person{display:flex;align-items:center;gap:9px;min-width:0}
+.coach-stats-person>span{display:flex;flex-direction:column;min-width:0}
+.coach-stats-person small{color:var(--muted,#77736f)}
+.coach-stats-mini{text-align:center}
+.coach-stats-mini strong,.coach-stats-mini small{display:block}
+.coach-stats-mini small{font-size:9px;color:var(--muted,#77736f)}
+.stat-entry-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.stat-entry-grid label{font-size:11px}
+.stat-entry-grid input{min-width:0}
+@media(max-width:560px){.coach-team-stat-grid{grid-template-columns:repeat(2,1fr)}.stat-entry-grid{grid-template-columns:repeat(2,1fr)}}
+
+/* v2.9.1.1 - teamprofielen echt horizontaal centreren */
+.team-people-grid,
+.team-people-grid.odd-count {
+  display:flex !important;
+  flex-wrap:wrap;
+  justify-content:center !important;
+  align-items:flex-start;
+  gap:18px 14px;
+}
+.team-people-grid > .team-person,
+.team-people-grid.odd-count > .team-person,
+.team-people-grid.odd-count > .team-person:last-child {
+  flex:0 0 142px;
+  width:142px !important;
+  max-width:142px;
+  grid-column:auto !important;
+  justify-self:auto !important;
+  margin:0 !important;
+}
+@media(max-width:420px){
+  .team-people-grid,
+  .team-people-grid.odd-count {
+    gap:16px 10px;
+  }
+  .team-people-grid > .team-person,
+  .team-people-grid.odd-count > .team-person,
+  .team-people-grid.odd-count > .team-person:last-child {
+    flex-basis:calc(50% - 8px);
+    width:calc(50% - 8px) !important;
+    max-width:142px;
+  }
+}
+
+/* v2.9.1.1 - pushstatus coaches in Clubbeheer */
+.admin-coach-push{
+  display:inline-flex;
+  width:max-content;
+  max-width:100%;
+  margin-top:5px;
+  padding:5px 8px;
+  border-radius:999px;
+  font-size:10px;
+  font-weight:800;
+  line-height:1.2;
+}
+.admin-coach-push.active{
+  background:#fff2e7;
+  color:#b85b12;
+}
+.admin-coach-push.inactive{
+  background:#f3f0ed;
+  color:#77736f;
+}
+
+/* v2.9.2 - gespeeld wedstrijdarchief */
+.agenda-time-tabs{display:grid;grid-template-columns:1fr 1fr;gap:5px;padding:4px;margin:4px 0 16px;border-radius:14px;background:#f2efec}
+.agenda-time-tabs button{border:0;background:transparent;padding:10px;border-radius:11px;font-weight:800;color:var(--muted,#77736f)}
+.agenda-time-tabs button.active{background:#fff;color:var(--og-orange,#f36f21);box-shadow:0 1px 4px rgba(0,0,0,.07)}
+.played-game-block{padding:17px;border-radius:18px;background:#fff8f0;border:1px solid #f2dfcc}
+.played-game-block h3{margin:6px 0}.played-game-block>p{line-height:1.5}.played-score{font-size:30px;font-weight:900;color:var(--og-orange,#f36f21);margin:4px 0}
+.played-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:14px}
+.own-game-stat{display:flex;justify-content:space-between;gap:12px;padding:11px 12px;margin-top:12px;border-radius:12px;background:#fff}
+.game-stats-entry{display:flex;flex-direction:column;gap:14px}.game-stat-player{padding:14px;border:1px solid var(--line,#e8e2dc);border-radius:15px}.game-stat-player>strong{display:block;margin-bottom:10px}
+@media(max-width:480px){.played-actions{grid-template-columns:1fr}}
