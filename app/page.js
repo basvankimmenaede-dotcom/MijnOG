@@ -1044,8 +1044,15 @@ function TeamModal({ team, currentProfile, currentMembership, members, busy, onT
 }
 
 function TeamPeopleSection({ title, rows, admin, busy, onAvatar, onPerson, canOpenPerson }) {
-  return <section className="team-people-section"><div className="team-people-heading"><h3>{title}</h3><span>{rows.length}</span></div>
-    {rows.length ? <div className="team-people-grid">{rows.map(row => { const openable=onPerson && canOpenPerson?.(row.person); return <article className={`team-person ${openable?'profile-openable':''}`} key={row.id} onClick={()=>openable&&onPerson(row.person)} role={openable?'button':undefined} tabIndex={openable?0:undefined} onKeyDown={e=>{if(openable&&(e.key==='Enter'||e.key===' ')){e.preventDefault();onPerson(row.person)}}}>
+  const displayRows = title === 'Spelers' ? [...rows].sort((a,b) => {
+    const an = Number.parseInt(a.person?.jersey_number,10)
+    const bn = Number.parseInt(b.person?.jersey_number,10)
+    const av = Number.isFinite(an) ? an : Number.MAX_SAFE_INTEGER
+    const bv = Number.isFinite(bn) ? bn : Number.MAX_SAFE_INTEGER
+    return av - bv || personName(a.person).localeCompare(personName(b.person),'nl')
+  }) : rows
+  return <section className="team-people-section"><div className="team-people-heading"><h3>{title}</h3><span>{displayRows.length}</span></div>
+    {displayRows.length ? <div className={`team-people-grid ${displayRows.length % 2 === 1 ? 'odd-count' : ''}`}>{displayRows.map(row => { const openable=onPerson && canOpenPerson?.(row.person); return <article className={`team-person ${openable?'profile-openable':''}`} key={row.id} onClick={()=>openable&&onPerson(row.person)} role={openable?'button':undefined} tabIndex={openable?0:undefined} onKeyDown={e=>{if(openable&&(e.key==='Enter'||e.key===' ')){e.preventDefault();onPerson(row.person)}}}>
       <div className="team-person-avatar-wrap"><ProfileAvatar person={row.person} size="large" />{admin && <label className="avatar-admin-edit" title="Profielfoto aanpassen" onClick={e=>e.stopPropagation()}><Icon name="edit" /><input type="file" accept="image/*" disabled={busy} onChange={e => { const file=e.target.files?.[0]; if(file) onAvatar(row.person,file); e.target.value='' }} /></label>}</div>
       <strong>{row.member_role==='player' ? teamDisplayName(row.person) : personName(row.person)}</strong>
       <small>{row.member_role==='player' ? teamPlayerMeta(row.person) : translateRole(row.member_role)}</small>
@@ -1668,7 +1675,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
         <SettingsRow icon="lock" title="Wachtwoord" subtitle="Wachtwoord wijzigen via resetmail" onClick={() => setSettingsView('password')} />
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.8.5.3" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.8.5.4" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -1707,7 +1714,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 2.8.5.3</h3>
+        <h3>Versie 2.8.5.4</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS agenda</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>

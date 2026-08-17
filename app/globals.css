@@ -1716,3 +1716,33 @@ input:focus, textarea:focus, select:focus {
   }
   .team-person{max-width:140px}
 }
+
+/* v2.8.5.4 - rugnummer volgorde + gecentreerde laatste speler */
+.team-people-grid{
+  grid-template-columns:repeat(2,minmax(120px,150px));
+  justify-content:center;
+}
+.team-people-grid.odd-count>.team-person:last-child{
+  grid-column:1 / -1;
+  justify-self:center;
+  width:150px;
+}
+@media(min-width:700px){
+  .team-people-grid{
+    grid-template-columns:repeat(4,minmax(120px,150px));
+  }
+  .team-people-grid.odd-count>.team-person:last-child{
+    grid-column:auto;
+    width:100%;
+  }
+}
+@media(max-width:420px){
+  .team-people-grid{
+    grid-template-columns:repeat(2,minmax(0,140px));
+  }
+  .team-people-grid.odd-count>.team-person:last-child{
+    grid-column:1 / -1;
+    justify-self:center;
+    width:140px;
+  }
+}
