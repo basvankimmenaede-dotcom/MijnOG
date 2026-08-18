@@ -999,42 +999,86 @@ function NominatePlayersModal({ session, request, team, profiles, memberships, o
   return <SettingsModal title="Speelsters voordragen" onClose={onClose}><div className="form-stack"><p className="settings-modal-intro"><strong>{request.position}</strong> gevraagd voor {request.event_title}. Selecteer alleen speelsters die volgens jou geschikt zijn.</p><label>Zoeken<input type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Naam, positie of slagzijde"/></label><div className="candidate-select-list">{candidates.map(p=>{const checked=selected.includes(p.id);return <button type="button" key={p.id} className={checked?'selected':''} onClick={()=>setSelected(checked?selected.filter(id=>id!==p.id):[...selected,p.id])}><ProfileAvatar person={p} size="small"/><span><strong>{personName(p)}{p.jersey_number?` · #${p.jersey_number}`:''}</strong><small>{playerSportLine(p)}</small></span><span className="candidate-check">{checked?'✓':'+'}</span></button>})}</div>{feedback&&<div className="push-feedback" role="status">{feedback}</div>}<button className="primary" disabled={busy} onClick={submit}>{busy?'Voordragen…':`Draag ${selected.length||''} speelster${selected.length===1?'':'s'} voor`}</button></div></SettingsModal>
 }
 
-function Stats({ profile, teams = [], attendance = [], gameAttendance = [], trainingEvents = [], calendarEvents = [], gameStats = [], measurements = [] }) {
-  const ownGames=gameStats.filter(row=>row.profile_id===profile?.id)
-  const ownMeasurements=measurements.filter(row=>row.profile_id===profile?.id)
-  const sums=ownGames.reduce((acc,row)=>{
-    ;['ab','h','rbi','bb','hbp','sf','tb','sb'].forEach(k=>acc[k]=(acc[k]||0)+Number(row[k]||0))
-    return acc
-  },{})
-  const avg=sums.ab ? sums.h/sums.ab : null
-  const obpDen=(sums.ab||0)+(sums.bb||0)+(sums.hbp||0)+(sums.sf||0)
-  const obp=obpDen ? ((sums.h||0)+(sums.bb||0)+(sums.hbp||0))/obpDen : null
-  const slg=sums.ab ? (sums.tb||0)/sums.ab : null
-  const ops=obp!=null&&slg!=null ? obp+slg : null
-  const latestMetric=type=>[...ownMeasurements].filter(r=>r.metric_type===type).sort((a,b)=>new Date(b.measured_at)-new Date(a.measured_at))[0]
-  const exit=latestMetric('exit_velocity')
-  const home1=latestMetric('home_to_first')
-  const team=teams.find(t=>t.member_role==='player') || teams[0]
-  const att=attendanceStatsForPerson(profile?.id,team,attendance,gameAttendance,trainingEvents,calendarEvents)
-  const fmtRate=value=>value==null?'—':value.toFixed(3).replace(/^0/,'')
-  const cards=[
-    ['AVG',fmtRate(avg),'Slaggemiddelde'],
-    ['OPS',fmtRate(ops),'On-base + slugging'],
-    ['Hits',String(sums.h||0),'Totaal'],
-    ['RBI',String(sums.rbi||0),'Binnengeslagen punten'],
-    ['SB',String(sums.sb||0),'Gestolen honken'],
-    ['Exit velocity',exit?`${Number(exit.value).toFixed(0)} km/u`:'—','Laatste meting'],
-    ['Home → 1',home1?`${Number(home1.value).toFixed(2).replace('.',',')} sec`:'—','Laatste meting'],
-    ['Aanwezigheid',att.percentage==null?'—':`${att.percentage}%`,att.total?`${att.attended} / ${att.total} sessies`:'Nog geen registraties']
-  ]
-  return <section className="stats-page">
-    <ScreenHeader title="Mijn stats" />
-    <div className="stats-player-strip"><ProfileAvatar person={profile} size="small"/><div><strong>{personName(profile)}</strong><span>{team?.name || 'Mijn OG'}{profile?.jersey_number?` · #${profile.jersey_number}`:''}</span></div><span className="stats-season">Seizoen 2026</span></div>
-    <div className="stats-eight-grid">{cards.map(([label,value,sub])=><article className="stats-metric-card" key={label}><span>{label}</span><strong>{value}</strong><small>{sub}</small></article>)}</div>
-    <div className="stats-source-note"><strong>8 kernstats</strong><p>Wedstrijdstats komen uit iScore of handmatige wedstrijdinvoer. Exit velocity en Home → 1 komen uit losse metingen. Aanwezigheid wordt automatisch uit Mijn OG gehaald.</p></div>
-  </section>
+function StatsSparkline({ values = [], lowerIsBetter = false }) {
+  const clean=values.map(Number).filter(Number.isFinite)
+  if(clean.length<2) return <div className="stats-sparkline-empty">Nog te weinig data voor een trend</div>
+  const w=180,h=46,p=4,min=Math.min(...clean),max=Math.max(...clean),range=max-min||1
+  const pts=clean.map((v,idx)=>{
+    const x=p+(idx/(clean.length-1))*(w-p*2)
+    const y=h-p-((v-min)/range)*(h-p*2)
+    return `${x},${y}`
+  }).join(' ')
+  return <svg className="stats-sparkline" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" aria-hidden="true"><polyline points={pts}/>{clean.map((v,idx)=>{const x=p+(idx/(clean.length-1))*(w-p*2),y=h-p-((v-min)/range)*(h-p*2);return <circle key={idx} cx={x} cy={y} r="2.3"/>})}</svg>
 }
 
+function Stats({ profile, teams = [], attendance = [], gameAttendance = [], trainingEvents = [], calendarEvents = [], gameStats = [], measurements = [] }) {
+  const ownGames=gameStats.filter(row=>row.profile_id===profile?.id).sort((a,b)=>new Date(a.game_date)-new Date(b.game_date))
+  const ownMeasurements=measurements.filter(row=>row.profile_id===profile?.id).sort((a,b)=>new Date(a.measured_at)-new Date(b.measured_at))
+  const sums=ownGames.reduce((acc,row)=>{;['ab','h','rbi','bb','hbp','sf','tb','sb'].forEach(k=>acc[k]=(acc[k]||0)+Number(row[k]||0));return acc},{})
+  const calcRates=rows=>{
+    const x=rows.reduce((acc,row)=>{;['ab','h','rbi','bb','hbp','sf','tb','sb'].forEach(k=>acc[k]=(acc[k]||0)+Number(row[k]||0));return acc},{})
+    const avg=x.ab?x.h/x.ab:null
+    const den=(x.ab||0)+(x.bb||0)+(x.hbp||0)+(x.sf||0)
+    const obp=den?((x.h||0)+(x.bb||0)+(x.hbp||0))/den:null
+    const slg=x.ab?(x.tb||0)/x.ab:null
+    return {...x,avg,ops:obp!=null&&slg!=null?obp+slg:null}
+  }
+  const season=calcRates(ownGames)
+  const last5=calcRates(ownGames.slice(-5))
+  const rolling=ownGames.map((_,idx)=>calcRates(ownGames.slice(0,idx+1)))
+  const team=teams.find(t=>t.member_role==='player') || teams[0]
+  const att=attendanceStatsForPerson(profile?.id,team,attendance,gameAttendance,trainingEvents,calendarEvents)
+  const fmtRate=v=>v==null?'—':Number(v).toFixed(3).replace(/^0/,'')
+  const metricSeries=type=>ownMeasurements.filter(r=>r.metric_type===type)
+  const exitSeries=metricSeries('exit_velocity')
+  const home1Series=metricSeries('home_to_first')
+  const exitLatest=exitSeries.at(-1), home1Latest=home1Series.at(-1)
+  const exitBest=exitSeries.length?Math.max(...exitSeries.map(r=>Number(r.value))):null
+  const home1Best=home1Series.length?Math.min(...home1Series.map(r=>Number(r.value))):null
+  const trendText=(current,recent,label)=>{
+    if(current==null||recent==null) return 'Nog te weinig data'
+    if(label==='AVG'||label==='OPS') return `Laatste 5: ${fmtRate(recent)}`
+    return `Laatste 5: ${recent}`
+  }
+  const gameCards=[
+    {label:'AVG',value:fmtRate(season.avg),context:`${season.ab||0} AB`,recent:fmtRate(last5.avg),series:rolling.map(r=>r.avg).filter(v=>v!=null)},
+    {label:'OPS',value:fmtRate(season.ops),context:`${(season.ab||0)+(season.bb||0)+(season.hbp||0)+(season.sf||0)} PA`,recent:fmtRate(last5.ops),series:rolling.map(r=>r.ops).filter(v=>v!=null)},
+    {label:'Hits',value:String(season.h||0),context:`${season.ab||0} AB`,recent:String(last5.h||0),series:ownGames.map(r=>Number(r.h||0))},
+    {label:'RBI',value:String(season.rbi||0),context:`${ownGames.length} wedstrijden`,recent:String(last5.rbi||0),series:ownGames.map(r=>Number(r.rbi||0))},
+    {label:'SB',value:String(season.sb||0),context:'Gestolen honken',recent:String(last5.sb||0),series:ownGames.map(r=>Number(r.sb||0))}
+  ]
+  const recentGames=[...ownGames].reverse().slice(0,5)
+  return <section className="stats-page stats-growth-page">
+    <ScreenHeader title="Mijn stats" />
+    <div className="stats-growth-hero">
+      <div className="stats-growth-person"><ProfileAvatar person={profile} size="profile"/><div><h2>{personName(profile)}</h2><p>{team?.name || 'Mijn OG'}{profile?.primary_position?` · ${profile.primary_position}`:''}{profile?.jersey_number?` · #${profile.jersey_number}`:''}</p><span>Focus op je eigen ontwikkeling</span></div></div>
+      <div className="stats-attendance-summary"><span>Aanwezigheid</span><strong>{att.percentage==null?'—':`${att.percentage}%`}</strong><small>{att.total?`${att.attended} / ${att.total} sessies`:'Nog geen registraties'}</small><div className="stats-attendance-bar"><i style={{width:`${att.percentage||0}%`}}/></div></div>
+    </div>
+
+    <div className="stats-tabs-static"><span className="active">Overzicht</span><span>Wedstrijden</span><span>Trends</span></div>
+
+    <section className="stats-section">
+      <div className="stats-section-heading"><div><h3>Wedstrijdprestaties</h3><p>{season.ab?`Gebaseerd op ${season.ab} AB`:'Nog geen wedstrijdstats'}</p></div></div>
+      <div className="stats-game-grid">{gameCards.map(card=><article className="stats-game-card" key={card.label}><span>{card.label}</span><strong>{card.value}</strong><small>{card.context}</small><StatsSparkline values={card.series}/><em>{trendText(card.value,card.recent,card.label)}</em></article>)}</div>
+      <div className="stats-growth-message">Kleine stappen tellen. Vergelijk jezelf vooral met je eigen eerdere prestaties.</div>
+    </section>
+
+    <section className="stats-section">
+      <div className="stats-section-heading"><div><h3>Ontwikkeling</h3><p>Metingen door de tijd</p></div></div>
+      <div className="stats-development-grid">
+        <article className="stats-development-card"><span>Exit velocity</span><strong>{exitLatest?`${Number(exitLatest.value).toFixed(0)} km/u`:'—'}</strong><small>{exitBest!=null?`Beste: ${exitBest.toFixed(0)} km/u`:'Nog geen metingen'}</small><StatsSparkline values={exitSeries.map(r=>r.value)}/>{exitSeries.length>1&&<em>Vanaf eerste meting: {Number(exitLatest.value)-Number(exitSeries[0].value)>=0?'+':''}{(Number(exitLatest.value)-Number(exitSeries[0].value)).toFixed(0)} km/u</em>}</article>
+        <article className="stats-development-card"><span>Home → 1</span><strong>{home1Latest?`${Number(home1Latest.value).toFixed(2).replace('.',',')} sec`:'—'}</strong><small>{home1Best!=null?`Beste: ${home1Best.toFixed(2).replace('.',',')} sec`:'Nog geen metingen'}</small><StatsSparkline values={home1Series.map(r=>r.value)} lowerIsBetter/>{home1Series.length>1&&<em>Vanaf eerste meting: {(Number(home1Latest.value)-Number(home1Series[0].value)).toFixed(2).replace('.',',')} sec</em>}</article>
+      </div>
+    </section>
+
+    <section className="stats-section stats-recent-section">
+      <div className="stats-section-heading"><div><h3>Laatste wedstrijden</h3><p>Je eigen wedstrijdregels</p></div></div>
+      {recentGames.length?<div className="stats-recent-games">{recentGames.map(row=><article key={row.id||row.game_key}><span>{new Date(row.game_date).toLocaleDateString('nl-NL',{day:'numeric',month:'short'})}</span><div><strong>{row.opponent||'Wedstrijd'}</strong><small>{Number(row.h||0)} H · {Number(row.rbi||0)} RBI · {Number(row.sb||0)} SB</small></div></article>)}</div>:<p className="muted">Nog geen wedstrijdstats ingevoerd.</p>}
+    </section>
+
+    <div className="stats-focus-card"><strong>Focus op jouw groei</strong><p>Geen rankings en geen rode beoordelingen. Elke training en wedstrijd levert informatie op waarmee je jezelf kunt verbeteren.</p></div>
+  </section>
+}
 function attendanceStatsForPerson(personId, team, attendance = [], gameAttendance = [], trainingEvents = [], calendarEvents = []) {
   const finalStatuses = new Set(['present','absent','injured','late'])
   const trainingIds = new Set(
@@ -1835,7 +1879,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
         <SettingsRow icon="lock" title="Wachtwoord" subtitle="Wachtwoord wijzigen via resetmail" onClick={() => setSettingsView('password')} />
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.9.2" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.9.3" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -1874,7 +1918,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 2.9.2</h3>
+        <h3>Versie 2.9.3</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS agenda</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>
@@ -2129,16 +2173,31 @@ function TransportModal({ event, profile, teams, profiles, memberships, transpor
     return () => { cancelled = true }
   }, [config, inferredTeam?.id, key])
 
-  const eventResponses = responses.filter(row => row.event_key === key)
-  const summary = getTransportSummary(config, responses)
-  const teamId = config?.team_id || inferredTeam?.id
+  // Wedstrijden gebruiken de FOYS/team-match als bron van waarheid. Een oude
+  // transport_events.team_id mag nooit spelers van een ander team meenemen.
+  const matchedTeamIds = event.type === 'game' ? eventTeamMatches(event, teams) : []
+  const matchedTeam = matchedTeamIds.length === 1 ? teams.find(team => Number(team.id) === Number(matchedTeamIds[0])) : null
+  const teamId = matchedTeam?.id || config?.team_id || inferredTeam?.id
   const teamMemberships = teamId ? memberships.filter(row => String(row.team_id) === String(teamId)) : []
   const eligibleIds = new Set(teamMemberships.filter(row => row.member_role === 'player').map(row => row.profile_id))
+  const eventResponses = responses.filter(row => row.event_key === key && eligibleIds.has(row.profile_id))
+  const summary = getTransportSummary(config, eventResponses)
   const responseIds = new Set(eventResponses.map(row => row.profile_id))
   const noResponseIds = [...eligibleIds].filter(id => !responseIds.has(id))
 
+  useEffect(() => {
+    if (!config?.id || !matchedTeam?.id || Number(config.team_id) === Number(matchedTeam.id)) return
+    let cancelled = false
+    async function repairTransportTeam() {
+      const { data, error } = await supabase.from('transport_events').update({ team_id:Number(matchedTeam.id), updated_at:new Date().toISOString() }).eq('id',config.id).select('*').single()
+      if (!cancelled && !error && data) { setConfig(data); await onChanged?.() }
+    }
+    repairTransportTeam()
+    return () => { cancelled = true }
+  }, [config?.id, config?.team_id, matchedTeam?.id])
+
   async function saveResponse(nextMode=mode) {
-    if (!config || !nextMode) return
+    if (!config || !nextMode || !eligibleIds.has(profile.id)) return
     setBusy(true)
     const payload = { event_key:key, profile_id:profile.id, mode:nextMode, seats_available:nextMode === 'driver' ? Number(seats || 0) : 0, note:note.trim() || null, updated_at:new Date().toISOString() }
     const { error } = await supabase.from('transport_responses').upsert(payload, { onConflict:'event_key,profile_id' })
