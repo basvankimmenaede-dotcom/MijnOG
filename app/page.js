@@ -1038,7 +1038,7 @@ function Stats({ profile, teams = [], attendance = [], gameAttendance = [], trai
   const home1Best=home1Series.length?Math.min(...home1Series.map(r=>Number(r.value))):null
   const trendText=(current,recent,label)=>{
     if(current==null||recent==null) return 'Nog te weinig data'
-    if(label==='AVG'||label==='OPS') return `Laatste 5: ${fmtRate(recent)}`
+    if(label==='AVG'||label==='OPS') return `Laatste 5: ${recent==='—'||recent==null?'—':recent}`
     return `Laatste 5: ${recent}`
   }
   const gameCards=[
@@ -1096,7 +1096,11 @@ function attendanceStatsForPerson(personId, team, attendance = [], gameAttendanc
   const finalStatuses = new Set(['present','absent','injured','late'])
   const trainingIds = new Set(
     trainingEvents
-      .filter(ev => !team || (ev.teamIds || [ev.teamId]).map(Number).includes(Number(team.id)))
+      .filter(ev => {
+        if (!team) return true
+        const ids = ev.teamIds?.length ? ev.teamIds : (ev.teamId != null ? [ev.teamId] : [])
+        return ids.map(Number).includes(Number(team.id))
+      })
       .map(ev => String(ev.id))
   )
   const gameKeys = new Set(
@@ -1895,7 +1899,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
         <SettingsRow icon="lock" title="Wachtwoord" subtitle="Wachtwoord wijzigen via resetmail" onClick={() => setSettingsView('password')} />
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.9.4" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.9.4.2" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -1934,7 +1938,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 2.9.4</h3>
+        <h3>Versie 2.9.4.2</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS agenda</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>

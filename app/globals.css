@@ -1898,3 +1898,42 @@ input:focus, textarea:focus, select:focus {
 .player-profile-stats-card{padding:16px;border:1px solid #f0dfcf;border-radius:18px;background:#fffaf6}
 .player-profile-stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:12px}.player-profile-stats-grid>div{padding:10px 5px;border-radius:12px;background:#fff;text-align:center}.player-profile-stats-grid span{display:block;font-size:9px;color:var(--muted,#77736f);font-weight:800}.player-profile-stats-grid strong{display:block;margin-top:4px;font-size:16px;color:var(--og-orange,#f36f21)}
 @media(max-width:560px){.stats-game-history-values{grid-template-columns:repeat(3,1fr)}.stats-trend-grid{grid-template-columns:1fr}.player-profile-stats-grid{grid-template-columns:repeat(2,1fr)}}
+
+/* v2.9.4.2 - gelijke uitlijning wedstrijdstat-kaarten */
+.stats-game-grid{
+  align-items:stretch;
+}
+.stats-game-card{
+  display:grid;
+  grid-template-rows:22px 42px 34px 50px 34px;
+  align-items:start;
+  height:100%;
+  box-sizing:border-box;
+}
+.stats-game-card>span,
+.stats-game-card>strong,
+.stats-game-card>small,
+.stats-game-card>.stats-sparkline,
+.stats-game-card>.stats-sparkline-empty,
+.stats-game-card>em{
+  margin-top:0;
+  margin-bottom:0;
+}
+.stats-game-card>strong{
+  display:flex;
+  align-items:center;
+}
+.stats-game-card>small{
+  display:flex;
+  align-items:flex-start;
+  line-height:1.25;
+}
+.stats-game-card>.stats-sparkline,
+.stats-game-card>.stats-sparkline-empty{
+  align-self:center;
+}
+.stats-game-card>em{
+  display:flex;
+  align-items:flex-start;
+  line-height:1.25;
+}
