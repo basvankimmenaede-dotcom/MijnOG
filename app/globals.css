@@ -1886,3 +1886,15 @@ input:focus, textarea:focus, select:focus {
 .stats-recent-games{display:flex;flex-direction:column;gap:7px}.stats-recent-games article{display:grid;grid-template-columns:62px 1fr;gap:10px;padding:10px 12px;border-radius:13px;background:#faf7f3}.stats-recent-games article>span{font-size:12px;color:var(--muted,#77736f)}.stats-recent-games article div{display:flex;justify-content:space-between;gap:12px}.stats-recent-games small{color:var(--muted,#77736f)}
 .stats-focus-card{padding:16px 18px;border-radius:18px;background:#fff0df;border:1px solid #f1d6bb}.stats-focus-card p{margin:5px 0 0;color:#6f6257;line-height:1.45}
 @media(max-width:760px){.stats-growth-hero{grid-template-columns:1fr}.stats-game-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.stats-game-card:last-child{grid-column:1/-1}.stats-development-grid{grid-template-columns:1fr}.stats-recent-games article div{flex-direction:column;gap:2px}}
+
+/* v2.9.4 - werkende Stats tabs + stats vanuit Teams */
+.stats-tabs-static button{border:0;background:transparent;padding:9px 2px 11px;color:var(--muted,#77736f);font:inherit;font-weight:800;cursor:pointer}
+.stats-tabs-static button.active{color:var(--og-orange,#f36f21);border-bottom:2px solid currentColor}
+.stats-game-history{display:flex;flex-direction:column;gap:10px}
+.stats-game-history article{padding:14px;border:1px solid #eee5dd;border-radius:15px;background:#fdfbf8}
+.stats-game-history-head{display:flex;justify-content:space-between;gap:12px;margin-bottom:10px}.stats-game-history-head span{font-size:12px;color:var(--muted,#77736f)}
+.stats-game-history-values{display:grid;grid-template-columns:repeat(5,1fr);gap:7px}.stats-game-history-values span{padding:8px 5px;border-radius:10px;background:#fff;text-align:center;font-size:10px;color:var(--muted,#77736f)}.stats-game-history-values b{display:block;font-size:16px;color:#1f1f1f}
+.stats-trend-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.stats-trend-grid article{padding:16px;border:1px solid #eee5dd;border-radius:16px;background:#fffaf6}.stats-trend-grid span{font-size:12px;font-weight:900}.stats-trend-grid strong{display:block;margin-top:4px;font-size:28px;color:var(--og-orange,#f36f21)}.stats-trend-grid small{color:var(--muted,#77736f)}
+.player-profile-stats-card{padding:16px;border:1px solid #f0dfcf;border-radius:18px;background:#fffaf6}
+.player-profile-stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:12px}.player-profile-stats-grid>div{padding:10px 5px;border-radius:12px;background:#fff;text-align:center}.player-profile-stats-grid span{display:block;font-size:9px;color:var(--muted,#77736f);font-weight:800}.player-profile-stats-grid strong{display:block;margin-top:4px;font-size:16px;color:var(--og-orange,#f36f21)}
+@media(max-width:560px){.stats-game-history-values{grid-template-columns:repeat(3,1fr)}.stats-trend-grid{grid-template-columns:1fr}.player-profile-stats-grid{grid-template-columns:repeat(2,1fr)}}

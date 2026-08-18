@@ -193,7 +193,7 @@ export default function HomePage() {
         {activeTab === 'Agenda' && <Agenda events={allEvents} connection={calendarConnection} gameHighlights={gameHighlights} gameStats={playerGameStats} transportEvents={transportEvents} transportResponses={transportResponses} clubLocations={clubLocations} state={calendarState} profile={profile} teams={teams} attendance={attendance} visibleProfiles={visibleProfiles} memberships={allMemberships} ownAttendance={ownAttendance} onAttendance={setAttendanceStatus} attendanceBusy={attendanceBusy} onRefresh={refreshAppData} onGoMore={() => navigate('Meer')} />}
         {activeTab === 'Stats' && <Stats profile={profile} teams={teams} attendance={attendance} gameAttendance={gameAttendance} trainingEvents={trainingEvents} calendarEvents={calendarEvents} gameStats={playerGameStats} measurements={playerMeasurements} />}
         {activeTab === 'Coach' && isCoachUser && <CoachDashboard session={session} profile={profile} teams={teams} gameStats={playerGameStats} measurements={playerMeasurements} trainingEvents={trainingEvents} calendarEvents={calendarEvents} attendance={attendance} gameAttendance={gameAttendance} profiles={visibleProfiles} memberships={allMemberships} messages={teamMessages} playerRequests={playerRequests} playerCandidates={playerRequestCandidates} pushSubscriptions={pushSubscriptions} ownAttendance={ownAttendance} onAttendance={setAttendanceStatus} attendanceBusy={attendanceBusy} clubLocations={clubLocations} transportEvents={transportEvents} transportResponses={transportResponses} onRefresh={refreshAppData} onMessage={setMessage} />}
-        {activeTab === 'Team' && <Team session={session} profile={profile} teams={teams} profiles={visibleProfiles} memberships={allMemberships} attendance={attendance} gameAttendance={gameAttendance} trainingEvents={trainingEvents} calendarEvents={calendarEvents} onSaved={refreshAppData} onMessage={setMessage} />}
+        {activeTab === 'Team' && <Team session={session} profile={profile} teams={teams} profiles={visibleProfiles} memberships={allMemberships} gameStats={playerGameStats} measurements={playerMeasurements} attendance={attendance} gameAttendance={gameAttendance} trainingEvents={trainingEvents} calendarEvents={calendarEvents} onSaved={refreshAppData} onMessage={setMessage} />}
         {activeTab === 'Meer' && <More session={session} profile={profile} teams={teams} calendar={calendarConnection} attendance={attendance} gameAttendance={gameAttendance} trainingEvents={trainingEvents} calendarEvents={calendarEvents} memberships={allMemberships} onSaved={refreshAppData} onMessage={setMessage} />}
       </section>
       <nav className="bottom-nav" aria-label="Hoofdnavigatie">{navTabs.map(tab => <button key={tab} className={activeTab === tab ? 'nav-item active' : 'nav-item'} onClick={() => navigate(tab)}><Icon name={iconNameForTab(tab)} /><small>{tab}</small></button>)}</nav>
@@ -1012,6 +1012,7 @@ function StatsSparkline({ values = [], lowerIsBetter = false }) {
 }
 
 function Stats({ profile, teams = [], attendance = [], gameAttendance = [], trainingEvents = [], calendarEvents = [], gameStats = [], measurements = [] }) {
+  const [statsView,setStatsView]=useState('overview')
   const ownGames=gameStats.filter(row=>row.profile_id===profile?.id).sort((a,b)=>new Date(a.game_date)-new Date(b.game_date))
   const ownMeasurements=measurements.filter(row=>row.profile_id===profile?.id).sort((a,b)=>new Date(a.measured_at)-new Date(b.measured_at))
   const sums=ownGames.reduce((acc,row)=>{;['ab','h','rbi','bb','hbp','sf','tb','sb'].forEach(k=>acc[k]=(acc[k]||0)+Number(row[k]||0));return acc},{})
@@ -1055,26 +1056,38 @@ function Stats({ profile, teams = [], attendance = [], gameAttendance = [], trai
       <div className="stats-attendance-summary"><span>Aanwezigheid</span><strong>{att.percentage==null?'—':`${att.percentage}%`}</strong><small>{att.total?`${att.attended} / ${att.total} sessies`:'Nog geen registraties'}</small><div className="stats-attendance-bar"><i style={{width:`${att.percentage||0}%`}}/></div></div>
     </div>
 
-    <div className="stats-tabs-static"><span className="active">Overzicht</span><span>Wedstrijden</span><span>Trends</span></div>
+    <div className="stats-tabs-static"><button className={statsView==='overview'?'active':''} onClick={()=>setStatsView('overview')}>Overzicht</button><button className={statsView==='games'?'active':''} onClick={()=>setStatsView('games')}>Wedstrijden</button><button className={statsView==='trends'?'active':''} onClick={()=>setStatsView('trends')}>Trends</button></div>
 
-    <section className="stats-section">
-      <div className="stats-section-heading"><div><h3>Wedstrijdprestaties</h3><p>{season.ab?`Gebaseerd op ${season.ab} AB`:'Nog geen wedstrijdstats'}</p></div></div>
-      <div className="stats-game-grid">{gameCards.map(card=><article className="stats-game-card" key={card.label}><span>{card.label}</span><strong>{card.value}</strong><small>{card.context}</small><StatsSparkline values={card.series}/><em>{trendText(card.value,card.recent,card.label)}</em></article>)}</div>
-      <div className="stats-growth-message">Kleine stappen tellen. Vergelijk jezelf vooral met je eigen eerdere prestaties.</div>
-    </section>
+    {statsView==='overview' && <>
+      <section className="stats-section">
+        <div className="stats-section-heading"><div><h3>Wedstrijdprestaties</h3><p>{season.ab?`Gebaseerd op ${season.ab} AB`:'Nog geen wedstrijdstats'}</p></div></div>
+        <div className="stats-game-grid">{gameCards.map(card=><article className="stats-game-card" key={card.label}><span>{card.label}</span><strong>{card.value}</strong><small>{card.context}</small><StatsSparkline values={card.series}/><em>{trendText(card.value,card.recent,card.label)}</em></article>)}</div>
+        <div className="stats-growth-message">Kleine stappen tellen. Vergelijk jezelf vooral met je eigen eerdere prestaties.</div>
+      </section>
+      <section className="stats-section">
+        <div className="stats-section-heading"><div><h3>Ontwikkeling</h3><p>Metingen door de tijd</p></div></div>
+        <div className="stats-development-grid">
+          <article className="stats-development-card"><span>Exit velocity</span><strong>{exitLatest?`${Number(exitLatest.value).toFixed(0)} km/u`:'—'}</strong><small>{exitBest!=null?`Beste: ${exitBest.toFixed(0)} km/u`:'Nog geen metingen'}</small><StatsSparkline values={exitSeries.map(r=>r.value)}/></article>
+          <article className="stats-development-card"><span>Home → 1</span><strong>{home1Latest?`${Number(home1Latest.value).toFixed(2).replace('.',',')} sec`:'—'}</strong><small>{home1Best!=null?`Beste: ${home1Best.toFixed(2).replace('.',',')} sec`:'Nog geen metingen'}</small><StatsSparkline values={home1Series.map(r=>r.value)}/></article>
+        </div>
+      </section>
+    </>}
 
-    <section className="stats-section">
-      <div className="stats-section-heading"><div><h3>Ontwikkeling</h3><p>Metingen door de tijd</p></div></div>
-      <div className="stats-development-grid">
-        <article className="stats-development-card"><span>Exit velocity</span><strong>{exitLatest?`${Number(exitLatest.value).toFixed(0)} km/u`:'—'}</strong><small>{exitBest!=null?`Beste: ${exitBest.toFixed(0)} km/u`:'Nog geen metingen'}</small><StatsSparkline values={exitSeries.map(r=>r.value)}/>{exitSeries.length>1&&<em>Vanaf eerste meting: {Number(exitLatest.value)-Number(exitSeries[0].value)>=0?'+':''}{(Number(exitLatest.value)-Number(exitSeries[0].value)).toFixed(0)} km/u</em>}</article>
-        <article className="stats-development-card"><span>Home → 1</span><strong>{home1Latest?`${Number(home1Latest.value).toFixed(2).replace('.',',')} sec`:'—'}</strong><small>{home1Best!=null?`Beste: ${home1Best.toFixed(2).replace('.',',')} sec`:'Nog geen metingen'}</small><StatsSparkline values={home1Series.map(r=>r.value)} lowerIsBetter/>{home1Series.length>1&&<em>Vanaf eerste meting: {(Number(home1Latest.value)-Number(home1Series[0].value)).toFixed(2).replace('.',',')} sec</em>}</article>
-      </div>
-    </section>
+    {statsView==='games' && <section className="stats-section">
+      <div className="stats-section-heading"><div><h3>Mijn wedstrijden</h3><p>Alle geregistreerde wedstrijdstats</p></div></div>
+      {ownGames.length?<div className="stats-game-history">{[...ownGames].reverse().map(row=><article key={row.id||row.game_key}><div className="stats-game-history-head"><span>{new Date(row.game_date).toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'})}</span><strong>{row.opponent||'Wedstrijd'}</strong></div><div className="stats-game-history-values"><span><b>{Number(row.ab||0)}</b> AB</span><span><b>{Number(row.h||0)}</b> H</span><span><b>{Number(row.rbi||0)}</b> RBI</span><span><b>{Number(row.sb||0)}</b> SB</span><span><b>{statRate(Number(row.ab)?Number(row.h||0)/Number(row.ab):null)}</b> AVG</span></div></article>)}</div>:<p className="muted">Nog geen wedstrijdstats ingevoerd.</p>}
+    </section>}
 
-    <section className="stats-section stats-recent-section">
-      <div className="stats-section-heading"><div><h3>Laatste wedstrijden</h3><p>Je eigen wedstrijdregels</p></div></div>
-      {recentGames.length?<div className="stats-recent-games">{recentGames.map(row=><article key={row.id||row.game_key}><span>{new Date(row.game_date).toLocaleDateString('nl-NL',{day:'numeric',month:'short'})}</span><div><strong>{row.opponent||'Wedstrijd'}</strong><small>{Number(row.h||0)} H · {Number(row.rbi||0)} RBI · {Number(row.sb||0)} SB</small></div></article>)}</div>:<p className="muted">Nog geen wedstrijdstats ingevoerd.</p>}
-    </section>
+    {statsView==='trends' && <>
+      <section className="stats-section">
+        <div className="stats-section-heading"><div><h3>Slagontwikkeling</h3><p>Seizoenslijn op basis van je wedstrijden</p></div></div>
+        <div className="stats-trend-grid"><article><span>AVG</span><strong>{fmtRate(season.avg)}</strong><StatsSparkline values={rolling.map(r=>r.avg).filter(v=>v!=null)}/><small>Laatste 5: {fmtRate(last5.avg)}</small></article><article><span>OPS</span><strong>{fmtRate(season.ops)}</strong><StatsSparkline values={rolling.map(r=>r.ops).filter(v=>v!=null)}/><small>Laatste 5: {fmtRate(last5.ops)}</small></article></div>
+      </section>
+      <section className="stats-section">
+        <div className="stats-section-heading"><div><h3>Fysieke ontwikkeling</h3><p>Vergelijk je metingen met jezelf</p></div></div>
+        <div className="stats-development-grid"><article className="stats-development-card"><span>Exit velocity</span><strong>{exitLatest?`${Number(exitLatest.value).toFixed(0)} km/u`:'—'}</strong><StatsSparkline values={exitSeries.map(r=>r.value)}/>{exitSeries.length>1&&<em>Verschil sinds eerste meting: {Number(exitLatest.value)-Number(exitSeries[0].value)>=0?'+':''}{(Number(exitLatest.value)-Number(exitSeries[0].value)).toFixed(0)} km/u</em>}</article><article className="stats-development-card"><span>Home → 1</span><strong>{home1Latest?`${Number(home1Latest.value).toFixed(2).replace('.',',')} sec`:'—'}</strong><StatsSparkline values={home1Series.map(r=>r.value)}/>{home1Series.length>1&&<em>Verschil sinds eerste meting: {(Number(home1Latest.value)-Number(home1Series[0].value)).toFixed(2).replace('.',',')} sec</em>}</article></div>
+      </section>
+    </>}
 
     <div className="stats-focus-card"><strong>Focus op jouw groei</strong><p>Geen rankings en geen rode beoordelingen. Elke training en wedstrijd levert informatie op waarmee je jezelf kunt verbeteren.</p></div>
   </section>
@@ -1109,9 +1122,11 @@ function attendanceStatsForPerson(personId, team, attendance = [], gameAttendanc
   return {...counts,total,attended,missed:counts.absent+counts.injured,percentage:total?Math.round((attended/total)*100):null}
 }
 
-function PlayerProfileModal({ person, team, viewerProfile, viewerMembership, attendance = [], gameAttendance = [], trainingEvents = [], calendarEvents = [], onClose }) {
+function PlayerProfileModal({ person, team, viewerProfile, viewerMembership, attendance = [], gameAttendance = [], trainingEvents = [], calendarEvents = [], gameStats = [], measurements = [], onClose }) {
   const canSeeAttendance = viewerProfile?.id === person?.id || viewerProfile?.role === 'admin' || viewerMembership?.member_role === 'coach'
   const stats = canSeeAttendance ? attendanceStatsForPerson(person?.id, team, attendance, gameAttendance, trainingEvents, calendarEvents) : null
+  const canSeePlayerStats = viewerProfile?.id === person?.id || viewerProfile?.role === 'admin' || viewerMembership?.member_role === 'coach'
+  const performance = canSeePlayerStats ? coreStatsForPlayer(person?.id,team,attendance,gameAttendance,trainingEvents,calendarEvents,gameStats,measurements) : null
   const secondary=(person?.secondary_positions||[]).filter(Boolean)
   const throwsLabel=person?.throws_hand==='L'?'Links':person?.throws_hand==='R'?'Rechts':'Niet ingevuld'
   const batsLabel=person?.bats_side==='S'?'Switch':person?.bats_side==='L'?'Links':person?.bats_side==='R'?'Rechts':'Niet ingevuld'
@@ -1127,6 +1142,7 @@ function PlayerProfileModal({ person, team, viewerProfile, viewerMembership, att
         <div><span>Gooit</span><strong>{throwsLabel}</strong></div>
         <div><span>Slaat</span><strong>{batsLabel}</strong></div>
       </div>
+      {canSeePlayerStats && <section className="player-profile-stats-card"><div className="player-attendance-heading"><div><p className="eyebrow orange">STATS</p><h3>Persoonlijke stats</h3></div><span>Seizoen 2026</span></div><div className="player-profile-stats-grid">{[['AVG',statRate(performance.avg)],['OPS',statRate(performance.ops)],['Hits',performance.h],['RBI',performance.rbi],['SB',performance.sb],['Exit velo',performance.exit?`${Number(performance.exit.value).toFixed(0)} km/u`:'—'],['Home → 1',performance.home1?`${Number(performance.home1.value).toFixed(2).replace('.',',')} s`:'—'],['Aanwezig',performance.attendance.percentage==null?'—':`${performance.attendance.percentage}%`]].map(([label,value])=><div key={label}><span>{label}</span><strong>{value}</strong></div>)}</div></section>}
       {canSeeAttendance && <section className="player-attendance-card">
         <div className="player-attendance-heading"><div><p className="eyebrow orange">AANWEZIGHEID</p><h3>{stats.percentage == null ? 'Nog geen percentage' : `${stats.percentage}%`}</h3></div><span>{stats.total} geregistreerde sessie{stats.total===1?'':'s'}</span></div>
         {stats.total ? <><div className="attendance-progress"><span style={{width:`${stats.percentage}%`}} /></div><div className="player-attendance-grid">
@@ -1141,7 +1157,7 @@ function PlayerProfileModal({ person, team, viewerProfile, viewerMembership, att
   </SettingsModal>
 }
 
-function Team({ session, profile, teams, profiles, memberships, attendance = [], gameAttendance = [], trainingEvents = [], calendarEvents = [], onSaved, onMessage }) {
+function Team({ session, profile, teams, profiles, memberships, gameStats = [], measurements = [], attendance = [], gameAttendance = [], trainingEvents = [], calendarEvents = [], onSaved, onMessage }) {
   const [selectedTeam, setSelectedTeam] = useState(null)
   const [cropRequest, setCropRequest] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -1199,7 +1215,7 @@ function Team({ session, profile, teams, profiles, memberships, attendance = [],
     <SectionTitle title="Teamgegevens" /><EmptyState icon="stats" title="Nog geen teamstatistieken beschikbaar" text="Teamstats verschijnen hier zodra we een echte statistiekbron koppelen." />
     {cropRequest && <ImageCropModal file={cropRequest.file} shape={cropRequest.kind==='avatar'?'circle':'wide'} onClose={() => setCropRequest(null)} onSave={async blob => { const request=cropRequest; setCropRequest(null); if(request.kind==='avatar') await uploadMemberAvatar(request.person,blob); else await uploadTeamPhoto(request.team,blob) }} />}
     {selectedTeam && <TeamModal team={selectedTeam} currentProfile={profile} currentMembership={teams.find(t => Number(t.id)===Number(selectedTeam.id))} members={membersForTeam(selectedTeam.id)} busy={busy} onTeamPhoto={(team,file) => setCropRequest({ kind:'team', team, file })} onAvatar={(person,file) => setCropRequest({ kind:'avatar', person, file })} onPerson={person => setPlayerProfile({ person, team:selectedTeam })} onClose={() => setSelectedTeam(null)} />}
-    {playerProfile && <PlayerProfileModal person={playerProfile.person} team={playerProfile.team} viewerProfile={profile} viewerMembership={teams.find(t=>Number(t.id)===Number(playerProfile.team.id))} attendance={attendance} gameAttendance={gameAttendance} trainingEvents={trainingEvents} calendarEvents={calendarEvents} memberships={memberships} onClose={()=>setPlayerProfile(null)} />}
+    {playerProfile && <PlayerProfileModal person={playerProfile.person} team={playerProfile.team} viewerProfile={profile} viewerMembership={teams.find(t=>Number(t.id)===Number(playerProfile.team.id))} attendance={attendance} gameAttendance={gameAttendance} trainingEvents={trainingEvents} calendarEvents={calendarEvents} gameStats={gameStats} measurements={measurements} memberships={memberships} onClose={()=>setPlayerProfile(null)} />}
   </section>
 }
 
@@ -1879,7 +1895,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
         <SettingsRow icon="lock" title="Wachtwoord" subtitle="Wachtwoord wijzigen via resetmail" onClick={() => setSettingsView('password')} />
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.9.3" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.9.4" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -1918,7 +1934,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 2.9.3</h3>
+        <h3>Versie 2.9.4</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS agenda</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>
