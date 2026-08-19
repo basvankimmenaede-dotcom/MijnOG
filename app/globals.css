@@ -2055,3 +2055,20 @@ button.swing-primary { width: 100%; margin-top: 12px; border: 0; background: var
 .swing-assignment-grid input { accent-color: var(--og-orange); }
 @media (min-width:620px){.swing-shell{height:min(92dvh,900px);border-radius:28px 28px 0 0;box-shadow:0 -20px 60px rgba(17,19,24,.22)}}
 @media (max-width:390px){.swing-launch{grid-column:auto}.swing-file-actions,.swing-score-grid,.swing-assignment-grid{grid-template-columns:1fr}.swing-access-head{grid-template-columns:36px minmax(0,1fr)}.swing-access-head select{grid-column:2}.swing-assignment-grid{margin-left:45px}}
+
+/* Swing Analyzer V1 AI */
+.swing-ai-card{margin-top:14px;padding:15px;border:1px solid var(--line);border-radius:22px;background:#fff}
+.swing-ai-start{margin-top:8px!important}
+.swing-ai-start:disabled{opacity:.45;cursor:not-allowed}
+.swing-ai-progress{display:grid;grid-template-columns:1fr auto;gap:8px 12px;align-items:center;padding:14px;border-radius:16px;background:#f7f7f8}
+.swing-ai-progress>div{grid-column:1/-1;height:7px;background:#e7e7e9;border-radius:999px;overflow:hidden}
+.swing-ai-progress i{display:block;height:100%;background:var(--og-orange);border-radius:inherit;transition:width .2s ease}
+.swing-ai-progress strong{font-size:11px}.swing-ai-progress small{font-size:10px;color:var(--muted)}
+.swing-ai-ok{margin:8px 0 10px;padding:12px 13px;border-radius:15px;background:#eef9f1;border:1px solid #cfead7;display:grid;gap:3px}
+.swing-ai-ok strong{font-size:11px;color:#1d6533}.swing-ai-ok small{font-size:9px;color:#52705d}
+.swing-ai-metric-list{border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.swing-ai-metric-list article{padding:10px 11px;border-bottom:1px solid var(--line);display:grid;grid-template-columns:minmax(0,1fr) 38px;gap:6px 10px;align-items:center}
+.swing-ai-metric-list article:last-child{border-bottom:0}.swing-ai-metric-list span{display:grid;gap:2px}.swing-ai-metric-list strong{font-size:10px}.swing-ai-metric-list small{font-size:8px;color:var(--muted)}
+.swing-ai-metric-list b{font-size:12px;text-align:right}.swing-ai-metric-list article>div{grid-column:1/-1;height:4px;background:#eee;border-radius:99px;overflow:hidden}.swing-ai-metric-list i{display:block;height:100%;background:var(--og-orange);border-radius:inherit}
+.swing-ai-again{width:100%;margin-top:10px}
+.swing-score-grid span small{display:inline;font-size:8px;color:var(--muted)}

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { analyzeSwingVideo } from '../lib/swing-ai'
 
 const allTabs = ['Home', 'Agenda', 'Stats', 'Coach', 'Team', 'Meer']
 
@@ -849,7 +850,9 @@ function SwingAnalyzerModal({ session, profile, accessLevel, team, players = [],
   const [videoUrl, setVideoUrl] = useState('')
   const [exitVelocity, setExitVelocity] = useState('')
   const [coachNote, setCoachNote] = useState('')
-  const [metrics, setMetrics] = useState(defaultSwingMetrics())
+  const [aiResult, setAiResult] = useState(null)
+  const [aiProgress, setAiProgress] = useState({progress:0,label:''})
+  const [analysisBusy, setAnalysisBusy] = useState(false)
   const [savedResult, setSavedResult] = useState(null)
   const [permissionBusy, setPermissionBusy] = useState(false)
 
@@ -872,24 +875,35 @@ function SwingAnalyzerModal({ session, profile, accessLevel, team, players = [],
   const latestFor = (playerId) => playerAnalyses(playerId)[0]
 
   function openNew(person) {
-    setSelectedPlayer(person); setVideoFile(null); setVideoUrl(''); setExitVelocity(''); setCoachNote(''); setMetrics(defaultSwingMetrics()); setSavedResult(null); setView('new')
+    setSelectedPlayer(person); setVideoFile(null); setVideoUrl(''); setExitVelocity(''); setCoachNote(''); setAiResult(null); setAiProgress({progress:0,label:''}); setSavedResult(null); setView('new')
   }
   function pickVideo(file) {
     if (!file) return
     if (videoUrl) URL.revokeObjectURL(videoUrl)
-    setVideoFile(file); setVideoUrl(URL.createObjectURL(file))
+    setVideoFile(file); setVideoUrl(URL.createObjectURL(file)); setAiResult(null); setAiProgress({progress:0,label:''})
   }
   function scoreInfo() {
-    const values=Object.values(metrics).map(Number).filter(Number.isFinite)
-    const overall=Math.round(values.reduce((a,b)=>a+b,0)/Math.max(1,values.length))
-    const sorted=Object.entries(metrics).sort((a,b)=>Number(a[1])-Number(b[1]))
-    const focus=sorted.slice(0,2).map(([key,score])=>({ key, score:Number(score), ...swingMetricCatalog[key] }))
-    return {overall,focus}
+    if(!aiResult) return {overall:0,focus:[]}
+    const metrics=aiResult.metrics||{}
+    const confidences=aiResult.confidences||{}
+    const sorted=Object.entries(metrics).filter(([key])=>(confidences[key]??0)>=45).sort((a,b)=>Number(a[1])-Number(b[1]))
+    const focus=sorted.slice(0,2).map(([key,score])=>({ key, score:Number(score), confidence:confidences[key], ...swingMetricCatalog[key] }))
+    return {overall:aiResult.overall||0,focus}
+  }
+  async function runAiAnalysis(){
+    if(!videoFile){setError('Film of kies eerst een swingvideo.');return}
+    setAnalysisBusy(true); setError(''); setAiResult(null); setAiProgress({progress:1,label:'AI voorbereiden…'})
+    try{
+      const result=await analyzeSwingVideo(videoFile,setAiProgress)
+      setAiResult(result)
+    }catch(err){setError(err?.message||'De AI-analyse kon niet worden uitgevoerd.')}
+    finally{setAnalysisBusy(false)}
   }
   async function saveAnalysis() {
     if (!selectedPlayer) return
+    if(!aiResult){setError('Start eerst de AI-analyse van de video.');return}
     const {overall,focus}=scoreInfo(); setBusy(true); setError('')
-    const payload={ player_id:selectedPlayer.id, coach_id:session.user.id, team_id:team?.id || null, recorded_at:new Date().toISOString(), exit_velocity:exitVelocity?Number(exitVelocity):null, overall_score:overall, metrics, focus, coach_note:coachNote.trim()||null }
+    const payload={ player_id:selectedPlayer.id, coach_id:session.user.id, team_id:team?.id || null, recorded_at:new Date().toISOString(), exit_velocity:exitVelocity?Number(exitVelocity):null, overall_score:overall, metrics:aiResult.metrics, focus, coach_note:coachNote.trim()||null, metric_confidence:aiResult.confidences||{}, analysis_meta:aiResult.meta||{}, analysis_version:'pose-ai-v1' }
     const {data,error}=await supabase.from('swing_analyses').insert(payload).select().single()
     if(error){setError(error.message);setBusy(false);return}
     setSavedResult(data); setAnalyses(prev=>[data,...prev]); setBusy(false); setView('result')
@@ -928,9 +942,9 @@ function SwingAnalyzerModal({ session, profile, accessLevel, team, players = [],
         {view==='new' && selectedPlayer && <>
           <div className="swing-section-head"><div><p className="eyebrow orange">NIEUWE ANALYSE</p><h3>{personName(selectedPlayer)}</h3></div></div>
           <section className="swing-capture-card"><div className="swing-camera-guide"><span className="guide-person">◯<i></i></span><span className="guide-ground"/><span className="guide-copy">Zijaanzicht · volledig lichaam en knuppel in beeld</span></div>{videoUrl?<video className="swing-preview" src={videoUrl} controls playsInline/>:<div className="swing-video-empty"><Icon name="camera"/><strong>Film of kies een korte swingvideo</strong><small>Bij voorkeur 60 fps · telefoon stabiel · zijaanzicht</small></div>}<div className="swing-file-actions"><label className="swing-primary"><Icon name="camera"/> Opnemen<input type="file" accept="video/*" capture="environment" onChange={e=>pickVideo(e.target.files?.[0])}/></label><label className="swing-secondary">Video kiezen<input type="file" accept="video/*" onChange={e=>pickVideo(e.target.files?.[0])}/></label></div>{videoFile&&<small className="swing-file-name">{videoFile.name} · {(videoFile.size/1024/1024).toFixed(1)} MB · wordt niet opgeslagen</small>}</section>
-          <section className="swing-metrics"><div className="swing-section-head compact"><div><p className="eyebrow orange">COACHBEOORDELING</p><h3>8 technische onderdelen</h3></div><span>{scoreInfo().overall}/100</span></div><p className="swing-help">Gebruik de video als hulpmiddel. 50 = aandachtspunt, 75 = goed, 90 = zeer sterk. Pas alleen aan wat je betrouwbaar kunt beoordelen.</p>{Object.entries(metrics).map(([key,value])=><label key={key}><span><strong>{swingMetricCatalog[key].label}</strong><small>{swingMetricCatalog[key].hint}</small></span><output>{value}</output><input type="range" min="40" max="100" step="1" value={value} onChange={e=>setMetrics({...metrics,[key]:Number(e.target.value)})}/></label>)}</section>
+          <section className="swing-ai-card"><div className="swing-section-head compact"><div><p className="eyebrow orange">AI-VIDEOANALYSE</p><h3>Automatische swinganalyse</h3></div>{aiResult&&<span>{aiResult.overall}/100</span>}</div><p className="swing-help">De AI volgt lichaamslandmarks door de video en berekent automatisch technische indicatoren. De uitkomst is een coachhulpmiddel en geen biomechanische waarheid.</p>{analysisBusy?<div className="swing-ai-progress"><div><i style={{width:`${aiProgress.progress||0}%`}}/></div><strong>{aiProgress.label||'Analyseren…'}</strong><small>{aiProgress.progress||0}%</small></div>:!aiResult?<button className="swing-primary swing-ai-start" disabled={!videoFile} onClick={runAiAnalysis}><Icon name="swing"/> AI-analyse starten</button>:<><div className="swing-ai-ok"><strong>AI-analyse gereed</strong><small>Pose confidence {aiResult.meta?.pose_confidence??'—'}% · contactmoment is een AI-proxy</small></div><div className="swing-ai-metric-list">{Object.entries(aiResult.metrics||{}).map(([key,value])=>{const conf=aiResult.confidences?.[key]??0;return <article key={key}><span><strong>{swingMetricCatalog[key]?.label||key}</strong><small>{conf>=80?'Hoge':conf>=60?'Redelijke':'Lage'} betrouwbaarheid · {conf}%</small></span><b>{value}</b><div><i style={{width:`${Math.max(0,Math.min(100,Number(value)))}%`}}/></div></article>})}</div><button className="swing-secondary swing-ai-again" onClick={runAiAnalysis}>Opnieuw analyseren</button></>}</section>
           <div className="form-stack swing-extra"><label>Exit velo <span>(optioneel)</span><input type="number" inputMode="decimal" value={exitVelocity} onChange={e=>setExitVelocity(e.target.value)} placeholder="Bijv. 92"/></label><label>Coachnotitie <span>(optioneel)</span><textarea rows="3" value={coachNote} onChange={e=>setCoachNote(e.target.value)} placeholder="Wat zie jij in deze swing?"/></label></div>
-          <button className="swing-primary" disabled={busy} onClick={saveAnalysis}>{busy?'Opslaan…':'Analyse opslaan'}</button>
+          <button className="swing-primary" disabled={busy||analysisBusy||!aiResult} onClick={saveAnalysis}>{busy?'Opslaan…':!aiResult?'Eerst AI-analyse uitvoeren':'AI-analyse opslaan'}</button>
         </>}
         {view==='result' && savedResult && <SwingResult analysis={savedResult} player={profiles.find(p=>p.id===savedResult.player_id)||selectedPlayer} onNew={()=>openNew(profiles.find(p=>p.id===savedResult.player_id)||selectedPlayer)} />}
         {view==='access' && isAnalyzerAdmin && <>
@@ -944,8 +958,8 @@ function SwingAnalyzerModal({ session, profile, accessLevel, team, players = [],
 
 function SwingResult({analysis,player,onNew}) {
   const metrics=analysis.metrics||{}; const focus=analysis.focus||[]
-  return <div className="swing-result"><section className="swing-result-hero"><div><p className="eyebrow">ANALYSERESULTAAT</p><h3>{personName(player)}</h3><p>{formatSwingDate(analysis.recorded_at)}</p></div><div className="swing-big-score"><strong>{Math.round(analysis.overall_score)}</strong><small>/100</small></div></section><p className="swing-result-note">Deze score is een coachregistratie en geen objectieve biomechanische meting.</p>
-    <div className="swing-score-grid">{Object.entries(metrics).map(([key,value])=><article key={key}><span>{swingMetricCatalog[key]?.label||key}</span><strong>{value}</strong><div><i style={{width:`${Math.max(0,Math.min(100,Number(value)))}%`}}/></div></article>)}</div>
+  return <div className="swing-result"><section className="swing-result-hero"><div><p className="eyebrow">ANALYSERESULTAAT</p><h3>{personName(player)}</h3><p>{formatSwingDate(analysis.recorded_at)}</p></div><div className="swing-big-score"><strong>{Math.round(analysis.overall_score)}</strong><small>/100</small></div></section><p className="swing-result-note">AI-ondersteunde videoanalyse. Gebruik dit als coachhulpmiddel; de score is niet leidend en geen laboratoriummeting.</p>
+    <div className="swing-score-grid">{Object.entries(metrics).map(([key,value])=>{const conf=analysis.metric_confidence?.[key];return <article key={key}><span>{swingMetricCatalog[key]?.label||key}{conf!=null?<small> · {conf}% confidence</small>:null}</span><strong>{value}</strong><div><i style={{width:`${Math.max(0,Math.min(100,Number(value)))}%`}}/></div></article>})}</div>
     <div className="swing-section-head"><div><p className="eyebrow orange">FOCUSPUNTEN</p><h3>Hier zou ik aan werken</h3></div></div><div className="swing-focus-list">{focus.map((item,index)=><article key={item.key}><span>{index+1}</span><div><strong>{item.label}</strong><p>{item.feedback}</p><div className="swing-drill"><Icon name="swing"/><span><b>{item.drill}</b><small>{item.drillText}</small></span></div></div></article>)}</div>{analysis.coach_note&&<div className="swing-coach-note"><strong>Coachnotitie</strong><p>{analysis.coach_note}</p></div>}{analysis.exit_velocity&&<div className="swing-exit"><span>Exit velo</span><strong>{analysis.exit_velocity}</strong></div>}<button className="swing-primary" onClick={onNew}><Icon name="camera"/> Nieuwe swing vergelijken</button></div>
 }
 
@@ -959,7 +973,6 @@ const swingMetricCatalog={
   sequencing:{label:'Sequencing',hint:'Volgorde onderlichaam, romp en handen',feedback:'Onderlichaam, romp en handen starten te veel tegelijk. Train de bewegingsvolgorde op lage snelheid.',drill:'Slow motion sequence',drillText:'3 × 5 langzame swings · heup → romp → schouders → handen/barrel.'},
   hand_connection:{label:'Hand connection',hint:'Handen verbonden met romp en rotatie',feedback:'De handen raken vroeg los van de lichaamsrotatie. Werk aan verbinding en een compacte handroute.',drill:'Connection drill',drillText:'3 × 6 korte tee-swings · handen verbonden houden met de romp.'}
 }
-function defaultSwingMetrics(){return {head_stability:75,stride:75,posture:75,front_side:75,balance:75,load_timing:75,sequencing:75,hand_connection:75}}
 function formatSwingDate(value){try{return new Intl.DateTimeFormat('nl-NL',{day:'numeric',month:'short',year:'numeric'}).format(new Date(value))}catch{return ''}}
 
 function CoachStatsModal({team,players=[],attendance=[],gameAttendance=[],trainingEvents=[],calendarEvents=[],gameStats=[],measurements=[],onPlayer,onAddGame,onAddMeasurement,onClose}){
@@ -2032,7 +2045,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
         <SettingsRow icon="lock" title="Wachtwoord" subtitle="Wachtwoord wijzigen via resetmail" onClick={() => setSettingsView('password')} />
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.9.5.0" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.9.6.0" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -2071,7 +2084,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 2.9.5.0</h3>
+        <h3>Versie 2.9.6.0</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS agenda</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>

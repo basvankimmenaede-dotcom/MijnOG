@@ -1,6 +1,6 @@
 {
   "name": "mijn-og",
-  "version": "2.9.5.0",
+  "version": "2.9.6.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -12,6 +12,7 @@
     "next": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "web-push": "3.6.7"
+    "web-push": "3.6.7",
+    "@mediapipe/tasks-vision": "1.0.1"
   }
 }
