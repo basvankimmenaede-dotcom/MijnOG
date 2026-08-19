@@ -17,3 +17,8 @@ This remains a coaching aid, not a biomechanical lab measurement. Sequencing and
 ## Supabase
 - Fresh install: run `supabase_v295_swing_analyzer.sql`, then `supabase_v296_swing_ai.sql`.
 - Existing Swing Analyzer V1 install: only run `supabase_v296_swing_ai.sql`.
+
+## v2.9.7.0
+- Live camera mode with an overlay on the actual camera image for player/bat framing.
+- Fallback to native phone camera and video picker.
+- Expanded explanation and AI observation for all 8 metrics in both analysis and saved result screens.
