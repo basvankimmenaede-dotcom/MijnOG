@@ -27,3 +27,12 @@ This remains a coaching aid, not a biomechanical lab measurement. Sequencing and
 - Fix: MediaPipe PoseLandmarker video timestamps blijven nu strikt oplopen over meerdere analyses.
 - Voorkomt `Packet timestamp mismatch` / `norm_rect` bij een tweede of herhaalde videoanalyse.
 - Geen databasewijziging nodig.
+
+
+## v2.9.8.0
+- Live pose-quality bounding box: groen/oranje/rood op basis van werkelijk gedetecteerde landmarks.
+- Automatische pre-check voor gekozen/opgenomen video; rode kwaliteit blokkeert AI-analyse.
+- Concrete AI-waarnemingen per metric, inclusief sequencing-patronen.
+- Basisdoel bij alle acht meetpunten.
+- Uitgebreide drills met doel, uitvoering, focus, coach-cues, volume en benodigdheden.
+- Printbare A4-weergave voor het persoonlijke oefenplan.

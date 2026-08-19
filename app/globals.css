@@ -2094,3 +2094,15 @@ button.swing-primary { width: 100%; margin-top: 12px; border: 0; background: var
 .swing-score-grid{grid-template-columns:1fr}
 .swing-score-grid article{padding:13px}
 @media(max-width:430px){.swing-file-actions{grid-template-columns:1fr}.swing-live-camera,.swing-preview-wrap{aspect-ratio:4/3}}
+
+/* v2.9.8.0 Swing Analyzer - pose quality, concrete feedback, drill report */
+.swing-pose-box{position:absolute;border:3px solid;border-radius:14px;box-shadow:0 0 0 2px rgba(0,0,0,.15);transition:all .18s ease;z-index:2}
+.swing-pose-box.green{border-color:#38c172;box-shadow:0 0 0 2px rgba(56,193,114,.22),0 0 18px rgba(56,193,114,.28)}
+.swing-pose-box.orange{border-color:#f2a33a;box-shadow:0 0 0 2px rgba(242,163,58,.22),0 0 18px rgba(242,163,58,.22)}
+.swing-pose-box.red{border-color:#e45454;box-shadow:0 0 0 2px rgba(228,84,84,.22),0 0 18px rgba(228,84,84,.24)}
+.swing-live-quality,.swing-video-quality{position:absolute;left:8px;right:8px;top:8px;z-index:3;padding:8px 9px;border-radius:11px;background:rgba(13,15,18,.84);color:#fff;display:grid;grid-template-columns:1fr auto;gap:2px 8px;backdrop-filter:blur(5px)}
+.swing-live-quality strong,.swing-video-quality strong{font-size:9px}.swing-live-quality small,.swing-video-quality small{grid-column:1/2;font-size:7.5px;line-height:1.35;color:rgba(255,255,255,.8)}.swing-live-quality b,.swing-video-quality b{grid-column:2;grid-row:1/3;align-self:center;font-size:8px;padding:4px 6px;border-radius:999px}
+.swing-live-quality.green b,.swing-video-quality.green b{background:#2c8d50}.swing-live-quality.orange b,.swing-video-quality.orange b{background:#a96a15}.swing-live-quality.red b,.swing-video-quality.red b{background:#a53939}
+.swing-bat-note{padding-top:6px;border-top:1px solid var(--line);font-size:7.5px!important}
+.swing-drill-detail{margin-top:9px;padding:11px;border-radius:14px;background:#f7f7f8;border:1px solid #ececee}.swing-drill-title{display:grid;grid-template-columns:26px 1fr;gap:8px;align-items:center;margin-bottom:7px}.swing-drill-title .icon{width:22px;color:var(--og-orange)}.swing-drill-title span{display:grid}.swing-drill-title b{font-size:11px}.swing-drill-title small{font-size:8px;color:var(--muted)}.swing-drill-detail p{margin:4px 0!important;font-size:8.5px!important}.swing-drill-detail p strong{color:#15171b}
+.swing-report-btn{width:100%;min-height:44px;margin-top:12px;border:1px solid var(--og-orange);background:#fff5ef;color:var(--og-orange-dark);border-radius:14px;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:7px}.swing-report-btn .icon{width:18px}

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { analyzeSwingVideo } from '../lib/swing-ai'
+import { analyzeSwingVideo, checkLivePose, checkSwingVideoQuality } from '../lib/swing-ai'
 
 const allTabs = ['Home', 'Agenda', 'Stats', 'Coach', 'Team', 'Meer']
 
@@ -855,6 +855,8 @@ function SwingAnalyzerModal({ session, profile, accessLevel, team, players = [],
   const [analysisBusy, setAnalysisBusy] = useState(false)
   const [savedResult, setSavedResult] = useState(null)
   const [permissionBusy, setPermissionBusy] = useState(false)
+  const [videoQuality, setVideoQuality] = useState(null)
+  const [qualityBusy, setQualityBusy] = useState(false)
 
   useEffect(() => { loadSwingData() }, [team?.id, accessLevel])
   useEffect(() => () => { if (videoUrl) URL.revokeObjectURL(videoUrl) }, [videoUrl])
@@ -875,23 +877,30 @@ function SwingAnalyzerModal({ session, profile, accessLevel, team, players = [],
   const latestFor = (playerId) => playerAnalyses(playerId)[0]
 
   function openNew(person) {
-    setSelectedPlayer(person); setVideoFile(null); setVideoUrl(''); setExitVelocity(''); setCoachNote(''); setAiResult(null); setAiProgress({progress:0,label:''}); setSavedResult(null); setView('new')
+    setSelectedPlayer(person); setVideoFile(null); setVideoUrl(''); setExitVelocity(''); setCoachNote(''); setAiResult(null); setAiProgress({progress:0,label:''}); setSavedResult(null); setVideoQuality(null); setQualityBusy(false); setView('new')
   }
-  function pickVideo(file) {
+  async function pickVideo(file) {
     if (!file) return
     if (videoUrl) URL.revokeObjectURL(videoUrl)
-    setVideoFile(file); setVideoUrl(URL.createObjectURL(file)); setAiResult(null); setAiProgress({progress:0,label:''})
+    setVideoFile(file); setVideoUrl(URL.createObjectURL(file)); setAiResult(null); setAiProgress({progress:0,label:''}); setVideoQuality(null); setQualityBusy(true); setError('')
+    try{
+      const quality=await checkSwingVideoQuality(file)
+      setVideoQuality(quality)
+      if(quality?.status==='red') setError('Deze video is onvoldoende betrouwbaar voor AI-analyse. Neem opnieuw op met het volledige lichaam zichtbaar.')
+    }catch(err){setVideoQuality({status:'orange',confidence:0,message:'Kwaliteitscontrole niet volledig uitgevoerd',detail:err?.message||'Controleer de opname handmatig.'})}
+    finally{setQualityBusy(false)}
   }
   function scoreInfo() {
     if(!aiResult) return {overall:0,focus:[]}
     const metrics=aiResult.metrics||{}
     const confidences=aiResult.confidences||{}
     const sorted=Object.entries(metrics).filter(([key])=>(confidences[key]??0)>=45).sort((a,b)=>Number(a[1])-Number(b[1]))
-    const focus=sorted.slice(0,2).map(([key,score])=>({ key, score:Number(score), confidence:confidences[key], ...swingMetricCatalog[key] }))
+    const focus=sorted.slice(0,3).map(([key,score])=>({ key, score:Number(score), confidence:confidences[key], ...swingMetricCatalog[key], feedback:aiResult.observations?.[key]||swingMetricCatalog[key]?.feedback }))
     return {overall:aiResult.overall||0,focus}
   }
   async function runAiAnalysis(){
     if(!videoFile){setError('Film of kies eerst een swingvideo.');return}
+    if(videoQuality?.status==='red'){setError('Deze opname is onvoldoende betrouwbaar. Neem eerst een nieuwe video op.');return}
     setAnalysisBusy(true); setError(''); setAiResult(null); setAiProgress({progress:1,label:'AI voorbereiden…'})
     try{
       const result=await analyzeSwingVideo(videoFile,setAiProgress)
@@ -903,7 +912,7 @@ function SwingAnalyzerModal({ session, profile, accessLevel, team, players = [],
     if (!selectedPlayer) return
     if(!aiResult){setError('Start eerst de AI-analyse van de video.');return}
     const {overall,focus}=scoreInfo(); setBusy(true); setError('')
-    const payload={ player_id:selectedPlayer.id, coach_id:session.user.id, team_id:team?.id || null, recorded_at:new Date().toISOString(), exit_velocity:exitVelocity?Number(exitVelocity):null, overall_score:overall, metrics:aiResult.metrics, focus, coach_note:coachNote.trim()||null, metric_confidence:aiResult.confidences||{}, analysis_meta:aiResult.meta||{}, analysis_version:'pose-ai-v1' }
+    const payload={ player_id:selectedPlayer.id, coach_id:session.user.id, team_id:team?.id || null, recorded_at:new Date().toISOString(), exit_velocity:exitVelocity?Number(exitVelocity):null, overall_score:overall, metrics:aiResult.metrics, focus, coach_note:coachNote.trim()||null, metric_confidence:aiResult.confidences||{}, analysis_meta:{...(aiResult.meta||{}),observations:aiResult.observations||{},video_quality:videoQuality||null}, analysis_version:'pose-ai-v1.1' }
     const {data,error}=await supabase.from('swing_analyses').insert(payload).select().single()
     if(error){setError(error.message);setBusy(false);return}
     setSavedResult(data); setAnalyses(prev=>[data,...prev]); setBusy(false); setView('result')
@@ -941,8 +950,8 @@ function SwingAnalyzerModal({ session, profile, accessLevel, team, players = [],
         </>}
         {view==='new' && selectedPlayer && <>
           <div className="swing-section-head"><div><p className="eyebrow orange">NIEUWE ANALYSE</p><h3>{personName(selectedPlayer)}</h3></div></div>
-          <section className="swing-capture-card"><SwingCameraCapture videoUrl={videoUrl} onVideo={pickVideo}/>{videoFile&&<small className="swing-file-name">{videoFile.name} · {(videoFile.size/1024/1024).toFixed(1)} MB · wordt niet opgeslagen</small>}</section>
-          <section className="swing-ai-card"><div className="swing-section-head compact"><div><p className="eyebrow orange">AI-VIDEOANALYSE</p><h3>Automatische swinganalyse</h3></div>{aiResult&&<span>{aiResult.overall}/100</span>}</div><p className="swing-help">De AI volgt lichaamslandmarks door de video en berekent automatisch technische indicatoren. De uitkomst is een coachhulpmiddel en geen biomechanische waarheid.</p>{analysisBusy?<div className="swing-ai-progress"><div><i style={{width:`${aiProgress.progress||0}%`}}/></div><strong>{aiProgress.label||'Analyseren…'}</strong><small>{aiProgress.progress||0}%</small></div>:!aiResult?<button className="swing-primary swing-ai-start" disabled={!videoFile} onClick={runAiAnalysis}><Icon name="swing"/> AI-analyse starten</button>:<><div className="swing-ai-ok"><strong>AI-analyse gereed</strong><small>Pose confidence {aiResult.meta?.pose_confidence??'—'}% · contactmoment is een AI-proxy</small></div><div className="swing-ai-metric-list">{Object.entries(aiResult.metrics||{}).map(([key,value])=>{const conf=aiResult.confidences?.[key]??0;const info=swingMetricCatalog[key]||{};return <article key={key}><span><strong>{info.label||key}</strong><small>{conf>=80?'Hoge':conf>=60?'Redelijke':'Lage'} betrouwbaarheid · {conf}%</small></span><b>{value}</b><div><i style={{width:`${Math.max(0,Math.min(100,Number(value)))}%`}}/></div><p className="swing-metric-observation"><b>Waarneming:</b> {metricObservation(key,value)}</p><p className="swing-metric-explain"><b>Wat houdt dit in?</b> {info.explanation||info.hint}</p></article>})}</div><button className="swing-secondary swing-ai-again" onClick={runAiAnalysis}>Opnieuw analyseren</button></>}</section>
+          <section className="swing-capture-card"><SwingCameraCapture videoUrl={videoUrl} onVideo={pickVideo} videoQuality={videoQuality} qualityBusy={qualityBusy}/>{videoFile&&<small className="swing-file-name">{videoFile.name} · {(videoFile.size/1024/1024).toFixed(1)} MB · wordt niet opgeslagen</small>}</section>
+          <section className="swing-ai-card"><div className="swing-section-head compact"><div><p className="eyebrow orange">AI-VIDEOANALYSE</p><h3>Automatische swinganalyse</h3></div>{aiResult&&<span>{aiResult.overall}/100</span>}</div><p className="swing-help">De AI volgt lichaamslandmarks door de video en berekent automatisch technische indicatoren. De uitkomst is een coachhulpmiddel en geen biomechanische waarheid.</p>{analysisBusy?<div className="swing-ai-progress"><div><i style={{width:`${aiProgress.progress||0}%`}}/></div><strong>{aiProgress.label||'Analyseren…'}</strong><small>{aiProgress.progress||0}%</small></div>:!aiResult?<button className="swing-primary swing-ai-start" disabled={!videoFile||qualityBusy||videoQuality?.status==='red'} onClick={runAiAnalysis}><Icon name="swing"/> AI-analyse starten</button>:<><div className="swing-ai-ok"><strong>AI-analyse gereed</strong><small>Pose confidence {aiResult.meta?.pose_confidence??'—'}% · contactmoment is een AI-proxy</small></div><div className="swing-ai-metric-list">{Object.entries(aiResult.metrics||{}).map(([key,value])=>{const conf=aiResult.confidences?.[key]??0;const info=swingMetricCatalog[key]||{};return <article key={key}><span><strong>{info.label||key}</strong><small>{conf>=80?'Hoge':conf>=60?'Redelijke':'Lage'} betrouwbaarheid · {conf}%</small></span><b>{value}</b><div><i style={{width:`${Math.max(0,Math.min(100,Number(value)))}%`}}/></div><p className="swing-metric-observation"><b>Waarneming:</b> {metricObservationFromAnalysis(key,value,aiResult)}</p><p className="swing-metric-explain"><b>Basisdoel:</b> {info.goal}</p><p className="swing-metric-explain"><b>Wat houdt dit in?</b> {info.explanation||info.hint}</p></article>})}</div><button className="swing-secondary swing-ai-again" onClick={runAiAnalysis}>Opnieuw analyseren</button></>}</section>
           <div className="form-stack swing-extra"><label>Exit velo <span>(optioneel)</span><input type="number" inputMode="decimal" value={exitVelocity} onChange={e=>setExitVelocity(e.target.value)} placeholder="Bijv. 92"/></label><label>Coachnotitie <span>(optioneel)</span><textarea rows="3" value={coachNote} onChange={e=>setCoachNote(e.target.value)} placeholder="Wat zie jij in deze swing?"/></label></div>
           <button className="swing-primary" disabled={busy||analysisBusy||!aiResult} onClick={saveAnalysis}>{busy?'Opslaan…':!aiResult?'Eerst AI-analyse uitvoeren':'AI-analyse opslaan'}</button>
         </>}
@@ -957,12 +966,23 @@ function SwingAnalyzerModal({ session, profile, accessLevel, team, players = [],
 }
 
 
-function SwingCameraCapture({videoUrl,onVideo}){
+function SwingCameraCapture({videoUrl,onVideo,videoQuality,qualityBusy}){
   const liveRef=useRef(null), streamRef=useRef(null), recorderRef=useRef(null), chunksRef=useRef([])
-  const [cameraOpen,setCameraOpen]=useState(false),[recording,setRecording]=useState(false),[cameraError,setCameraError]=useState('')
+  const [cameraOpen,setCameraOpen]=useState(false),[recording,setRecording]=useState(false),[cameraError,setCameraError]=useState(''),[liveQuality,setLiveQuality]=useState(null)
   useEffect(()=>()=>stopCamera(),[])
+  useEffect(()=>{
+    if(!cameraOpen)return
+    let active=true,busy=false
+    const tick=async()=>{
+      if(!active||busy||!liveRef.current?.videoWidth)return
+      busy=true
+      try{const q=await checkLivePose(liveRef.current);if(active)setLiveQuality(q)}catch{}finally{busy=false}
+    }
+    tick();const id=setInterval(tick,450)
+    return()=>{active=false;clearInterval(id)}
+  },[cameraOpen])
   async function openCamera(){
-    setCameraError('')
+    setCameraError('');setLiveQuality(null)
     try{
       if(!navigator.mediaDevices?.getUserMedia) throw new Error('Live camera is in deze browser niet beschikbaar.')
       const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false})
@@ -972,7 +992,7 @@ function SwingCameraCapture({videoUrl,onVideo}){
   }
   function stopCamera(){
     try{if(recorderRef.current?.state==='recording')recorderRef.current.stop()}catch{}
-    streamRef.current?.getTracks?.().forEach(t=>t.stop());streamRef.current=null;setCameraOpen(false);setRecording(false)
+    streamRef.current?.getTracks?.().forEach(t=>t.stop());streamRef.current=null;setCameraOpen(false);setRecording(false);setLiveQuality(null)
   }
   function startRecording(){
     if(!streamRef.current)return
@@ -984,49 +1004,63 @@ function SwingCameraCapture({videoUrl,onVideo}){
       recorderRef.current=rec
       rec.ondataavailable=e=>{if(e.data?.size)chunksRef.current.push(e.data)}
       rec.onstop=()=>{
-        const type=rec.mimeType||chunksRef.current[0]?.type||'video/webm'
-        const ext=type.includes('mp4')?'mp4':'webm'
+        const type=rec.mimeType||chunksRef.current[0]?.type||'video/webm', ext=type.includes('mp4')?'mp4':'webm'
         const blob=new Blob(chunksRef.current,{type})
-        if(blob.size){const file=new File([blob],`swing-${Date.now()}.${ext}`,{type});onVideo(file)}
+        if(blob.size)onVideo(new File([blob],`swing-${Date.now()}.${ext}`,{type}))
         stopCamera()
       }
       rec.start();setRecording(true)
     }catch(e){setCameraError('Opnemen in de live camera wordt op dit toestel niet ondersteund. Gebruik “Telefooncamera”.')}
   }
   function stopRecording(){try{recorderRef.current?.stop()}catch{} setRecording(false)}
+  const box=liveQuality?.box
+  const quality=liveQuality||{status:'red',message:'Zoek speelster…',detail:'Ga volledig in beeld staan.'}
   return <>
-    {cameraOpen?<div className="swing-live-camera"><video ref={liveRef} muted playsInline autoPlay/><div className="swing-live-overlay"><span className="swing-head-zone">HOOFD</span><span className="swing-body-zone">LICHAAM</span><span className="swing-bat-zone">KNUPPEL</span><span className="swing-ground-line"/><p>Volledig lichaam + hele knuppel binnen het kader</p></div><div className="swing-live-controls">{!recording?<button className="swing-record" onClick={startRecording}><i/> Opname starten</button>:<button className="swing-record recording" onClick={stopRecording}><i/> Stop opname</button>}<button className="swing-camera-close" onClick={stopCamera}>Sluiten</button></div></div>:videoUrl?<div className="swing-preview-wrap"><video className="swing-preview" src={videoUrl} controls playsInline/><div className="swing-preview-tip">Controleer: hele speler en knuppel zichtbaar, camera loodrecht op de slaglijn.</div></div>:<div className="swing-video-empty"><Icon name="camera"/><strong>Film vanuit vast zijaanzicht</strong><small>Camera op ongeveer heuphoogte · hele speler én volledige knuppel in beeld</small></div>}
-    <div className="swing-capture-instructions"><strong>Zo kader je de opname</strong><div><span>1</span><p><b>Hoofd</b> ruim onder de bovenrand; niet afsnijden.</p></div><div><span>2</span><p><b>Knuppel</b> moet in stance én follow-through volledig zichtbaar blijven.</p></div><div><span>3</span><p><b>Voeten</b> altijd zichtbaar; camera stabiel en loodrecht op de slaglijn.</p></div></div>
+    {cameraOpen?<div className={`swing-live-camera quality-${quality.status}`}><video ref={liveRef} muted playsInline autoPlay/><div className="swing-live-overlay"><span className="swing-ground-line"/>{box&&<span className={`swing-pose-box ${quality.status}`} style={{left:`${box.x*100}%`,top:`${box.y*100}%`,width:`${box.width*100}%`,height:`${box.height*100}%`}}/>}<div className={`swing-live-quality ${quality.status}`}><strong>{quality.message}</strong><small>{quality.detail}</small><b>{quality.confidence||0}% pose</b></div></div><div className="swing-live-controls">{!recording?<button className="swing-record" onClick={startRecording}><i/> Opname starten</button>:<button className="swing-record recording" onClick={stopRecording}><i/> Stop opname</button>}<button className="swing-camera-close" onClick={stopCamera}>Sluiten</button></div></div>:videoUrl?<div className="swing-preview-wrap"><video className="swing-preview" src={videoUrl} controls playsInline/>{qualityBusy?<div className="swing-preview-tip">Opnamekwaliteit controleren…</div>:videoQuality?<div className={`swing-video-quality ${videoQuality.status}`}><strong>{videoQuality.message}</strong><small>{videoQuality.detail}</small><b>{videoQuality.confidence||0}% pose</b></div>:null}</div>:<div className="swing-video-empty"><Icon name="camera"/><strong>Film vanuit vast zijaanzicht</strong><small>Camera op ongeveer heuphoogte · hele speler én volledige knuppel in beeld</small></div>}
+    <div className="swing-capture-instructions"><strong>AI-opnamecheck</strong><div><span>1</span><p><b>Groen</b> = lichaam betrouwbaar herkend en goed gekaderd.</p></div><div><span>2</span><p><b>Oranje</b> = analyse mogelijk, maar een deel is minder betrouwbaar.</p></div><div><span>3</span><p><b>Rood</b> = AI-analyse wordt geblokkeerd; neem opnieuw op.</p></div><p className="swing-bat-note">Let op: V1 controleert de lichaamshouding automatisch. De volledige knuppel moet je nog visueel binnen beeld houden.</p></div>
     {cameraError&&<div className="notice warning">{cameraError}</div>}
     <div className="swing-file-actions"><button className="swing-primary" type="button" onClick={openCamera}><Icon name="camera"/> Live camera</button><label className="swing-secondary">Telefooncamera<input type="file" accept="video/*" capture="environment" onChange={e=>onVideo(e.target.files?.[0])}/></label><label className="swing-secondary">Video kiezen<input type="file" accept="video/*" onChange={e=>onVideo(e.target.files?.[0])}/></label></div>
   </>
 }
 
 function SwingResult({analysis,player,onNew}) {
-  const metrics=analysis.metrics||{}; const focus=analysis.focus||[]
+  const metrics=analysis.metrics||{}, focus=analysis.focus||[]
   return <div className="swing-result"><section className="swing-result-hero"><div><p className="eyebrow">ANALYSERESULTAAT</p><h3>{personName(player)}</h3><p>{formatSwingDate(analysis.recorded_at)}</p></div><div className="swing-big-score"><strong>{Math.round(analysis.overall_score)}</strong><small>/100</small></div></section><p className="swing-result-note">AI-ondersteunde videoanalyse. Gebruik dit als coachhulpmiddel; de score is niet leidend en geen laboratoriummeting.</p>
-    <div className="swing-score-grid">{Object.entries(metrics).map(([key,value])=>{const conf=analysis.metric_confidence?.[key];const info=swingMetricCatalog[key]||{};return <article key={key}><span>{info.label||key}{conf!=null?<small> · {conf}% confidence</small>:null}</span><strong>{value}</strong><div><i style={{width:`${Math.max(0,Math.min(100,Number(value)))}%`}}/></div><p className="swing-metric-observation"><b>Waarneming:</b> {metricObservation(key,value)}</p><p className="swing-metric-explain"><b>Betekenis:</b> {info.explanation||info.hint}</p></article>})}</div>
-    <div className="swing-section-head"><div><p className="eyebrow orange">FOCUSPUNTEN</p><h3>Hier zou ik aan werken</h3></div></div><div className="swing-focus-list">{focus.map((item,index)=><article key={item.key}><span>{index+1}</span><div><strong>{item.label}</strong><p>{item.feedback}</p><div className="swing-drill"><Icon name="swing"/><span><b>{item.drill}</b><small>{item.drillText}</small></span></div></div></article>)}</div>{analysis.coach_note&&<div className="swing-coach-note"><strong>Coachnotitie</strong><p>{analysis.coach_note}</p></div>}{analysis.exit_velocity&&<div className="swing-exit"><span>Exit velo</span><strong>{analysis.exit_velocity}</strong></div>}<button className="swing-primary" onClick={onNew}><Icon name="camera"/> Nieuwe swing vergelijken</button></div>
+    <div className="swing-score-grid">{Object.entries(metrics).map(([key,value])=>{const conf=analysis.metric_confidence?.[key];const info=swingMetricCatalog[key]||{};return <article key={key}><span>{info.label||key}{conf!=null?<small> · {conf}% confidence</small>:null}</span><strong>{value}</strong><div><i style={{width:`${Math.max(0,Math.min(100,Number(value)))}%`}}/></div><p className="swing-metric-observation"><b>Wat ziet de AI?</b> {metricObservationFromAnalysis(key,value,analysis)}</p><p className="swing-metric-explain"><b>Basisdoel:</b> {info.goal}</p><p className="swing-metric-explain"><b>Wat meten we?</b> {info.explanation||info.hint}</p></article>})}</div>
+    <div className="swing-section-head"><div><p className="eyebrow orange">COACHINGFOCUS</p><h3>Belangrijkste aandachtspunten</h3></div></div><div className="swing-focus-list">{focus.map((item,index)=>{const info=swingMetricCatalog[item.key]||item;const drill=info.drillDetails;return <article key={item.key}><span>{index+1}</span><div><strong>{item.label||info.label}</strong><p>{metricObservationFromAnalysis(item.key,item.score,analysis)}</p>{drill&&<div className="swing-drill-detail"><div className="swing-drill-title"><Icon name="swing"/><span><b>{drill.name}</b><small>{drill.volume}</small></span></div><p><strong>Doel:</strong> {drill.goal}</p><p><strong>Uitvoering:</strong> {drill.steps}</p><p><strong>Focus:</strong> {drill.focus}</p><p><strong>Coach let op:</strong> {drill.coach}</p><p><strong>Benodigd:</strong> {drill.equipment}</p></div>}</div></article>})}</div>
+    {focus.length>0&&<button className="swing-report-btn" onClick={()=>printSwingPlan(analysis,player)}><Icon name="swing"/> Mijn oefenrapport afdrukken</button>}
+    {analysis.coach_note&&<div className="swing-coach-note"><strong>Coachnotitie</strong><p>{analysis.coach_note}</p></div>}{analysis.exit_velocity&&<div className="swing-exit"><span>Exit velo</span><strong>{analysis.exit_velocity}</strong></div>}<button className="swing-primary" onClick={onNew}><Icon name="camera"/> Nieuwe swing vergelijken</button></div>
 }
 
 const swingMetricCatalog={
-  head_stability:{label:'Head stability',hint:'Rust van het hoofd tijdens load en contact',explanation:'Kijkt hoeveel het hoofd horizontaal en verticaal verplaatst tijdens de kern van de swing. Minder onnodige beweging helpt om de ogen rustiger op de bal te houden.',feedback:'Er is relatief veel hoofdbeweging. Zoek eerst een stabiele basis en rustigere verplaatsing.',drill:'No-stride tee drill',drillText:'3 × 5 swings · hoofd rustig houden van load tot contact.'},
-  stride:{label:'Stride',hint:'Controle en herhaalbaarheid van de stap',explanation:'Beoordeelt de voorwaartse stap richting foot plant: hoe gecontroleerd de afstand en landing verlopen ten opzichte van de lichaamspositie.',feedback:'De stride verdient extra aandacht. Werk aan een herhaalbare landing zonder haast.',drill:'Stride & freeze',drillText:'3 × 5 herhalingen · land, bevries, controleer balans en swing dan door.'},
-  posture:{label:'Posture',hint:'Houding en rompcontrole door de swing',explanation:'Meet hoe stabiel de romp- en hoofdhoek blijven terwijl de speelster loadt, roteert en richting contact beweegt.',feedback:'De houding verandert te veel door de beweging. Train rotatie vanuit een stabiele atletische positie.',drill:'Posture tee',drillText:'3 × 6 swings · behoud romp- en hoofdhoek richting contact.'},
-  front_side:{label:'Front side',hint:'Stabiliteit van voorste been en zijde',explanation:'Kijkt hoe stabiel het voorste been en de voorste heup blijven na de landing. Een stabiele front side kan helpen om rotatie en energieoverdracht te controleren.',feedback:'De front side geeft nog onvoldoende stabiele weerstand. Bouw eerst controle bij de landing.',drill:'Firm front-side drill',drillText:'3 × 5 swings · gecontroleerde landing, daarna rotatie rond een stabiele voorzijde.'},
-  balance:{label:'Balance',hint:'Balans vóór, tijdens en na contact',explanation:'Kijkt naar de positie van het lichaamszwaartepunt ten opzichte van de voeten en hoeveel herstelstappen of zijwaartse verplaatsing zichtbaar zijn.',feedback:'De swing eindigt minder stabiel dan gewenst. Maak balans een voorwaarde vóór je snelheid toevoegt.',drill:'Finish & hold',drillText:'3 × 5 swings · eindpositie 2 seconden vasthouden zonder bijstappen.'},
-  load_timing:{label:'Load → plant timing',hint:'Tempo en controle richting foot plant',explanation:'Meet de tijdsverhouding tussen het inzetten van de load en het moment waarop de voorste voet plant. Het gaat om ritme en herhaalbaarheid, niet om één perfecte tijd.',feedback:'De timing tussen load en landing kan consistenter. Werk met een rustig ritme en vaste landing.',drill:'Load-pause-go',drillText:'3 × 5 herhalingen · gecontroleerde load, korte pauze, plant en swing.'},
-  sequencing:{label:'Sequencing',hint:'Volgorde onderlichaam, romp en handen',explanation:'Schat de volgorde waarin heupen/onderlichaam, romp, schouders en handen versnellen. Bij één camerahoek is dit een indicatie en geen exacte 3D-meting.',feedback:'Onderlichaam, romp en handen starten te veel tegelijk. Train de bewegingsvolgorde op lage snelheid.',drill:'Slow motion sequence',drillText:'3 × 5 langzame swings · heup → romp → schouders → handen/barrel.'},
-  hand_connection:{label:'Hand connection',hint:'Handen verbonden met romp en rotatie',explanation:'Kijkt hoe de handen ten opzichte van schouders en romp bewegen. De score zoekt naar een compacte, verbonden handroute zonder vroeg loskomen van de lichaamsrotatie.',feedback:'De handen raken vroeg los van de lichaamsrotatie. Werk aan verbinding en een compacte handroute.',drill:'Connection drill',drillText:'3 × 6 korte tee-swings · handen verbonden houden met de romp.'}
+  head_stability:{label:'Head stability',goal:'Het hoofd voldoende stabiel houden zodat de ogen de bal rustig kunnen blijven volgen.',hint:'Rust van het hoofd tijdens load en contact',explanation:'Meet hoeveel het hoofd horizontaal en verticaal verplaatst tijdens de kern van de swing.',feedback:'Er is relatief veel hoofdbeweging.',drillDetails:{name:'No-stride tee drill',goal:'Een rustige basis creëren en onnodige hoofdverplaatsing verminderen.',steps:'Start in normale stance, maak geen stride en swing vanaf de tee. Houd de beweging gecontroleerd en bouw pas snelheid op als het hoofd rustig blijft.',focus:'Ogen en hoofd zo rustig mogelijk van load tot contact; rotatie zonder naar voren te vallen.',coach:'Let op extra hoofdbeweging, opveren of achter de swing aan vallen.',volume:'3 × 5 swings',equipment:'Tee, ballen en net'}},
+  stride:{label:'Stride',goal:'Gecontroleerd naar een sterke, herhaalbare landingspositie bewegen van waaruit krachtig geroteerd kan worden.',hint:'Controle en herhaalbaarheid van de stap',explanation:'Beoordeelt de afstand van de voorwaartse stap en hoeveel de voorste voet na de landing nog verschuift.',feedback:'De stride verdient extra aandacht.',drillDetails:{name:'Stride & freeze',goal:'Controle en balans leren voelen op het moment dat de voorste voet landt.',steps:'Maak de normale load en stride. Bevries twee seconden zodra de voorste voet landt. Controleer balans en houding en swing daarna gecontroleerd door.',focus:'Zachte landing, hoofd tussen de voeten en een stabiele voorste voet.',coach:'De speelster mag niet doorvallen, bijstappen of na de freeze opnieuw positie zoeken.',volume:'3 × 5 herhalingen',equipment:'Tee, ballen en net'}},
+  posture:{label:'Posture',goal:'Een atletische romp- en hoofdhoek behouden waaruit de speelster vrij en krachtig kan roteren.',hint:'Houding en rompcontrole door de swing',explanation:'Meet hoeveel de romphoek verandert van load richting contact.',feedback:'De houding verandert te veel door de beweging.',drillDetails:{name:'Posture tee',goal:'Roteren zonder de oorspronkelijke atletische lichaamshoek te verliezen.',steps:'Neem stance bij de tee. Pauzeer kort in load, voel de rompstand en swing terwijl borst en hoofd dezelfde functionele hoek behouden.',focus:'Draai rond de romp zonder omhoog te komen of over de plaat te vallen.',coach:'Let op vroeg strekken van benen/rug en een hoofd dat sterk omhoog of naar voren beweegt.',volume:'3 × 6 swings',equipment:'Tee, ballen en net'}},
+  front_side:{label:'Front side',goal:'Een stabiele voorzijde creëren waartegen het lichaam gecontroleerd kan roteren.',hint:'Stabiliteit van voorste been en zijde',explanation:'Kijkt naar kniehoek en beweging van de voorste voet/zijde na landing.',feedback:'De front side geeft nog onvoldoende stabiele weerstand.',drillDetails:{name:'Firm front-side drill',goal:'Een stevige landing koppelen aan gecontroleerde rotatie.',steps:'Stride naar een rustige landing, voel druk in het voorste been en swing daarna vanaf de tee zonder dat de voorste voet verder schuift.',focus:'Voorste voet blijft staan; knie en heup geven een stevige maar niet geforceerde basis.',coach:'Voorkom dat de voorste knie instort of de voet na landing blijft doorlopen.',volume:'3 × 5 swings',equipment:'Tee, ballen en net'}},
+  balance:{label:'Balance',goal:'Tijdens load, landing, contact en finish controle over het lichaamsgewicht behouden.',hint:'Balans vóór, tijdens en na contact',explanation:'Kijkt of de heup binnen de steunbasis van de voeten blijft en of de voeten na landing blijven bewegen.',feedback:'De swing eindigt minder stabiel dan gewenst.',drillDetails:{name:'Finish & hold',goal:'Leren krachtig te swingen zonder de controle over de eindpositie te verliezen.',steps:'Swing normaal vanaf de tee en houd de finish twee seconden vast. Reset als er een herstelstap nodig is.',focus:'Volledige swing met een rustige, controleerbare finish.',coach:'Let op bijstappen, wegvallen naar één zijde of een heup die buiten de voeten eindigt.',volume:'3 × 5 swings',equipment:'Tee, ballen en net'}},
+  load_timing:{label:'Load → plant timing',goal:'Load, landing en launch in een herhaalbaar ritme laten samenwerken zonder te haasten of te wachten.',hint:'Tempo en controle richting foot plant',explanation:'Schat de verhouding tussen foot plant en het moment waarop de handen duidelijk versnellen.',feedback:'De timing tussen load en landing kan consistenter.',drillDetails:{name:'Load-pause-go',goal:'Bewustzijn ontwikkelen van de overgang tussen load, landing en launch.',steps:'Maak load en stride, pauzeer heel kort bij de landing en start daarna de swing. Verkort de pauze geleidelijk tot een vloeiende beweging.',focus:'Rustig tempo naar landing; daarna duidelijke intentie richting swing.',coach:'Voorkom dat handen al weg zijn vóór de landing of dat de speelster na plant lang stilvalt.',volume:'3 × 5 herhalingen',equipment:'Tee, ballen en net'}},
+  sequencing:{label:'Sequencing',goal:'Beweging efficiënt laten opbouwen van onderlichaam naar romp/schouders en vervolgens handen/barrel.',hint:'Volgorde onderlichaam, romp en handen',explanation:'Schat wanneer heupen, romp/schouders en handen beginnen te versnellen. Bij één camerahoek blijft dit een indicatie.',feedback:'De bewegingsvolgorde verdient aandacht.',drillDetails:{name:'Slow motion sequence',goal:'De volgorde onderlichaam → romp → handen bewust leren voelen.',steps:'Voer de swing op ongeveer 30–40% snelheid uit. Start vanuit een stabiele landing, laat heupen inzetten, laat romp en schouders volgen en laat de handen als laatste versnellen. Bouw daarna langzaam snelheid op.',focus:'Geen losse armen; voel één doorlopende keten van grond naar barrel.',coach:'Kijk of schouders of handen vóór de heupen vertrekken, of juist of de heupen volledig wegdraaien zonder dat de romp volgt.',volume:'3 × 5 langzame swings + 2 × 5 normale swings',equipment:'Tee, ballen en eventueel PVC-stick'}},
+  hand_connection:{label:'Hand connection',goal:'Handen functioneel met de lichaamsrotatie laten samenwerken zonder onnodig vroeg los te komen.',hint:'Handen verbonden met romp en rotatie',explanation:'Kijkt hoe sterk de afstand tussen handen, schouders en romp verandert tijdens launch naar contact.',feedback:'De handen raken vroeg los van de lichaamsrotatie.',drillDetails:{name:'Connection drill',goal:'Een compacte handroute en betere samenwerking met de romp voelen.',steps:'Maak korte tee-swings op 60% snelheid. Houd de handen dicht bij de draaiende romp tot de barrel vanzelf naar contact versnelt.',focus:'Compacte start; handen volgen de rotatie in plaats van vooruit te duwen.',coach:'Let op vroeg strekken van de armen of handen die recht naar de bal worden geduwd.',volume:'3 × 6 swings',equipment:'Tee, ballen en net'}}
 }
-function metricObservation(key,value){
-  const n=Number(value)
-  const info=swingMetricCatalog[key]||{}
-  if(!Number.isFinite(n)) return 'Niet betrouwbaar genoeg beoordeeld in deze video.'
-  if(n>=82) return `De AI ziet ${info.label?.toLowerCase()||'dit onderdeel'} als relatief stabiel in deze swing.`
-  if(n>=68) return `De AI ziet een bruikbare basis, met nog zichtbare ruimte voor meer controle en herhaalbaarheid.`
-  if(n>=52) return `De AI ziet hier een duidelijk aandachtspunt. Bekijk dit samen met de video voordat je er coaching aan koppelt.`
-  return `De AI ziet hier de grootste afwijking binnen deze swing. Controleer of camerahoek en zichtbaarheid goed waren en beoordeel het daarna als coach.`
+function metricObservationFromAnalysis(key,value,source){
+  const specific=source?.observations?.[key]||source?.analysis_meta?.observations?.[key]
+  if(specific)return specific
+  const n=Number(value),info=swingMetricCatalog[key]||{}
+  if(!Number.isFinite(n))return 'Niet betrouwbaar genoeg beoordeeld in deze video.'
+  if(n>=82)return `De AI ziet ${info.label?.toLowerCase()||'dit onderdeel'} als relatief stabiel in deze swing.`
+  if(n>=68)return 'De AI ziet een bruikbare basis, met nog zichtbare ruimte voor meer controle en herhaalbaarheid.'
+  if(n>=52)return 'De AI ziet hier een duidelijk aandachtspunt. Bekijk dit samen met de video voordat je er coaching aan koppelt.'
+  return 'De AI ziet hier een grote afwijking. Controleer camerahoek en zichtbaarheid en beoordeel dit daarna als coach.'
+}
+function printSwingPlan(analysis,player){
+  const esc=v=>String(v??'').replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))
+  const focus=(analysis.focus||[]).slice(0,3)
+  const cards=focus.map((item,index)=>{const info=swingMetricCatalog[item.key]||item,drill=info.drillDetails||{};return `<section class="drill"><div class="num">${index+1}</div><div><h2>${esc(info.label||item.label)}</h2><p class="obs"><b>AI-waarneming:</b> ${esc(metricObservationFromAnalysis(item.key,item.score,analysis))}</p><h3>${esc(drill.name||item.drill||'Oefening')}</h3><p><b>Doel:</b> ${esc(drill.goal||'')}</p><p><b>Uitvoering:</b> ${esc(drill.steps||'')}</p><p><b>Focus:</b> ${esc(drill.focus||'')}</p><p><b>Coach let op:</b> ${esc(drill.coach||'')}</p><p><b>Volume:</b> ${esc(drill.volume||'')}</p><p><b>Benodigd:</b> ${esc(drill.equipment||'')}</p></div></section>`}).join('')
+  const w=window.open('','_blank')
+  if(w) try{w.opener=null}catch{}
+  if(!w)return
+  w.document.write(`<!doctype html><html><head><title>Mijn OG - Swing oefenplan</title><style>@page{size:A4;margin:14mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#17191d;margin:0}header{border-bottom:4px solid #f36c21;padding-bottom:12px;margin-bottom:16px}header small{color:#f36c21;font-weight:800;letter-spacing:.12em}h1{font-size:24px;margin:5px 0}header p{margin:3px 0;color:#60636b}.note{background:#fff4ed;border-left:4px solid #f36c21;padding:10px 12px;font-size:11px;margin:12px 0 18px}.drill{display:grid;grid-template-columns:30px 1fr;gap:10px;border:1px solid #ddd;border-radius:12px;padding:12px;margin-bottom:12px;break-inside:avoid}.num{width:28px;height:28px;border-radius:8px;background:#f36c21;color:white;display:grid;place-items:center;font-weight:800}.drill h2{font-size:15px;margin:2px 0 5px}.drill h3{font-size:14px;color:#e85d13;margin:10px 0 5px}.drill p{font-size:10.5px;line-height:1.45;margin:4px 0}.obs{background:#f5f5f6;padding:8px;border-radius:8px}footer{margin-top:18px;border-top:1px solid #ddd;padding-top:8px;font-size:9px;color:#777}</style></head><body><header><small>MIJN OG · SWING ANALYZER</small><h1>Persoonlijk oefenplan</h1><p><b>Speelster:</b> ${esc(personName(player))}</p><p><b>Datum analyse:</b> ${esc(formatSwingDate(analysis.recorded_at))}</p></header><div class="note"><b>Coachhulpmiddel:</b> de AI-waarnemingen ondersteunen de coach en zijn niet leidend. Selecteer oefeningen passend bij speler, intentie en trainingscontext.</div>${cards}${analysis.coach_note?`<section class="note"><b>Coachnotitie:</b> ${esc(analysis.coach_note)}</section>`:''}<footer>Mijn OG · Swing Analyzer · persoonlijk trainingsadvies</footer><script>window.onload=()=>window.print()<\/script></body></html>`)
+  w.document.close()
 }
 
 function formatSwingDate(value){try{return new Intl.DateTimeFormat('nl-NL',{day:'numeric',month:'short',year:'numeric'}).format(new Date(value))}catch{return ''}}
@@ -2101,7 +2135,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
         <SettingsRow icon="lock" title="Wachtwoord" subtitle="Wachtwoord wijzigen via resetmail" onClick={() => setSettingsView('password')} />
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.9.7.1" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.9.8.0" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -2140,7 +2174,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 2.9.7.1</h3>
+        <h3>Versie 2.9.8.0</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS agenda</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>
