@@ -39,6 +39,7 @@ export default function HomePage() {
   const [playerGameStats, setPlayerGameStats] = useState([])
   const [playerMeasurements, setPlayerMeasurements] = useState([])
   const [gameHighlights, setGameHighlights] = useState([])
+  const [swingAccess, setSwingAccess] = useState(null)
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -61,7 +62,7 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!session?.user?.id) {
-      setProfile(null); setTeams([]); setCalendarConnection(null); setCalendarEvents([]); setTrainingEvents([]); setAttendance([]); setVisibleProfiles([]); setAllMemberships([]); setEventTeamLinks([]); setEventParticipantLinks([]); setClubLocations([]); setTransportEvents([]); setTransportResponses([]); setTeamMessages([]); setGameAttendance([]); setPlayerRequests([]); setPlayerRequestCandidates([]); setPushSubscriptions([]); setPlayerGameStats([]); setPlayerMeasurements([]); setGameHighlights([])
+      setProfile(null); setTeams([]); setCalendarConnection(null); setCalendarEvents([]); setTrainingEvents([]); setAttendance([]); setVisibleProfiles([]); setAllMemberships([]); setEventTeamLinks([]); setEventParticipantLinks([]); setClubLocations([]); setTransportEvents([]); setTransportResponses([]); setTeamMessages([]); setGameAttendance([]); setPlayerRequests([]); setPlayerRequestCandidates([]); setPushSubscriptions([]); setPlayerGameStats([]); setPlayerMeasurements([]); setGameHighlights([]); setSwingAccess(null)
       return
     }
     loadUserData(session.user.id, session.access_token)
@@ -70,7 +71,7 @@ export default function HomePage() {
   async function loadUserData(userId, accessToken = session?.access_token) {
     setLoading(true)
     setMessage('')
-    const [profileResult, teamResult, calendarResult, eventResult, attendanceResult, profilesResult, membershipResult, eventTeamsResult, eventParticipantsResult, locationsResult, transportEventsResult, transportResponsesResult, messagesResult, gameAttendanceResult, playerRequestsResult, playerCandidatesResult, pushSubscriptionsResult, playerGameStatsResult, playerMeasurementsResult, gameHighlightsResult] = await Promise.all([
+    const [profileResult, teamResult, calendarResult, eventResult, attendanceResult, profilesResult, membershipResult, eventTeamsResult, eventParticipantsResult, locationsResult, transportEventsResult, transportResponsesResult, messagesResult, gameAttendanceResult, playerRequestsResult, playerCandidatesResult, pushSubscriptionsResult, playerGameStatsResult, playerMeasurementsResult, gameHighlightsResult, swingAccessResult] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
       supabase.from('team_members').select('member_role, teams(id, name, sport, season_id, is_active, team_photo_url, foys_match_text, seasons(is_active))').eq('profile_id', userId),
       supabase.from('calendar_connections').select('*').eq('profile_id', userId).eq('provider', 'foys').maybeSingle(),
@@ -90,7 +91,8 @@ export default function HomePage() {
       supabase.from('push_subscriptions').select('profile_id,enabled').eq('enabled', true),
       supabase.from('player_game_stats').select('*').order('game_date', { ascending: true }),
       supabase.from('player_measurements').select('*').order('measured_at', { ascending: true }),
-      supabase.from('game_highlights').select('*').order('updated_at', { ascending: false })
+      supabase.from('game_highlights').select('*').order('updated_at', { ascending: false }),
+      supabase.from('swing_analyzer_permissions').select('access_level').eq('profile_id', userId).maybeSingle()
     ])
     if (profileResult.error) setMessage(`Profiel kon niet worden geladen: ${profileResult.error.message}`)
     else setProfile(profileResult.data)
@@ -124,6 +126,7 @@ export default function HomePage() {
     if (!playerGameStatsResult.error) setPlayerGameStats(playerGameStatsResult.data ?? [])
     if (!playerMeasurementsResult.error) setPlayerMeasurements(playerMeasurementsResult.data ?? [])
     if (!gameHighlightsResult.error) setGameHighlights(gameHighlightsResult.data ?? [])
+    setSwingAccess(profileResult.data?.role === 'admin' ? 'admin' : (swingAccessResult.error ? null : swingAccessResult.data?.access_level || null))
     setLoading(false)
   }
 
@@ -192,7 +195,7 @@ export default function HomePage() {
         {activeTab === 'Home' && <Dashboard session={session} profile={profile} teams={teams} events={allEvents} messages={teamMessages} playerRequests={playerRequests} playerCandidates={playerRequestCandidates} pushSubscriptions={pushSubscriptions} onRefresh={refreshAppData} transportEvents={transportEvents} transportResponses={transportResponses} calendarConnection={calendarConnection} calendarState={calendarState} ownAttendance={ownAttendance} onAttendance={setAttendanceStatus} attendanceBusy={attendanceBusy} onAgenda={() => navigate('Agenda')} onTeam={() => navigate('Team')} onStats={() => navigate('Stats')} onMore={() => navigate('Meer')} />}
         {activeTab === 'Agenda' && <Agenda events={allEvents} connection={calendarConnection} gameHighlights={gameHighlights} gameStats={playerGameStats} transportEvents={transportEvents} transportResponses={transportResponses} clubLocations={clubLocations} state={calendarState} profile={profile} teams={teams} attendance={attendance} visibleProfiles={visibleProfiles} memberships={allMemberships} ownAttendance={ownAttendance} onAttendance={setAttendanceStatus} attendanceBusy={attendanceBusy} onRefresh={refreshAppData} onGoMore={() => navigate('Meer')} />}
         {activeTab === 'Stats' && <Stats profile={profile} teams={teams} attendance={attendance} gameAttendance={gameAttendance} trainingEvents={trainingEvents} calendarEvents={calendarEvents} gameStats={playerGameStats} measurements={playerMeasurements} />}
-        {activeTab === 'Coach' && isCoachUser && <CoachDashboard session={session} profile={profile} teams={teams} gameStats={playerGameStats} measurements={playerMeasurements} trainingEvents={trainingEvents} calendarEvents={calendarEvents} attendance={attendance} gameAttendance={gameAttendance} profiles={visibleProfiles} memberships={allMemberships} messages={teamMessages} playerRequests={playerRequests} playerCandidates={playerRequestCandidates} pushSubscriptions={pushSubscriptions} ownAttendance={ownAttendance} onAttendance={setAttendanceStatus} attendanceBusy={attendanceBusy} clubLocations={clubLocations} transportEvents={transportEvents} transportResponses={transportResponses} onRefresh={refreshAppData} onMessage={setMessage} />}
+        {activeTab === 'Coach' && isCoachUser && <CoachDashboard session={session} profile={profile} teams={teams} gameStats={playerGameStats} measurements={playerMeasurements} trainingEvents={trainingEvents} calendarEvents={calendarEvents} attendance={attendance} gameAttendance={gameAttendance} profiles={visibleProfiles} memberships={allMemberships} messages={teamMessages} playerRequests={playerRequests} playerCandidates={playerRequestCandidates} pushSubscriptions={pushSubscriptions} ownAttendance={ownAttendance} onAttendance={setAttendanceStatus} attendanceBusy={attendanceBusy} clubLocations={clubLocations} transportEvents={transportEvents} transportResponses={transportResponses} onRefresh={refreshAppData} onMessage={setMessage} swingAccess={swingAccess} />}
         {activeTab === 'Team' && <Team session={session} profile={profile} teams={teams} profiles={visibleProfiles} memberships={allMemberships} gameStats={playerGameStats} measurements={playerMeasurements} attendance={attendance} gameAttendance={gameAttendance} trainingEvents={trainingEvents} calendarEvents={calendarEvents} onSaved={refreshAppData} onMessage={setMessage} />}
         {activeTab === 'Meer' && <More session={session} profile={profile} teams={teams} calendar={calendarConnection} attendance={attendance} gameAttendance={gameAttendance} trainingEvents={trainingEvents} calendarEvents={calendarEvents} memberships={allMemberships} onSaved={refreshAppData} onMessage={setMessage} />}
       </section>
@@ -699,7 +702,7 @@ function PlayerInvitationCards({ session, requests = [], candidates = [], teams 
   return <section className="player-invite-stack"><p className="eyebrow orange">UITNODIGINGEN</p>{mine.map(c=>{const req=requests.find(r=>r.id===c.request_id);if(!req)return null;return <article className="player-invite-card" key={c.id}><div className="player-invite-copy"><span>Uitnodiging om mee te spelen</span><h3>{req.event_title}</h3><p><strong>{req.position}</strong>{req.note?` · ${req.note}`:''}</p><small>{formatLongDate(req.event_start)}</small></div>{c.response==='invited'?<div className="player-invite-actions"><button className="primary" onClick={()=>respond(c,'available')}>Ik kan</button><button className="secondary" onClick={()=>respond(c,'unavailable')}>Ik kan niet</button></div>:<div className="invite-response-state">{c.response==='confirmed'?'Je bent bevestigd voor deze activiteit.':'Je hebt aangegeven dat je kunt. De coach bevestigt wie meegaat.'}</div>}</article>})}</section>
 }
 
-function CoachDashboard({ session, profile, teams, gameStats = [], measurements = [], trainingEvents = [], calendarEvents = [], attendance = [], gameAttendance = [], profiles = [], memberships = [], messages = [], playerRequests = [], playerCandidates = [], pushSubscriptions = [], ownAttendance = {}, onAttendance, attendanceBusy = false, clubLocations = [], transportEvents = [], transportResponses = [], onRefresh, onMessage }) {
+function CoachDashboard({ session, profile, teams, gameStats = [], measurements = [], trainingEvents = [], calendarEvents = [], attendance = [], gameAttendance = [], profiles = [], memberships = [], messages = [], playerRequests = [], playerCandidates = [], pushSubscriptions = [], ownAttendance = {}, onAttendance, attendanceBusy = false, clubLocations = [], transportEvents = [], transportResponses = [], onRefresh, onMessage, swingAccess }) {
   const ownCoachTeams = teams.filter(team => team.member_role === 'coach' || profile?.role === 'admin')
   const [selectedTeamId, setSelectedTeamId] = useState(String(ownCoachTeams[0]?.id || ''))
   const [trainingEditorOpen, setTrainingEditorOpen] = useState(false)
@@ -715,6 +718,7 @@ function CoachDashboard({ session, profile, teams, gameStats = [], measurements 
   const [coachStatsOpen, setCoachStatsOpen] = useState(false)
   const [statsPlayer, setStatsPlayer] = useState(null)
   const [statEntryOpen, setStatEntryOpen] = useState(null)
+  const [swingAnalyzerOpen, setSwingAnalyzerOpen] = useState(false)
 
   useEffect(() => {
     supabase.from('teams').select('id,name,sport,is_active,season_id,foys_match_text,seasons(is_active)').eq('is_active', true).then(({data}) => {
@@ -771,6 +775,7 @@ function CoachDashboard({ session, profile, teams, gameStats = [], measurements 
       <button onClick={()=>setMessageOpen(true)}><span><Icon name="bell"/></span><strong>Teambericht</strong><small>Ook als pushmelding</small></button>
       <button onClick={()=>setRequestOpen(true)}><span><Icon name="people"/></span><strong>Invaller aanvragen</strong><small>Verzoek aan coach van ander team</small></button>
       <button onClick={()=>setCoachStatsOpen(true)}><span><Icon name="stats"/></span><strong>Team stats</strong><small>Team & persoonlijke cijfers</small></button>
+      {(profile?.role === 'admin' || swingAccess === 'coach' || swingAccess === 'admin') && <button className="swing-launch" onClick={()=>setSwingAnalyzerOpen(true)}><span><Icon name="swing"/></span><strong>Swing Analyzer</strong><small>Video, coachanalyse & drills</small></button>}
     </div>
 
     <SectionTitle title="Komend" />
@@ -810,6 +815,7 @@ function CoachDashboard({ session, profile, teams, gameStats = [], measurements 
     {coachStatsOpen && <CoachStatsModal team={selectedTeam} players={teamPlayers} attendance={attendance} gameAttendance={gameAttendance} trainingEvents={teamTrainingEvents} calendarEvents={teamGames} gameStats={gameStats} measurements={measurements} onPlayer={person=>setStatsPlayer(person)} onAddGame={()=>setStatEntryOpen('game')} onAddMeasurement={()=>setStatEntryOpen('measurement')} onClose={()=>setCoachStatsOpen(false)} />}
     {statsPlayer && <PlayerStatsModal person={statsPlayer} team={selectedTeam} attendance={attendance} gameAttendance={gameAttendance} trainingEvents={teamTrainingEvents} calendarEvents={teamGames} gameStats={gameStats} measurements={measurements} onClose={()=>setStatsPlayer(null)} />}
     {statEntryOpen && <CoachStatEntryModal mode={statEntryOpen} team={selectedTeam} players={teamPlayers} onClose={()=>setStatEntryOpen(null)} onSaved={async()=>{setStatEntryOpen(null);await onRefresh()}} />}
+    {swingAnalyzerOpen && <SwingAnalyzerModal session={session} profile={profile} accessLevel={profile?.role === 'admin' ? 'admin' : swingAccess} team={selectedTeam} players={teamPlayers} profiles={profiles} memberships={memberships} onClose={()=>setSwingAnalyzerOpen(false)} />}
     {coachPlayerProfile && <PlayerProfileModal person={coachPlayerProfile} team={selectedTeam} viewerProfile={profile} viewerMembership={{member_role:'coach'}} attendance={attendance} gameAttendance={gameAttendance} trainingEvents={trainingEvents} calendarEvents={calendarEvents} memberships={memberships} onClose={()=>setCoachPlayerProfile(null)} />}
   </section>
 }
@@ -829,6 +835,133 @@ function coreStatsForPlayer(personId, team, attendance=[], gameAttendance=[], tr
   return {avg,ops,h:sums.h||0,rbi:sums.rbi||0,sb:sums.sb||0,exit:latest('exit_velocity'),home1:latest('home_to_first'),attendance:att}
 }
 function statRate(v){return v==null?'—':Number(v).toFixed(3).replace(/^0/,'')}
+
+function SwingAnalyzerModal({ session, profile, accessLevel, team, players = [], profiles = [], memberships = [], onClose }) {
+  const isAnalyzerAdmin = profile?.role === 'admin' || accessLevel === 'admin'
+  const [view, setView] = useState('home')
+  const [selectedPlayer, setSelectedPlayer] = useState(null)
+  const [analyses, setAnalyses] = useState([])
+  const [assignments, setAssignments] = useState([])
+  const [permissions, setPermissions] = useState([])
+  const [busy, setBusy] = useState(true)
+  const [error, setError] = useState('')
+  const [videoFile, setVideoFile] = useState(null)
+  const [videoUrl, setVideoUrl] = useState('')
+  const [exitVelocity, setExitVelocity] = useState('')
+  const [coachNote, setCoachNote] = useState('')
+  const [metrics, setMetrics] = useState(defaultSwingMetrics())
+  const [savedResult, setSavedResult] = useState(null)
+  const [permissionBusy, setPermissionBusy] = useState(false)
+
+  useEffect(() => { loadSwingData() }, [team?.id, accessLevel])
+  useEffect(() => () => { if (videoUrl) URL.revokeObjectURL(videoUrl) }, [videoUrl])
+
+  async function loadSwingData() {
+    setBusy(true); setError('')
+    const analysisQuery = supabase.from('swing_analyses').select('*').order('recorded_at', { ascending: false })
+    const assignmentQuery = supabase.from('swing_analyzer_assignments').select('*')
+    const permissionQuery = isAnalyzerAdmin ? supabase.from('swing_analyzer_permissions').select('*') : Promise.resolve({data:[],error:null})
+    const [a, as, p] = await Promise.all([analysisQuery, assignmentQuery, permissionQuery])
+    if (a.error) setError(`Swing Analyzer is nog niet ingericht in Supabase: ${a.error.message}`)
+    setAnalyses(a.data || []); setAssignments(as.data || []); setPermissions(p.data || []); setBusy(false)
+  }
+
+  const allowedPlayerIds = new Set(isAnalyzerAdmin ? players.map(p=>p.id) : assignments.filter(a=>a.coach_id===session?.user?.id).map(a=>a.player_id))
+  const allowedPlayers = players.filter(p => allowedPlayerIds.has(p.id))
+  const playerAnalyses = (playerId) => analyses.filter(a => a.player_id === playerId)
+  const latestFor = (playerId) => playerAnalyses(playerId)[0]
+
+  function openNew(person) {
+    setSelectedPlayer(person); setVideoFile(null); setVideoUrl(''); setExitVelocity(''); setCoachNote(''); setMetrics(defaultSwingMetrics()); setSavedResult(null); setView('new')
+  }
+  function pickVideo(file) {
+    if (!file) return
+    if (videoUrl) URL.revokeObjectURL(videoUrl)
+    setVideoFile(file); setVideoUrl(URL.createObjectURL(file))
+  }
+  function scoreInfo() {
+    const values=Object.values(metrics).map(Number).filter(Number.isFinite)
+    const overall=Math.round(values.reduce((a,b)=>a+b,0)/Math.max(1,values.length))
+    const sorted=Object.entries(metrics).sort((a,b)=>Number(a[1])-Number(b[1]))
+    const focus=sorted.slice(0,2).map(([key,score])=>({ key, score:Number(score), ...swingMetricCatalog[key] }))
+    return {overall,focus}
+  }
+  async function saveAnalysis() {
+    if (!selectedPlayer) return
+    const {overall,focus}=scoreInfo(); setBusy(true); setError('')
+    const payload={ player_id:selectedPlayer.id, coach_id:session.user.id, team_id:team?.id || null, recorded_at:new Date().toISOString(), exit_velocity:exitVelocity?Number(exitVelocity):null, overall_score:overall, metrics, focus, coach_note:coachNote.trim()||null }
+    const {data,error}=await supabase.from('swing_analyses').insert(payload).select().single()
+    if(error){setError(error.message);setBusy(false);return}
+    setSavedResult(data); setAnalyses(prev=>[data,...prev]); setBusy(false); setView('result')
+  }
+  async function setCoachAccess(coachId, level) {
+    setPermissionBusy(true); setError('')
+    const {error}=await supabase.from('swing_analyzer_permissions').upsert({profile_id:coachId,access_level:level,granted_by:session.user.id,updated_at:new Date().toISOString()},{onConflict:'profile_id'})
+    if(error) setError(error.message); else await loadSwingData(); setPermissionBusy(false)
+  }
+  async function toggleAssignment(coachId, playerId, checked) {
+    setPermissionBusy(true); setError('')
+    const q=checked ? supabase.from('swing_analyzer_assignments').upsert({coach_id:coachId,player_id:playerId,assigned_by:session.user.id},{onConflict:'coach_id,player_id'}) : supabase.from('swing_analyzer_assignments').delete().eq('coach_id',coachId).eq('player_id',playerId)
+    const {error}=await q
+    if(error) setError(error.message); else await loadSwingData(); setPermissionBusy(false)
+  }
+  const allCoachIds=[...new Set(memberships.filter(m=>m.member_role==='coach').map(m=>m.profile_id))]
+  const coaches=allCoachIds.map(id=>profiles.find(p=>p.id===id)).filter(Boolean)
+
+  return <div className="swing-layer"><section className="swing-shell" role="dialog" aria-modal="true" aria-label="Swing Analyzer">
+    <header className="swing-topbar"><button className="swing-icon-btn" onClick={()=>view==='home'?onClose():setView('home')}><Icon name={view==='home'?'close':'back'}/></button><div><p className="eyebrow orange">MIJN OG</p><h2>Swing Analyzer <span>V1</span></h2></div>{isAnalyzerAdmin?<button className={`swing-admin-btn ${view==='access'?'active':''}`} onClick={()=>setView('access')}><Icon name="lock"/></button>:<span className="swing-icon-spacer"/>}</header>
+    <div className="swing-body">
+      <div className="swing-advisory"><Icon name="info"/><span><strong>Coachhulpmiddel</strong> De analyse ondersteunt jouw observatie en is niet leidend. Beoordeel altijd zelf de volledige swing en context.</span></div>
+      {error && <div className="notice error">{error}</div>}
+      {busy && view==='home' ? <div className="swing-loading">Analyses laden…</div> : <>
+        {view==='home' && <>
+          <section className="swing-hero"><div><p className="eyebrow">TEAM</p><h3>{team?.name || 'Mijn OG'}</h3><p>{allowedPlayers.length} speelster{allowedPlayers.length===1?'':'s'} beschikbaar</p></div><span className="swing-hero-mark"><Icon name="swing"/></span></section>
+          <div className="swing-section-head"><div><p className="eyebrow orange">SPEELSTERS</p><h3>Kies een speelster</h3></div></div>
+          <div className="swing-player-list">{allowedPlayers.map(person=>{const last=latestFor(person.id);return <button key={person.id} onClick={()=>{setSelectedPlayer(person);setView('player')}}><ProfileAvatar person={person} size="small"/><span><strong>{personName(person)}</strong><small>{last?`Laatste analyse ${formatSwingDate(last.recorded_at)}`:'Nog geen analyse'}</small></span>{last?<b className="swing-mini-score">{Math.round(last.overall_score)}</b>:<span className="swing-new-pill">Nieuw</span>}<Icon name="chevron"/></button>})}{!allowedPlayers.length&&<div className="swing-empty"><Icon name="lock"/><strong>Geen speelsters toegewezen</strong><p>Een Analyzer Admin kan speelsters aan jouw account koppelen.</p></div>}</div>
+        </>}
+        {view==='player' && selectedPlayer && <>
+          <section className="swing-player-head"><ProfileAvatar person={selectedPlayer} size="large"/><div><p className="eyebrow orange">SWINGPROFIEL</p><h3>{personName(selectedPlayer)}</h3><p>{playerSportLine(selectedPlayer)}</p></div></section>
+          <button className="swing-primary" onClick={()=>openNew(selectedPlayer)}><Icon name="camera"/> Nieuwe swing analyseren</button>
+          <div className="swing-section-head"><div><p className="eyebrow orange">HISTORIE</p><h3>Analyses</h3></div></div>
+          <div className="swing-history">{playerAnalyses(selectedPlayer.id).map(a=><article key={a.id}><div className="swing-score-orb">{Math.round(a.overall_score)}</div><div><strong>{formatSwingDate(a.recorded_at)}</strong><small>{a.focus?.[0]?.label || 'Coachinganalyse'}{a.exit_velocity?` · Exit velo ${a.exit_velocity}`:''}</small></div><button onClick={()=>{setSavedResult(a);setView('result')}}><Icon name="chevron"/></button></article>)}{!playerAnalyses(selectedPlayer.id).length&&<p className="muted">Nog geen swinganalyses opgeslagen.</p>}</div>
+        </>}
+        {view==='new' && selectedPlayer && <>
+          <div className="swing-section-head"><div><p className="eyebrow orange">NIEUWE ANALYSE</p><h3>{personName(selectedPlayer)}</h3></div></div>
+          <section className="swing-capture-card"><div className="swing-camera-guide"><span className="guide-person">◯<i></i></span><span className="guide-ground"/><span className="guide-copy">Zijaanzicht · volledig lichaam en knuppel in beeld</span></div>{videoUrl?<video className="swing-preview" src={videoUrl} controls playsInline/>:<div className="swing-video-empty"><Icon name="camera"/><strong>Film of kies een korte swingvideo</strong><small>Bij voorkeur 60 fps · telefoon stabiel · zijaanzicht</small></div>}<div className="swing-file-actions"><label className="swing-primary"><Icon name="camera"/> Opnemen<input type="file" accept="video/*" capture="environment" onChange={e=>pickVideo(e.target.files?.[0])}/></label><label className="swing-secondary">Video kiezen<input type="file" accept="video/*" onChange={e=>pickVideo(e.target.files?.[0])}/></label></div>{videoFile&&<small className="swing-file-name">{videoFile.name} · {(videoFile.size/1024/1024).toFixed(1)} MB · wordt niet opgeslagen</small>}</section>
+          <section className="swing-metrics"><div className="swing-section-head compact"><div><p className="eyebrow orange">COACHBEOORDELING</p><h3>8 technische onderdelen</h3></div><span>{scoreInfo().overall}/100</span></div><p className="swing-help">Gebruik de video als hulpmiddel. 50 = aandachtspunt, 75 = goed, 90 = zeer sterk. Pas alleen aan wat je betrouwbaar kunt beoordelen.</p>{Object.entries(metrics).map(([key,value])=><label key={key}><span><strong>{swingMetricCatalog[key].label}</strong><small>{swingMetricCatalog[key].hint}</small></span><output>{value}</output><input type="range" min="40" max="100" step="1" value={value} onChange={e=>setMetrics({...metrics,[key]:Number(e.target.value)})}/></label>)}</section>
+          <div className="form-stack swing-extra"><label>Exit velo <span>(optioneel)</span><input type="number" inputMode="decimal" value={exitVelocity} onChange={e=>setExitVelocity(e.target.value)} placeholder="Bijv. 92"/></label><label>Coachnotitie <span>(optioneel)</span><textarea rows="3" value={coachNote} onChange={e=>setCoachNote(e.target.value)} placeholder="Wat zie jij in deze swing?"/></label></div>
+          <button className="swing-primary" disabled={busy} onClick={saveAnalysis}>{busy?'Opslaan…':'Analyse opslaan'}</button>
+        </>}
+        {view==='result' && savedResult && <SwingResult analysis={savedResult} player={profiles.find(p=>p.id===savedResult.player_id)||selectedPlayer} onNew={()=>openNew(profiles.find(p=>p.id===savedResult.player_id)||selectedPlayer)} />}
+        {view==='access' && isAnalyzerAdmin && <>
+          <div className="swing-section-head"><div><p className="eyebrow orange">TOEGANG</p><h3>Analyzer coaches</h3></div></div><p className="swing-help">Alleen toegewezen coaches zien de module. Analyzer Coaches zien uitsluitend de speelsters die hieronder aan hen zijn gekoppeld.</p>
+          <div className="swing-access-list">{coaches.map(coach=>{const perm=permissions.find(p=>p.profile_id===coach.id);const level=perm?.access_level||'none';const assigned=new Set(assignments.filter(a=>a.coach_id===coach.id).map(a=>a.player_id));return <article key={coach.id}><div className="swing-access-head"><ProfileAvatar person={coach} size="small"/><span><strong>{personName(coach)}</strong><small>{level==='admin'?'Analyzer Admin':level==='coach'?'Analyzer Coach':'Geen toegang'}</small></span><select disabled={permissionBusy} value={level} onChange={e=>setCoachAccess(coach.id,e.target.value)}><option value="none">Geen toegang</option><option value="coach">Analyzer Coach</option><option value="admin">Analyzer Admin</option></select></div>{level==='coach'&&<div className="swing-assignment-grid">{players.map(player=><label key={player.id}><input type="checkbox" checked={assigned.has(player.id)} disabled={permissionBusy} onChange={e=>toggleAssignment(coach.id,player.id,e.target.checked)}/><span>{personName(player)}</span></label>)}</div>}</article>})}{!coaches.length&&<p className="muted">Geen coaches gevonden.</p>}</div>
+        </>}
+      </>}
+    </div>
+  </section></div>
+}
+
+function SwingResult({analysis,player,onNew}) {
+  const metrics=analysis.metrics||{}; const focus=analysis.focus||[]
+  return <div className="swing-result"><section className="swing-result-hero"><div><p className="eyebrow">ANALYSERESULTAAT</p><h3>{personName(player)}</h3><p>{formatSwingDate(analysis.recorded_at)}</p></div><div className="swing-big-score"><strong>{Math.round(analysis.overall_score)}</strong><small>/100</small></div></section><p className="swing-result-note">Deze score is een coachregistratie en geen objectieve biomechanische meting.</p>
+    <div className="swing-score-grid">{Object.entries(metrics).map(([key,value])=><article key={key}><span>{swingMetricCatalog[key]?.label||key}</span><strong>{value}</strong><div><i style={{width:`${Math.max(0,Math.min(100,Number(value)))}%`}}/></div></article>)}</div>
+    <div className="swing-section-head"><div><p className="eyebrow orange">FOCUSPUNTEN</p><h3>Hier zou ik aan werken</h3></div></div><div className="swing-focus-list">{focus.map((item,index)=><article key={item.key}><span>{index+1}</span><div><strong>{item.label}</strong><p>{item.feedback}</p><div className="swing-drill"><Icon name="swing"/><span><b>{item.drill}</b><small>{item.drillText}</small></span></div></div></article>)}</div>{analysis.coach_note&&<div className="swing-coach-note"><strong>Coachnotitie</strong><p>{analysis.coach_note}</p></div>}{analysis.exit_velocity&&<div className="swing-exit"><span>Exit velo</span><strong>{analysis.exit_velocity}</strong></div>}<button className="swing-primary" onClick={onNew}><Icon name="camera"/> Nieuwe swing vergelijken</button></div>
+}
+
+const swingMetricCatalog={
+  head_stability:{label:'Head stability',hint:'Rust van het hoofd tijdens load en contact',feedback:'Er is relatief veel hoofdbeweging. Zoek eerst een stabiele basis en rustigere verplaatsing.',drill:'No-stride tee drill',drillText:'3 × 5 swings · hoofd rustig houden van load tot contact.'},
+  stride:{label:'Stride',hint:'Controle en herhaalbaarheid van de stap',feedback:'De stride verdient extra aandacht. Werk aan een herhaalbare landing zonder haast.',drill:'Stride & freeze',drillText:'3 × 5 herhalingen · land, bevries, controleer balans en swing dan door.'},
+  posture:{label:'Posture',hint:'Houding en rompcontrole door de swing',feedback:'De houding verandert te veel door de beweging. Train rotatie vanuit een stabiele atletische positie.',drill:'Posture tee',drillText:'3 × 6 swings · behoud romp- en hoofdhoek richting contact.'},
+  front_side:{label:'Front side',hint:'Stabiliteit van voorste been en zijde',feedback:'De front side geeft nog onvoldoende stabiele weerstand. Bouw eerst controle bij de landing.',drill:'Firm front-side drill',drillText:'3 × 5 swings · gecontroleerde landing, daarna rotatie rond een stabiele voorzijde.'},
+  balance:{label:'Balance',hint:'Balans vóór, tijdens en na contact',feedback:'De swing eindigt minder stabiel dan gewenst. Maak balans een voorwaarde vóór je snelheid toevoegt.',drill:'Finish & hold',drillText:'3 × 5 swings · eindpositie 2 seconden vasthouden zonder bijstappen.'},
+  load_timing:{label:'Load → plant timing',hint:'Tempo en controle richting foot plant',feedback:'De timing tussen load en landing kan consistenter. Werk met een rustig ritme en vaste landing.',drill:'Load-pause-go',drillText:'3 × 5 herhalingen · gecontroleerde load, korte pauze, plant en swing.'},
+  sequencing:{label:'Sequencing',hint:'Volgorde onderlichaam, romp en handen',feedback:'Onderlichaam, romp en handen starten te veel tegelijk. Train de bewegingsvolgorde op lage snelheid.',drill:'Slow motion sequence',drillText:'3 × 5 langzame swings · heup → romp → schouders → handen/barrel.'},
+  hand_connection:{label:'Hand connection',hint:'Handen verbonden met romp en rotatie',feedback:'De handen raken vroeg los van de lichaamsrotatie. Werk aan verbinding en een compacte handroute.',drill:'Connection drill',drillText:'3 × 6 korte tee-swings · handen verbonden houden met de romp.'}
+}
+function defaultSwingMetrics(){return {head_stability:75,stride:75,posture:75,front_side:75,balance:75,load_timing:75,sequencing:75,hand_connection:75}}
+function formatSwingDate(value){try{return new Intl.DateTimeFormat('nl-NL',{day:'numeric',month:'short',year:'numeric'}).format(new Date(value))}catch{return ''}}
+
 function CoachStatsModal({team,players=[],attendance=[],gameAttendance=[],trainingEvents=[],calendarEvents=[],gameStats=[],measurements=[],onPlayer,onAddGame,onAddMeasurement,onClose}){
   const rows=players.map(person=>({person,stats:coreStatsForPlayer(person.id,team,attendance,gameAttendance,trainingEvents,calendarEvents,gameStats,measurements)}))
   const teamGames=gameStats.filter(r=>Number(r.team_id)===Number(team?.id))
@@ -1899,7 +2032,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
         <SettingsRow icon="lock" title="Wachtwoord" subtitle="Wachtwoord wijzigen via resetmail" onClick={() => setSettingsView('password')} />
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.9.4.2" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.9.5.0" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -1938,7 +2071,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 2.9.4.2</h3>
+        <h3>Versie 2.9.5.0</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS agenda</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>
@@ -2301,7 +2434,8 @@ function Icon({ name }) {
     trash: <><path d="M4 7h16M9 7V4h6v3M7 7l1 14h8l1-14M10 11v6M14 11v6"/></>,
     camera: <><path d="M4 8h3l1.5-2h7L17 8h3v11H4Z"/><circle cx="12" cy="13" r="3.5"/></>,
     car: <><path d="M5 17h14l-1-6-2-4H8l-2 4-1 6Z"/><path d="M7 11h10M5 14h14"/><circle cx="8" cy="18" r="1.5"/><circle cx="16" cy="18" r="1.5"/></>,
-    clipboard: <><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4.5V3h6v1.5M8 9h8M8 13h8M8 17h5"/></>
+    clipboard: <><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4.5V3h6v1.5M8 9h8M8 13h8M8 17h5"/></>,
+    swing: <><path d="M4 19 18 5"/><path d="m15 4 5 5"/><path d="M5.5 16.5 8 19"/><circle cx="6" cy="6" r="2.2"/><path d="M9 14c-2-1.4-3.3-3.2-3-5"/></>
   }
   return <svg className="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name] || paths.more}</svg>
 }

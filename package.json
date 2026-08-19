@@ -1,6 +1,6 @@
 {
   "name": "mijn-og",
-  "version": "2.9.4.2",
+  "version": "2.9.5.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
