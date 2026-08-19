@@ -22,3 +22,8 @@ This remains a coaching aid, not a biomechanical lab measurement. Sequencing and
 - Live camera mode with an overlay on the actual camera image for player/bat framing.
 - Fallback to native phone camera and video picker.
 - Expanded explanation and AI observation for all 8 metrics in both analysis and saved result screens.
+
+## v2.9.7.1
+- Fix: MediaPipe PoseLandmarker video timestamps blijven nu strikt oplopen over meerdere analyses.
+- Voorkomt `Packet timestamp mismatch` / `norm_rect` bij een tweede of herhaalde videoanalyse.
+- Geen databasewijziging nodig.
