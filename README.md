@@ -8,7 +8,32 @@ Agenda refresh met kaartweergave en team-aware FOYS filtering.
 - Typefilter Alles / Wedstrijden / Trainingen.
 - FOYS-herkenning per team via `teams.foys_match_text`.
 - Clubbeheer > Teams kan de FOYS-herkenning aanpassen.
-- Over Mijn OG: versie 2.9.9.0.
+- Over Mijn OG: versie 2.9.9.3.
+
+## v2.9.9.3 - Uniforme statistiekbronnen
+
+- Coachmetingen gebruiken voortaan de centrale tabel `player_measurements`.
+- Meetpunten hebben vaste statistiekcodes, zodat dezelfde waarde overal terugkomt.
+- Bestaande kaartmetingen worden door de migratie veilig overgezet.
+- Wedstrijdstats accepteren handmatige invoer en iScore via dezelfde wedstrijdsleutel.
+- De basis voor pitchingstats is toegevoegd met dezelfde handmatig/iScore-bronlogica.
+- Pitchers krijgen in het spelersprofiel automatisch een Pitchingstats-kaart.
+- Voer `supabase_v2993_unified_stats.sql` uit na de eerdere spelerskaartmigratie.
+
+## v2.9.9.2 - Persoonlijke stats samengevoegd
+
+- Wedstrijdstats en flexibele meetkaarten staan nu samen onder Persoonlijke stats.
+- Het losse dubbele statistiekenblok is verwijderd.
+- Aanwezigheid blijft als apart onderdeel zichtbaar.
+
+## v2.9.9.1 - Kleine verbeteringen
+
+- Strakke vaste teamfoto's en uitlijning in Mijn team.
+- Teamberichten en eigen invallerverzoeken kunnen door coaches worden verwijderd.
+- Verlopen trainingen blijven beschikbaar onder Agenda → Gespeeld.
+- Datum- en tijdvelden staan op mobiel onder elkaar en vullen de beschikbare breedte.
+- Popups veroorzaken op mobiel geen automatische paginazoom meer.
+- Verwijderen van spelerskaarten heeft nu een duidelijke rode actieknop.
 
 ## v2.9.9.0 - Spelerskaarten
 

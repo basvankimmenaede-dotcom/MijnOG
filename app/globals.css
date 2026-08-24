@@ -1905,6 +1905,7 @@ input:focus, textarea:focus, select:focus {
 .player-cards-heading h3{margin:1px 0 0}
 .player-cards-heading .primary.compact{flex:0 0 auto;padding:10px 14px}
 .player-measurement-card{border:1px solid #f0dfcf;border-radius:18px;background:#fffaf6;overflow:hidden}
+.player-game-stats-card .player-profile-stats-grid{margin:0;padding:0 14px 14px;grid-template-columns:repeat(5,minmax(0,1fr))}
 .player-measurement-card-head{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:11px;padding:14px 15px}
 .player-measurement-card-head>div{display:flex;flex-direction:column;gap:2px;min-width:0}
 .player-measurement-card-head small{color:var(--muted,#77736f)}
@@ -1950,6 +1951,57 @@ input:focus, textarea:focus, select:focus {
   .player-card-editor-rows>article label:first-child{grid-column:1/-1}
   .player-card-editor-rows>article>.sheet-icon-button{align-self:end}
   .player-metric-row{grid-template-columns:minmax(0,1fr) auto auto}
+  .player-game-stats-card .player-profile-stats-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .player-game-stats-card .player-profile-stats-grid>div:nth-child(n+4){grid-column:auto}
+}
+
+/* v2.9.9.1 - uitlijning, beheeracties en mobiele formulieren */
+.team-grid .team-card{
+  min-height:104px;
+  display:grid;
+  grid-template-columns:112px minmax(0,1fr) 22px;
+  align-items:center;
+  gap:16px;
+  padding:15px 16px;
+  text-align:left;
+}
+.team-grid .team-card>.team-thumb-image,
+.team-grid .team-card>.soft-icon.large{
+  width:112px;
+  height:74px;
+  min-width:112px;
+  border-radius:13px;
+  object-fit:cover;
+}
+.team-grid .team-card>.soft-icon.large{display:grid;place-items:center}
+.team-grid .team-card>div{min-width:0;display:grid;align-content:center;gap:3px}
+.team-grid .team-card h2{margin:0;line-height:1.15;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.team-grid .team-card p,.team-grid .team-card small{margin:0;line-height:1.35}
+.team-grid .team-card>svg{justify-self:end}
+.destructive-block-button{
+  width:100%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  padding:11px 14px;
+  cursor:pointer;
+}
+.destructive-block-button .icon{width:17px;height:17px}
+.coach-message-history{display:flex;flex-direction:column;margin-top:8px;padding-top:14px;border-top:1px solid var(--line,#e8e2dc)}
+.coach-message-history>.player-card-editor-head{padding-bottom:7px}
+.coach-message-history article{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px;padding:11px 0;border-top:1px solid var(--line,#e8e2dc)}
+.coach-message-history article>span{min-width:0;display:flex;flex-direction:column;gap:3px}
+.coach-message-history article small{color:var(--muted,#77736f);line-height:1.35;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+@media(max-width:640px){
+  .training-form .form-two.equal-fields{grid-template-columns:minmax(0,1fr)!important}
+  .training-form input[type="time"],
+  .training-form input[type="date"]{min-width:0;width:100%;max-width:100%;font-size:16px}
+  .training-form label{min-width:0}
+  .team-grid .team-card{grid-template-columns:92px minmax(0,1fr) 20px;gap:12px;padding:13px}
+  .team-grid .team-card>.team-thumb-image,
+  .team-grid .team-card>.soft-icon.large{width:92px;height:66px;min-width:92px}
+  input,select,textarea{font-size:16px!important}
 }
 
 /* v2.9.4.2 - gelijke uitlijning wedstrijdstat-kaarten */
