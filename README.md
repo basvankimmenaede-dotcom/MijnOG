@@ -8,7 +8,13 @@ Agenda refresh met kaartweergave en team-aware FOYS filtering.
 - Typefilter Alles / Wedstrijden / Trainingen.
 - FOYS-herkenning per team via `teams.foys_match_text`.
 - Clubbeheer > Teams kan de FOYS-herkenning aanpassen.
-- Over Mijn OG: versie 2.9.9.3.
+- Over Mijn OG: versie 2.9.9.4.
+
+## v2.9.9.4 - Spelersprofiel via Team stats
+
+- Team stats opent per speelster direct het samengevoegde spelersprofiel met wedstrijd-, pitching- en meetstats.
+- Het losse dubbele venster voor persoonlijke statistieken is verwijderd.
+- Feedback na het verwijderen van een teambericht staat onder de knop Bericht versturen.
 
 ## v2.9.9.3 - Uniforme statistiekbronnen
 
