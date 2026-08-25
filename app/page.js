@@ -174,6 +174,10 @@ export default function HomePage() {
   const ownAttendance = useMemo(() => Object.fromEntries(attendance.filter(row => row.profile_id === session?.user?.id).map(row => [String(row.event_id), row])), [attendance, session?.user?.id])
 
   async function setAttendanceStatus(event, status) {
+    if (new Date(event.end || event.start).getTime() < Date.now()) {
+      setMessage('Deze activiteit is afgelopen. Alleen een coach kan de aanwezigheid nog aanpassen.')
+      return
+    }
     if (status === 'absent') { setAbsenceReason(''); setAbsenceEvent(event); return }
     setAttendanceBusy(true); setMessage('')
     const { error } = await supabase.from('attendance').upsert({ event_id: event.id, profile_id: session.user.id, status, note: null, updated_at: new Date().toISOString() }, { onConflict: 'event_id,profile_id' })
@@ -184,6 +188,10 @@ export default function HomePage() {
 
   async function confirmAbsence() {
     if (!absenceReason.trim()) return setMessage('Geef een reden voor je afmelding.')
+    if (new Date(absenceEvent?.end || absenceEvent?.start).getTime() < Date.now()) {
+      setAbsenceEvent(null); setAbsenceReason('')
+      return setMessage('Deze activiteit is afgelopen. Alleen een coach kan de aanwezigheid nog aanpassen.')
+    }
     setAttendanceBusy(true); setMessage('')
     const { error } = await supabase.from('attendance').upsert({ event_id: absenceEvent.id, profile_id: session.user.id, status: 'absent', note: absenceReason.trim(), updated_at: new Date().toISOString() }, { onConflict: 'event_id,profile_id' })
     setAttendanceBusy(false)
@@ -574,7 +582,8 @@ function EventAudience({ event, compact=false }) {
 }
 
 function TrainingDetailModal({ event, current, onAttendance, busy, canManage, onEdit, onManageAttendance, onClose, attendance, profiles, memberships }) {
-  return <div className="modal-backdrop" onMouseDown={e => { if (e.target===e.currentTarget) onClose() }}><section className="detail-modal" role="dialog" aria-modal="true" aria-label="Trainingdetails"><header className="detail-modal-header"><div><p className="eyebrow orange">TRAINING</p><h2>{event.title}</h2></div><button className="sheet-icon-button" onClick={onClose} aria-label="Sluiten"><Icon name="close" /></button></header><div className="detail-modal-body"><div className="detail-meta-grid"><div><Icon name="calendar"/><span>{formatLongDate(event.start)}</span></div><div><Icon name="clock"/><span>{formatTimeRange(event.start,event.end)}</span></div>{event.meetAt && <div><Icon name="people"/><span>Verzamelen {formatClock(event.meetAt)}</span></div>}{event.location && <div><Icon name="pin"/><span>{event.location}</span></div>}</div><EventAudience event={event} />{event.description && <p className="detail-description">{event.description}</p>}<div className="detail-attendance"><h3>Ben je erbij?</h3><AttendanceButtons current={current?.status} onSelect={status => onAttendance(event,status)} busy={busy} /></div>{canManage && <><div className="detail-manage-actions"><button className="primary detail-edit" onClick={onEdit}>Training aanpassen</button>{onManageAttendance && <button className="secondary orange-outline" onClick={onManageAttendance}>Aanwezigheid beheren</button>}</div><AttendanceSummary event={event} rows={attendance} profiles={profiles} memberships={memberships} expanded /></>}</div></section></div>
+  const isPast=new Date(event.end||event.start).getTime()<Date.now()
+  return <div className="modal-backdrop" onMouseDown={e => { if (e.target===e.currentTarget) onClose() }}><section className="detail-modal" role="dialog" aria-modal="true" aria-label="Trainingdetails"><header className="detail-modal-header"><div><p className="eyebrow orange">TRAINING</p><h2>{event.title}</h2></div><button className="sheet-icon-button" onClick={onClose} aria-label="Sluiten"><Icon name="close" /></button></header><div className="detail-modal-body"><div className="detail-meta-grid"><div><Icon name="calendar"/><span>{formatLongDate(event.start)}</span></div><div><Icon name="clock"/><span>{formatTimeRange(event.start,event.end)}</span></div>{event.meetAt && <div><Icon name="people"/><span>Verzamelen {formatClock(event.meetAt)}</span></div>}{event.location && <div><Icon name="pin"/><span>{event.location}</span></div>}</div><EventAudience event={event} />{event.description && <p className="detail-description">{event.description}</p>}{!isPast?<div className="detail-attendance"><h3>Ben je erbij?</h3><AttendanceButtons current={current?.status} onSelect={status => onAttendance(event,status)} busy={busy} /></div>:<div className="attendance-locked"><Icon name="lock"/><span><strong>Aanwezigheid gesloten</strong><small>Na afloop kan alleen een coach de registratie aanpassen.</small></span></div>}{canManage && <><div className="detail-manage-actions"><button className="primary detail-edit" onClick={onEdit}>Training aanpassen</button>{onManageAttendance && <button className="secondary orange-outline" onClick={onManageAttendance}>Aanwezigheid beheren</button>}</div><AttendanceSummary event={event} rows={attendance} profiles={profiles} memberships={memberships} expanded /></>}</div></section></div>
 }
 
 function AttendanceButtons({ current, onSelect, busy, compact=false }) {
@@ -1147,9 +1156,22 @@ function CoachStatsModal({team,players=[],attendance=[],gameAttendance=[],traini
   const avg=sum.ab?sum.h/sum.ab:null, den=(sum.ab||0)+(sum.bb||0)+(sum.hbp||0)+(sum.sf||0), obp=den?((sum.h||0)+(sum.bb||0)+(sum.hbp||0))/den:null, slg=sum.ab?(sum.tb||0)/sum.ab:null, ops=obp!=null&&slg!=null?obp+slg:null
   const ev=rows.map(r=>Number(r.stats.exit?.value)).filter(Number.isFinite), h1=rows.map(r=>Number(r.stats.home1?.value)).filter(Number.isFinite), atts=rows.map(r=>r.stats.attendance.percentage).filter(v=>v!=null)
   const cards=[['AVG',statRate(avg)],['OPS',statRate(ops)],['Hits',sum.h||0],['RBI',sum.rbi||0],['SB',sum.sb||0],['Exit velo',ev.length?`${Math.round(ev.reduce((a,b)=>a+b,0)/ev.length)} km/u`:'—'],['Home → 1',h1.length?`${(h1.reduce((a,b)=>a+b,0)/h1.length).toFixed(2).replace('.',',')} s`:'—'],['Aanwezig',atts.length?`${Math.round(atts.reduce((a,b)=>a+b,0)/atts.length)}%`:'—']]
+  const pastTraining=trainingEvents.filter(event=>event.type==='training'&&(event.teamIds||[event.teamId]).map(Number).includes(Number(team?.id))&&new Date(event.end||event.start).getTime()<Date.now())
+  const pastGames=[...trainingEvents.filter(event=>event.type!=='training'),...calendarEvents].filter(event=>eventTeamMatches(event,[team]).includes(Number(team?.id))&&new Date(event.end||event.start).getTime()<Date.now())
+  const sessions=[...pastTraining,...pastGames].sort((a,b)=>new Date(b.start)-new Date(a.start))
+  function eligible(person,event){return event.type!=='training'||event.audienceMode!=='selected'||event.guestProfileIds?.includes(person.id)}
+  function statusFor(person,event){if(!eligible(person,event))return 'not_invited';return event.type==='training'?attendance.find(row=>String(row.event_id)===String(event.id)&&row.profile_id===person.id)?.status||'none':gameAttendance.find(row=>row.event_key===eventTransportKey(event)&&row.profile_id===person.id)?.status||'none'}
+  const attendanceRows=players.map(person=>{const statuses=sessions.map(event=>statusFor(person,event));const present=statuses.filter(value=>value==='present'||value==='late').length, absent=statuses.filter(value=>value==='absent'||value==='injured').length, late=statuses.filter(value=>value==='late').length, total=present+absent;return {person,statuses,present,absent,late,percentage:total?Math.round(present/total*100):null}})
+  const teamRegistered=attendanceRows.reduce((total,row)=>total+row.present+row.absent,0), teamPresent=attendanceRows.reduce((total,row)=>total+row.present,0)
+  const cards=[['AVG',statRate(avg)],['OPS',statRate(ops)],['Hits',sum.h||0],['RBI',sum.rbi||0],['SB',sum.sb||0],['Exit velo',ev.length?`${Math.round(ev.reduce((a,b)=>a+b,0)/ev.length)} km/u`:'—'],['Home → 1',h1.length?`${(h1.reduce((a,b)=>a+b,0)/h1.length).toFixed(2).replace('.',',')} s`:'—'],['Aanwezig',teamRegistered?`${Math.round(teamPresent/teamRegistered*100)}%`:'—']]
+  const statusMark=status=>status==='present'?['✓','Aanwezig']:status==='late'?['T','Te laat']:status==='absent'?['×','Afwezig']:status==='injured'?['G','Geblesseerd']:status==='maybe'?['?','Misschien']:status==='not_invited'?['–','Niet uitgenodigd']:['','Niet geregistreerd']
   return <SettingsModal title={`${team?.name||'Team'} stats`} onClose={onClose}><div className="coach-stats-modal">
     <div className="coach-stats-actions"><button className="primary" onClick={onAddGame}>+ Wedstrijd</button><button className="secondary orange-outline" onClick={onAddMeasurement}>+ Meting</button></div>
     <p className="eyebrow orange">TEAMSTATISTIEKEN</p><div className="coach-team-stat-grid">{cards.map(([l,v])=><div key={l}><span>{l}</span><strong>{v}</strong></div>)}</div>
+    <div className="coach-stats-player-head"><strong>Aanwezigheid totaal</strong><small>{sessions.length} afgelopen activiteiten</small></div>
+    <div className="attendance-total-table"><div className="attendance-total-head"><span>Speelster</span><span>Aanw.</span><span>Afgemeld</span><span>Te laat</span><span>%</span></div>{attendanceRows.map(row=><div className="attendance-total-row" key={row.person.id}><span><ProfileAvatar person={row.person} size="small"/><strong>{teamDisplayName(row.person)}</strong></span><span>{row.present}</span><span>{row.absent}</span><span>{row.late}</span><strong>{row.percentage==null?'—':`${row.percentage}%`}</strong></div>)}</div>
+    <div className="coach-stats-player-head"><strong>Overzicht per activiteit</strong><small>Veeg horizontaal voor eerdere activiteiten</small></div>
+    <div className="attendance-matrix-wrap"><table className="attendance-matrix"><thead><tr><th>Speelster</th>{sessions.map(event=><th key={event.uid||`${event.type}-${event.id}`} title={`${event.title} · ${formatLongDate(event.start)}`}><span>{formatShortDate(event.start)}</span><small>{event.type==='game'?'W':'T'}</small></th>)}</tr></thead><tbody>{attendanceRows.map(row=><tr key={row.person.id}><th>{teamDisplayName(row.person)}</th>{row.statuses.map((status,index)=>{const [mark,label]=statusMark(status);return <td key={`${row.person.id}-${index}`} className={`attendance-cell ${status}`} title={label}>{mark}</td>})}</tr>)}</tbody></table>{!sessions.length&&<p className="muted">Nog geen afgelopen trainingen of wedstrijden.</p>}</div>
     <div className="coach-stats-player-head"><strong>Persoonlijke stats</strong><small>Tik op een speelster</small></div>
     <div className="coach-stats-players">{rows.map(({person,stats})=><button key={person.id} onClick={()=>onPlayer(person)}><span className="coach-stats-person"><ProfileAvatar person={person} size="small"/><span><strong>{teamDisplayName(person)}</strong><small>{person.jersey_number?`#${person.jersey_number} · `:''}${person.primary_position||'Geen positie'}</small></span></span><span className="coach-stats-mini"><strong>{statRate(stats.avg)}</strong><small>AVG</small></span><span className="coach-stats-mini"><strong>{stats.attendance.percentage==null?'—':`${stats.attendance.percentage}%`}</strong><small>Aanw.</small></span><Icon name="chevron"/></button>)}</div>
   </div></SettingsModal>
@@ -1259,8 +1281,8 @@ function FinalizeAttendanceModal({ event, team, players, attendance, gameAttenda
   const options=isPast
     ? [['present','Aanwezig'],['absent','Afwezig'],['injured','Geblesseerd'],['late','Te laat']]
     : isGame
-      ? [['present','Aanwezig'],['absent','Afwezig']]
-      : [['present','Aanwezig'],['maybe','Misschien'],['absent','Afwezig']]
+      ? [['present','Aanwezig'],['absent','Afwezig'],['late','Te laat']]
+      : [['present','Aanwezig'],['maybe','Misschien'],['absent','Afwezig'],['late','Te laat']]
   return <SettingsModal title={isPast?'Aanwezigheid afronden':'Aanwezigheid beheren'} onClose={onClose}><div className="finalize-session-head"><strong>{event.title}</strong><span>{formatLongDate(event.start)} · {team?.name}</span>{!isPast&&<small>Als coach kun je vooraf de status voor speelsters invullen of corrigeren.</small>}</div><div className="finalize-roster">{players.map(p=><article key={p.id}><span className="finalize-person"><ProfileAvatar person={p} size="small"/><span><strong>{p.first_name||personName(p)}</strong>{p.is_placeholder&&<small>Nog geen Mijn OG-account</small>}</span></span><div className="finalize-status-grid">{options.map(([value,label])=><button type="button" key={value} className={statuses[p.id]===value?'active':''} onClick={()=>setStatuses({...statuses,[p.id]:value})}>{label}</button>)}</div></article>)}</div>{feedback&&<div className="push-feedback" role="status">{feedback}</div>}<button className="primary" disabled={busy} onClick={save}>{busy?'Opslaan…':'Registratie opslaan'}</button></SettingsModal>
 }
 
@@ -2350,7 +2372,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
         <SettingsRow icon="lock" title="Wachtwoord" subtitle="Wachtwoord wijzigen via resetmail" onClick={() => setSettingsView('password')} />
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.9.9.7" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.9.9.8" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -2389,7 +2411,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 2.9.9.7</h3>
+        <h3>Versie 2.9.9.8</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS agenda</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>

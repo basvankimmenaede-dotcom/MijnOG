@@ -8,7 +8,15 @@ Agenda refresh met kaartweergave en team-aware FOYS filtering.
 - Typefilter Alles / Wedstrijden / Trainingen.
 - FOYS-herkenning per team via `teams.foys_match_text`.
 - Clubbeheer > Teams kan de FOYS-herkenning aanpassen.
-- Over Mijn OG: versie 2.9.9.7.
+- Over Mijn OG: versie 2.9.9.8.
+
+## v2.9.9.8 - Aanwezigheidsoverzicht
+
+- Team stats bevat een totaaloverzicht per speelster met aanwezig, afgemeld, te laat en aanwezigheidspercentage.
+- Een horizontaal scrollbare matrix toont de status per afgelopen training en wedstrijd.
+- Speelsters kunnen hun aanwezigheid na afloop niet meer aanpassen; coaches en admins wel.
+- Coaches kunnen zowel vóór als na afloop de status Te laat registreren.
+- Voer `supabase_v2998_attendance_lock.sql` uit voordat deze versie wordt gebruikt.
 
 ## v2.9.9.7 - Teamvolgorde & bewuste teamkeuze
 

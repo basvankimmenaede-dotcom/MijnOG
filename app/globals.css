@@ -1806,6 +1806,19 @@ input:focus, textarea:focus, select:focus {
 .coach-stats-mini{text-align:center}
 .coach-stats-mini strong,.coach-stats-mini small{display:block}
 .coach-stats-mini small{font-size:9px;color:var(--muted,#77736f)}
+.attendance-locked{display:flex;align-items:center;gap:12px;padding:14px;border:1px solid var(--line,#e8e2dc);border-radius:14px;background:#f7f5f2;color:var(--muted,#77736f)}
+.attendance-locked>span,.attendance-locked strong,.attendance-locked small{display:block}.attendance-locked small{margin-top:2px}
+.attendance-total-table{border:1px solid var(--line,#e8e2dc);border-radius:16px;overflow:hidden;background:#fff}
+.attendance-total-head,.attendance-total-row{display:grid;grid-template-columns:minmax(120px,1fr) 54px 64px 54px 48px;align-items:center;gap:6px;padding:10px 12px}
+.attendance-total-head{background:#f5f2ee;color:var(--muted,#77736f);font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.04em}
+.attendance-total-row{border-top:1px solid var(--line,#e8e2dc);font-size:12px}.attendance-total-row>span:not(:first-child),.attendance-total-row>strong{text-align:center}
+.attendance-total-row>span:first-child{display:flex;align-items:center;gap:8px;min-width:0}.attendance-total-row>span:first-child strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.attendance-matrix-wrap{overflow-x:auto;border:1px solid var(--line,#e8e2dc);border-radius:16px;background:#fff;-webkit-overflow-scrolling:touch}
+.attendance-matrix{border-collapse:separate;border-spacing:0;min-width:max-content;font-size:11px}.attendance-matrix th,.attendance-matrix td{border-right:1px solid #eee7e0;border-bottom:1px solid #eee7e0;text-align:center;height:38px;min-width:42px;padding:4px}
+.attendance-matrix thead th{position:sticky;top:0;background:#f5f2ee;z-index:2}.attendance-matrix th:first-child{position:sticky;left:0;z-index:3;min-width:125px;max-width:125px;text-align:left;padding-left:10px;background:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.attendance-matrix thead th:first-child{background:#f5f2ee;z-index:4}
+.attendance-matrix thead th span,.attendance-matrix thead th small{display:block}.attendance-matrix thead th small{color:var(--orange);margin-top:2px}
+.attendance-cell.present{background:#dff5e5;color:#19733a;font-weight:900}.attendance-cell.late{background:#fff0d5;color:#a85b00;font-weight:900}.attendance-cell.absent{background:#ffe1df;color:#b3312c;font-weight:900}.attendance-cell.injured{background:#e7eaf0;color:#586171;font-weight:900}.attendance-cell.maybe{background:#fff7cf;color:#806800;font-weight:900}.attendance-cell.not_invited{background:#f5f5f5;color:#aaa}.attendance-cell.none{background:#fff}
+@media(max-width:520px){.attendance-total-head,.attendance-total-row{grid-template-columns:minmax(105px,1fr) 46px 56px 46px 44px;padding:9px 8px;font-size:11px}.attendance-total-head{font-size:8px}}
 .stat-entry-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
 .stat-entry-grid label{font-size:11px}
 .stat-entry-grid input{min-width:0}
