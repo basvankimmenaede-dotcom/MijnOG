@@ -1154,8 +1154,7 @@ function CoachStatsModal({team,players=[],attendance=[],gameAttendance=[],traini
   const teamGames=gameStats.filter(r=>Number(r.team_id)===Number(team?.id))
   const sum=teamGames.reduce((a,r)=>{['ab','h','rbi','bb','hbp','sf','tb','sb'].forEach(k=>a[k]=(a[k]||0)+Number(r[k]||0));return a},{})
   const avg=sum.ab?sum.h/sum.ab:null, den=(sum.ab||0)+(sum.bb||0)+(sum.hbp||0)+(sum.sf||0), obp=den?((sum.h||0)+(sum.bb||0)+(sum.hbp||0))/den:null, slg=sum.ab?(sum.tb||0)/sum.ab:null, ops=obp!=null&&slg!=null?obp+slg:null
-  const ev=rows.map(r=>Number(r.stats.exit?.value)).filter(Number.isFinite), h1=rows.map(r=>Number(r.stats.home1?.value)).filter(Number.isFinite), atts=rows.map(r=>r.stats.attendance.percentage).filter(v=>v!=null)
-  const cards=[['AVG',statRate(avg)],['OPS',statRate(ops)],['Hits',sum.h||0],['RBI',sum.rbi||0],['SB',sum.sb||0],['Exit velo',ev.length?`${Math.round(ev.reduce((a,b)=>a+b,0)/ev.length)} km/u`:'—'],['Home → 1',h1.length?`${(h1.reduce((a,b)=>a+b,0)/h1.length).toFixed(2).replace('.',',')} s`:'—'],['Aanwezig',atts.length?`${Math.round(atts.reduce((a,b)=>a+b,0)/atts.length)}%`:'—']]
+  const ev=rows.map(r=>Number(r.stats.exit?.value)).filter(Number.isFinite), h1=rows.map(r=>Number(r.stats.home1?.value)).filter(Number.isFinite)
   const pastTraining=trainingEvents.filter(event=>event.type==='training'&&(event.teamIds||[event.teamId]).map(Number).includes(Number(team?.id))&&new Date(event.end||event.start).getTime()<Date.now())
   const pastGames=[...trainingEvents.filter(event=>event.type!=='training'),...calendarEvents].filter(event=>eventTeamMatches(event,[team]).includes(Number(team?.id))&&new Date(event.end||event.start).getTime()<Date.now())
   const sessions=[...pastTraining,...pastGames].sort((a,b)=>new Date(b.start)-new Date(a.start))
