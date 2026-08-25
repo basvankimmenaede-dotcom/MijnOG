@@ -2465,3 +2465,137 @@ button.swing-primary { width: 100%; margin-top: 12px; border: 0; background: var
 .flex-select-wrap{display:flex;align-items:center;gap:7px;min-width:0}.flex-select-wrap select{width:100%;min-width:0;height:42px;border:1px solid #d8d8d8;border-radius:11px;background:#fff;padding:0 34px 0 11px;font:inherit;font-size:12px;font-weight:700;color:#222}
 .flex-selector.complete .flex-select-wrap select{border-color:#9fc8a8}.flex-clear{height:42px;border:0;background:transparent;color:#8a8a8a;font-size:11px;font-weight:800;padding:0 5px}
 @media(max-width:520px){.lineup-nav-wrap{padding:8px 12px 12px}.lineup-tabs button{min-height:40px;font-size:11px}.flex-selector.flex-selector-compact{grid-template-columns:1fr;gap:10px}.flex-select-wrap select{height:44px}.drag-handle{width:48px;min-width:48px}}
+
+/* v3.0.0.14 Compact Line-up header/navigation + FLEX polish */
+.lineup-modal{
+  grid-template-rows:auto auto minmax(0,1fr);
+}
+.lineup-header{
+  min-height:0!important;
+  padding:12px 18px 8px!important;
+  border-bottom:0!important;
+  align-items:center;
+}
+.lineup-header .eyebrow{
+  margin:0 0 2px;
+  font-size:10px;
+  line-height:1.1;
+}
+.lineup-header h2{
+  margin:0!important;
+  font-size:21px!important;
+  line-height:1.08;
+}
+.lineup-header small{
+  margin-top:3px!important;
+  max-width:100%;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  font-size:10px;
+  line-height:1.2;
+}
+.lineup-header .sheet-icon-button{
+  width:38px;
+  height:38px;
+  align-self:center;
+}
+.lineup-nav-wrap{
+  padding:0 18px 10px!important;
+  border:0!important;
+  background:#fff!important;
+}
+.lineup-tabs{
+  min-height:42px;
+  border-radius:12px!important;
+  padding:3px!important;
+  background:#f2f2f2!important;
+}
+.lineup-tabs button{
+  min-height:36px!important;
+  padding:7px 6px!important;
+  border-radius:9px!important;
+  font-size:11px!important;
+}
+.lineup-body{
+  border-top:1px solid #ececec;
+  padding-top:14px!important;
+}
+.lineup-order-head{
+  align-items:center;
+  margin-bottom:10px;
+}
+.lineup-order-head p{
+  max-width:540px;
+}
+.lineup-order-head .secondary.orange-outline{
+  width:auto!important;
+  min-height:34px;
+  padding:7px 10px;
+  border-radius:10px;
+  font-size:11px;
+  line-height:1.1;
+}
+.flex-selector.flex-selector-compact{
+  display:grid!important;
+  grid-template-columns:auto minmax(0,1fr) auto;
+  gap:8px!important;
+  align-items:center;
+  margin:8px 0 12px!important;
+  padding:9px 10px!important;
+  border-radius:12px!important;
+}
+.flex-inline-label{
+  display:flex;
+  flex-direction:column;
+  gap:1px;
+  min-width:56px;
+}
+.flex-inline-label strong{
+  font-size:12px;
+  line-height:1.1;
+}
+.flex-select-wrap{
+  min-width:0;
+}
+.flex-select-wrap select{
+  height:38px!important;
+  font-size:11px!important;
+  padding-left:10px!important;
+}
+.flex-clear{
+  width:30px;
+  min-width:30px;
+  height:30px!important;
+  padding:0!important;
+  border-radius:50%!important;
+  background:#fff!important;
+  border:1px solid #dedede!important;
+  font-size:18px!important;
+  line-height:1!important;
+}
+.flex-inline-help{
+  grid-column:2 / 4;
+  color:#7a7a7a;
+  font-size:9px;
+  line-height:1.25;
+  margin-top:-3px;
+}
+@media(max-width:520px){
+  .lineup-modal{width:min(100% - 14px,485px);max-height:calc(100dvh - 14px);border-radius:22px}
+  .lineup-header{padding:10px 14px 7px!important}
+  .lineup-header h2{font-size:19px!important}
+  .lineup-header small{font-size:9px}
+  .lineup-nav-wrap{padding:0 14px 8px!important}
+  .lineup-tabs{min-height:40px}
+  .lineup-tabs button{min-height:34px!important;font-size:10px!important}
+  .lineup-body{padding:12px 14px 16px!important}
+  .lineup-order-head{display:grid!important;grid-template-columns:minmax(0,1fr) auto;gap:8px!important;align-items:start}
+  .lineup-order-head h3{font-size:17px}
+  .lineup-order-head p{font-size:10px;line-height:1.35}
+  .lineup-order-head .secondary.orange-outline{width:auto!important;min-height:32px;padding:6px 8px;font-size:10px;align-self:start}
+  .flex-selector.flex-selector-compact{grid-template-columns:52px minmax(0,1fr) auto!important;gap:6px!important;padding:8px!important}
+  .flex-inline-label strong{font-size:11px}
+  .flex-select-wrap select{height:36px!important;font-size:10px!important}
+  .flex-inline-help{font-size:8px}
+}
