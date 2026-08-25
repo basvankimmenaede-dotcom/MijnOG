@@ -8,7 +8,14 @@ Agenda refresh met kaartweergave en team-aware FOYS filtering.
 - Typefilter Alles / Wedstrijden / Trainingen.
 - FOYS-herkenning per team via `teams.foys_match_text`.
 - Clubbeheer > Teams kan de FOYS-herkenning aanpassen.
-- Over Mijn OG: versie 2.9.9.8.
+- Over Mijn OG: versie 2.9.9.9.
+
+## v2.9.9.9 - Coachbeheer speelsters & invallers
+
+- Het detailoverzicht per activiteit opent vanuit één compacte knop in Team stats.
+- Zowel de aanvragende als ontvangende coach kan een invaller bevestigen, ook wanneer dit mondeling is afgesproken.
+- Coaches kunnen rugnummer, primaire/secundaire posities, werphand en slagzijde aanpassen voor speelsters van het eigen team.
+- Voer `supabase_v2999_coach_player_management.sql` uit voordat deze versie wordt gebruikt.
 
 ## v2.9.9.8 - Aanwezigheidsoverzicht
 

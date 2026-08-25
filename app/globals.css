@@ -1819,6 +1819,9 @@ input:focus, textarea:focus, select:focus {
 .attendance-matrix thead th span,.attendance-matrix thead th small{display:block}.attendance-matrix thead th small{color:var(--orange);margin-top:2px}
 .attendance-cell.present{background:#dff5e5;color:#19733a;font-weight:900}.attendance-cell.late{background:#fff0d5;color:#a85b00;font-weight:900}.attendance-cell.absent{background:#ffe1df;color:#b3312c;font-weight:900}.attendance-cell.injured{background:#e7eaf0;color:#586171;font-weight:900}.attendance-cell.maybe{background:#fff7cf;color:#806800;font-weight:900}.attendance-cell.not_invited{background:#f5f5f5;color:#aaa}.attendance-cell.none{background:#fff}
 @media(max-width:520px){.attendance-total-head,.attendance-total-row{grid-template-columns:minmax(105px,1fr) 46px 56px 46px 44px;padding:9px 8px;font-size:11px}.attendance-total-head{font-size:8px}}
+.attendance-detail-button{width:100%;display:flex;align-items:center;justify-content:space-between;text-align:left}
+.attendance-detail-modal{display:flex;flex-direction:column;gap:14px}
+.player-details-edit{width:100%;display:flex;align-items:center;justify-content:center;gap:8px}
 .stat-entry-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
 .stat-entry-grid label{font-size:11px}
 .stat-entry-grid input{min-width:0}

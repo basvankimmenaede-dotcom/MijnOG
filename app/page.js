@@ -1150,6 +1150,7 @@ function printSwingPlan(analysis,player){
 function formatSwingDate(value){try{return new Intl.DateTimeFormat('nl-NL',{day:'numeric',month:'short',year:'numeric'}).format(new Date(value))}catch{return ''}}
 
 function CoachStatsModal({team,players=[],attendance=[],gameAttendance=[],trainingEvents=[],calendarEvents=[],gameStats=[],measurements=[],onPlayer,onAddGame,onAddMeasurement,onClose}){
+  const [attendanceDetailOpen,setAttendanceDetailOpen]=useState(false)
   const rows=players.map(person=>({person,stats:coreStatsForPlayer(person.id,team,attendance,gameAttendance,trainingEvents,calendarEvents,gameStats,measurements)}))
   const teamGames=gameStats.filter(r=>Number(r.team_id)===Number(team?.id))
   const sum=teamGames.reduce((a,r)=>{['ab','h','rbi','bb','hbp','sf','tb','sb'].forEach(k=>a[k]=(a[k]||0)+Number(r[k]||0));return a},{})
@@ -1169,11 +1170,10 @@ function CoachStatsModal({team,players=[],attendance=[],gameAttendance=[],traini
     <p className="eyebrow orange">TEAMSTATISTIEKEN</p><div className="coach-team-stat-grid">{cards.map(([l,v])=><div key={l}><span>{l}</span><strong>{v}</strong></div>)}</div>
     <div className="coach-stats-player-head"><strong>Aanwezigheid totaal</strong><small>{sessions.length} afgelopen activiteiten</small></div>
     <div className="attendance-total-table"><div className="attendance-total-head"><span>Speelster</span><span>Aanw.</span><span>Afgemeld</span><span>Te laat</span><span>%</span></div>{attendanceRows.map(row=><div className="attendance-total-row" key={row.person.id}><span><ProfileAvatar person={row.person} size="small"/><strong>{teamDisplayName(row.person)}</strong></span><span>{row.present}</span><span>{row.absent}</span><span>{row.late}</span><strong>{row.percentage==null?'—':`${row.percentage}%`}</strong></div>)}</div>
-    <div className="coach-stats-player-head"><strong>Overzicht per activiteit</strong><small>Veeg horizontaal voor eerdere activiteiten</small></div>
-    <div className="attendance-matrix-wrap"><table className="attendance-matrix"><thead><tr><th>Speelster</th>{sessions.map(event=><th key={event.uid||`${event.type}-${event.id}`} title={`${event.title} · ${formatLongDate(event.start)}`}><span>{formatShortDate(event.start)}</span><small>{event.type==='game'?'W':'T'}</small></th>)}</tr></thead><tbody>{attendanceRows.map(row=><tr key={row.person.id}><th>{teamDisplayName(row.person)}</th>{row.statuses.map((status,index)=>{const [mark,label]=statusMark(status);return <td key={`${row.person.id}-${index}`} className={`attendance-cell ${status}`} title={label}>{mark}</td>})}</tr>)}</tbody></table>{!sessions.length&&<p className="muted">Nog geen afgelopen trainingen of wedstrijden.</p>}</div>
+    <button type="button" className="secondary orange-outline attendance-detail-button" onClick={()=>setAttendanceDetailOpen(true)}>Bekijk aanwezigheid per activiteit <Icon name="chevron"/></button>
     <div className="coach-stats-player-head"><strong>Persoonlijke stats</strong><small>Tik op een speelster</small></div>
     <div className="coach-stats-players">{rows.map(({person,stats})=><button key={person.id} onClick={()=>onPlayer(person)}><span className="coach-stats-person"><ProfileAvatar person={person} size="small"/><span><strong>{teamDisplayName(person)}</strong><small>{person.jersey_number?`#${person.jersey_number} · `:''}${person.primary_position||'Geen positie'}</small></span></span><span className="coach-stats-mini"><strong>{statRate(stats.avg)}</strong><small>AVG</small></span><span className="coach-stats-mini"><strong>{stats.attendance.percentage==null?'—':`${stats.attendance.percentage}%`}</strong><small>Aanw.</small></span><Icon name="chevron"/></button>)}</div>
-  </div></SettingsModal>
+  </div>{attendanceDetailOpen&&<SettingsModal title="Aanwezigheid per activiteit" onClose={()=>setAttendanceDetailOpen(false)}><div className="attendance-detail-modal"><p className="settings-modal-intro">T = training · W = wedstrijd. Veeg horizontaal om eerdere activiteiten te bekijken.</p><div className="attendance-matrix-wrap"><table className="attendance-matrix"><thead><tr><th>Speelster</th>{sessions.map(event=><th key={event.uid||`${event.type}-${event.id}`} title={`${event.title} · ${formatLongDate(event.start)}`}><span>{formatShortDate(event.start)}</span><small>{event.type==='game'?'W':'T'}</small></th>)}</tr></thead><tbody>{attendanceRows.map(row=><tr key={row.person.id}><th>{teamDisplayName(row.person)}</th>{row.statuses.map((status,index)=>{const [mark,label]=statusMark(status);return <td key={`${row.person.id}-${index}`} className={`attendance-cell ${status}`} title={label}>{mark}</td>})}</tr>)}</tbody></table>{!sessions.length&&<p className="muted">Nog geen afgelopen trainingen of wedstrijden.</p>}</div></div></SettingsModal>}</SettingsModal>
 }
 function CoachStatEntryModal({mode,team,players=[],onClose,onSaved}){
   const [busy,setBusy]=useState(false),[feedback,setFeedback]=useState('')
@@ -1213,7 +1213,7 @@ function PlayerRequestDetailModal({ request, selectedTeam, allTeams = [], profil
     {(request.event_meet_at||request.event_location||request.event_address)&&<div className="request-detail-grid">{request.event_meet_at&&<div><span>Verzamelen</span><strong>{formatClock(request.event_meet_at)}</strong></div>}{request.event_location&&<div><span>Locatie</span><strong>{request.event_location}</strong></div>}{request.event_address&&<div><span>Adres</span><strong>{request.event_address}</strong></div>}</div>}
     {request.note && <div className="request-detail-note"><span>Opmerking</span><p>{request.note}</p></div>}
     <div className="request-detail-heading"><strong>Speelsters</strong><span>{candidates.length} voorgedragen</span></div>
-    <div className="request-detail-candidates">{ordered.length ? ordered.map(candidate => { const person=profiles.find(p=>p.id===candidate.profile_id); return <article key={candidate.id}><span className="request-person"><ProfileAvatar person={person} size="small"/><span><strong>{person?.first_name || personName(person)}</strong><small>{playerSportLine(person)}</small></span></span><span className={`request-status ${candidate.response}`}>{statusLabel(candidate.response)}</span>{candidate.response==='available' && Number(selectedTeam?.id)===Number(request.requesting_team_id) && <button className="mini-action" onClick={()=>onConfirm(candidate)}>Bevestigen</button>}</article> }) : <p className="muted">Er zijn nog geen speelsters voorgedragen.</p>}</div>
+    <div className="request-detail-candidates">{ordered.length ? ordered.map(candidate => { const person=profiles.find(p=>p.id===candidate.profile_id); return <article key={candidate.id}><span className="request-person"><ProfileAvatar person={person} size="small"/><span><strong>{person?.first_name || personName(person)}</strong><small>{playerSportLine(person)}</small></span></span><span className={`request-status ${candidate.response}`}>{statusLabel(candidate.response)}</span>{['invited','available'].includes(candidate.response) && (isRequestingCoach||isTargetCoach) && <button className="mini-action" onClick={()=>onConfirm(candidate)}>Bevestigen</button>}</article> }) : <p className="muted">Er zijn nog geen speelsters voorgedragen.</p>}</div>
     {isTargetCoach && request.status === 'open' && <button className="primary" onClick={onNominate}>Speelsters voordragen</button>}
     {isRequestingCoach && <button className="danger-solid destructive-block-button" onClick={onDelete}><Icon name="trash"/> Verzoek verwijderen</button>}
   </div></SettingsModal>
@@ -1491,6 +1491,7 @@ function formatCardValue(value, unit) {
 function PlayerProfileModal({ person, team, viewerProfile, viewerMembership, attendance = [], gameAttendance = [], trainingEvents = [], calendarEvents = [], gameStats = [], measurements = [], pitchingStats = [], playerCards = [], playerCardMetrics = [], onChanged, onClose }) {
   const canSeeAttendance = viewerProfile?.id === person?.id || viewerProfile?.role === 'admin' || viewerMembership?.member_role === 'coach'
   const canManageCards = viewerProfile?.role === 'admin' || viewerMembership?.member_role === 'coach'
+  const canEditPlayerDetails = Boolean(team?.id) && (viewerProfile?.role === 'admin' || viewerMembership?.member_role === 'coach')
   const stats = canSeeAttendance ? attendanceStatsForPerson(person?.id, team, attendance, gameAttendance, trainingEvents, calendarEvents) : null
   const canSeePlayerStats = viewerProfile?.id === person?.id || viewerProfile?.role === 'admin' || viewerMembership?.member_role === 'coach'
   const performance = canSeePlayerStats ? coreStatsForPlayer(person?.id,team,attendance,gameAttendance,trainingEvents,calendarEvents,gameStats,measurements) : null
@@ -1498,6 +1499,7 @@ function PlayerProfileModal({ person, team, viewerProfile, viewerMembership, att
   const cards = playerCards.filter(card=>card.player_id===person?.id && (!team || card.team_id==null || Number(card.team_id)===Number(team.id)))
   const [cardEditor,setCardEditor]=useState(null)
   const [measurementMetric,setMeasurementMetric]=useState(null)
+  const [detailsEditor,setDetailsEditor]=useState(false)
   const secondary=(person?.secondary_positions||[]).filter(Boolean)
   const isPitcher=[person?.primary_position,...secondary].some(position=>/(^|[^A-Z])P([^A-Z]|$)/.test(String(position||'').toUpperCase()))
   const throwsLabel=person?.throws_hand==='L'?'Links':person?.throws_hand==='R'?'Rechts':'Niet ingevuld'
@@ -1514,6 +1516,7 @@ function PlayerProfileModal({ person, team, viewerProfile, viewerMembership, att
         <div><span>Gooit</span><strong>{throwsLabel}</strong></div>
         <div><span>Slaat</span><strong>{batsLabel}</strong></div>
       </div>
+      {canEditPlayerDetails&&<button type="button" className="secondary orange-outline player-details-edit" onClick={()=>setDetailsEditor(true)}><Icon name="edit"/> Spelersgegevens aanpassen</button>}
       <section className="player-custom-cards">
         <div className="player-cards-heading"><div><p className="eyebrow orange">PERSOONLIJKE STATS</p><h3>Stats & ontwikkeling</h3></div>{canManageCards&&<button className="primary compact" onClick={()=>setCardEditor({})}>+ Kaart toevoegen</button>}</div>
         {canSeePlayerStats&&<article className="player-measurement-card player-game-stats-card">
@@ -1551,7 +1554,20 @@ function PlayerProfileModal({ person, team, viewerProfile, viewerMembership, att
     </div>
     {cardEditor&&<PlayerCardEditorModal person={person} team={team} card={cardEditor.id?cardEditor:null} metrics={cardEditor.id?playerCardMetrics.filter(metric=>metric.card_id===cardEditor.id):[]} viewerProfile={viewerProfile} onClose={()=>setCardEditor(null)} onSaved={async()=>{setCardEditor(null);await onChanged?.()}} />}
     {measurementMetric&&<PlayerMeasurementModal metric={measurementMetric} person={person} team={team} viewerProfile={viewerProfile} canManage={canManageCards} history={measurements.filter(row=>Number(row.card_metric_id)===Number(measurementMetric.id)||(measurementMetric.metric_key&&row.metric_type===measurementMetric.metric_key))} onClose={()=>setMeasurementMetric(null)} onSaved={async()=>{await onChanged?.()}} />}
+    {detailsEditor&&<PlayerDetailsEditorModal person={person} team={team} onClose={()=>setDetailsEditor(false)} onSaved={async()=>{await onChanged?.();setDetailsEditor(false);onClose()}}/>}
   </SettingsModal>
+}
+
+function PlayerDetailsEditorModal({person,team,onClose,onSaved}){
+  const [form,setForm]=useState({jersey_number:person?.jersey_number||'',primary_position:person?.primary_position||'',secondary_positions:(person?.secondary_positions||[]).join(', '),throws_hand:person?.throws_hand||'',bats_side:person?.bats_side||''})
+  const [busy,setBusy]=useState(false),[feedback,setFeedback]=useState('')
+  async function save(){
+    setBusy(true);setFeedback('')
+    const {error}=await supabase.rpc('update_team_player_details',{p_team_id:Number(team.id),p_profile_id:person.id,p_jersey_number:form.jersey_number.trim()||null,p_primary_position:form.primary_position.trim()||null,p_secondary_positions:form.secondary_positions.split(',').map(value=>value.trim()).filter(Boolean),p_throws_hand:form.throws_hand||null,p_bats_side:form.bats_side||null})
+    if(error){setFeedback(`Opslaan mislukt: ${error.message}`);setBusy(false);return}
+    await onSaved()
+  }
+  return <SettingsModal title="Spelersgegevens aanpassen" onClose={onClose}><div className="form-stack"><p className="settings-modal-intro">Je past de sportgegevens van <strong>{personName(person)}</strong> aan voor {team?.name}.</p><div className="form-two equal-fields"><label>Rugnummer<input value={form.jersey_number} onChange={e=>setForm({...form,jersey_number:e.target.value})} placeholder="Bijv. 12"/></label><label>Primaire positie<input value={form.primary_position} onChange={e=>setForm({...form,primary_position:e.target.value.toUpperCase()})} placeholder="Bijv. SS"/></label></div><label>Secundaire posities<input value={form.secondary_positions} onChange={e=>setForm({...form,secondary_positions:e.target.value.toUpperCase()})} placeholder="Bijv. 2B, 3B"/><small className="field-help">Scheid meerdere posities met een komma.</small></label><div className="form-two equal-fields"><label>Gooit<select value={form.throws_hand} onChange={e=>setForm({...form,throws_hand:e.target.value})}><option value="">Niet ingesteld</option><option value="R">Rechts</option><option value="L">Links</option></select></label><label>Slaat<select value={form.bats_side} onChange={e=>setForm({...form,bats_side:e.target.value})}><option value="">Niet ingesteld</option><option value="R">Rechts</option><option value="L">Links</option><option value="S">Switch</option></select></label></div>{feedback&&<div className="notice error">{feedback}</div>}<button className="primary" disabled={busy} onClick={save}>{busy?'Opslaan…':'Spelersgegevens opslaan'}</button></div></SettingsModal>
 }
 
 function PlayerCardEditorModal({person,team,card,metrics=[],viewerProfile,onClose,onSaved}){
@@ -2371,7 +2387,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
         <SettingsRow icon="lock" title="Wachtwoord" subtitle="Wachtwoord wijzigen via resetmail" onClick={() => setSettingsView('password')} />
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.9.9.8" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 2.9.9.9" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -2410,7 +2426,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 2.9.9.8</h3>
+        <h3>Versie 2.9.9.9</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS agenda</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>
