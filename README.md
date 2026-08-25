@@ -8,7 +8,26 @@ Agenda refresh met kaartweergave en team-aware FOYS filtering.
 - Typefilter Alles / Wedstrijden / Trainingen.
 - FOYS-herkenning per team via `teams.foys_match_text`.
 - Clubbeheer > Teams kan de FOYS-herkenning aanpassen.
-- Over Mijn OG: versie 2.9.9.5.
+- Over Mijn OG: versie 2.9.9.7.
+
+## v2.9.9.7 - Teamvolgorde & bewuste teamkeuze
+
+- Teams staan eerst per sport: softbal vóór honkbal.
+- Binnen iedere sport is de volgorde Senioren, U21, U15 en U12; teams binnen dezelfde categorie staan op naam.
+- Bij het aanmaken van een training of wedstrijd is standaard geen team geselecteerd.
+- Een activiteit kan pas worden opgeslagen nadat de coach of admin bewust minimaal één team heeft gekozen.
+- Trainingen kunnen voor het hele team, pitchers, catchers, pitchers en catchers samen of een handmatige spelersselectie worden aangemaakt.
+- Positie is bij invallersverzoeken optioneel.
+- Interne opmerkingen bij invallersverzoeken zijn uitsluitend zichtbaar voor betrokken coaches en admins.
+- Pushmeldingen staan prominent op Home, met een eenmalige introductie en duidelijke status/uitleg in de instellingen.
+- Voer `supabase_v2997_team_groups_requests.sql` uit voordat deze versie wordt gebruikt.
+
+## v2.9.9.6 - Alle OG-teams
+
+- Team toont eerst de eigen gekoppelde teams.
+- Daaronder staan alle andere actieve OG-teams uit het huidige seizoen.
+- Andere teams zijn te bekijken zonder coachrechten of persoonlijke spelersstatistieken te openen.
+- Het oude lege blok Teamgegevens is verwijderd; teamstats blijven in de coachomgeving.
 
 ## v2.9.9.5 - Activiteiten & complete invallerverzoeken
 

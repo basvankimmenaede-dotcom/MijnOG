@@ -18,9 +18,9 @@ export async function POST(request){
     const date=new Date(req.event_start).toLocaleDateString('nl-NL',{weekday:'short',day:'numeric',month:'short',timeZone:'Europe/Amsterdam'})
     const time=new Date(req.event_start).toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit',timeZone:'Europe/Amsterdam'})
     const meet=req.event_meet_at?new Date(req.event_meet_at).toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit',timeZone:'Europe/Amsterdam'}):null
-    const practical=[`${date} ${time}`,meet?`verzamelen ${meet}`:null,req.event_location||req.event_address||null].filter(Boolean).join(' · ')
+    const practical=[req.position||null,`${date} ${time}`,meet?`verzamelen ${meet}`:null,req.event_location||req.event_address||null].filter(Boolean).join(' · ')
     webpush.setVapidDetails(subject,vapidPublic,vapidPrivate);let sent=0
-    for(const row of subs||[]){try{await webpush.sendNotification({endpoint:row.endpoint,keys:{p256dh:row.p256dh,auth:row.auth}},JSON.stringify({title:'Nieuw invallerverzoek',body:`${req.event_title} · ${req.position} · ${practical}`,url:'/?tab=Coach',tag:`coach-request-${req.id}`,requireInteraction:true}));sent++}catch(e){if([404,410].includes(e?.statusCode))await service.from('push_subscriptions').delete().eq('id',row.id)}}
+    for(const row of subs||[]){try{await webpush.sendNotification({endpoint:row.endpoint,keys:{p256dh:row.p256dh,auth:row.auth}},JSON.stringify({title:'Nieuw invallerverzoek',body:`${req.event_title} · ${practical}`,url:'/?tab=Coach',tag:`coach-request-${req.id}`,requireInteraction:true}));sent++}catch(e){if([404,410].includes(e?.statusCode))await service.from('push_subscriptions').delete().eq('id',row.id)}}
     return Response.json({ok:true,sent,coachCount:ids.length})
   }catch(error){return Response.json({error:error?.message||'Push mislukt.'},{status:500})}
 }
