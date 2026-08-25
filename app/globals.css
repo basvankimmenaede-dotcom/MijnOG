@@ -2328,3 +2328,28 @@ button.swing-primary { width: 100%; margin-top: 12px; border: 0; background: var
   .profile-inline-actions{grid-template-columns:1fr;gap:7px}
   .profile-action-button{width:100%;padding-inline:9px}
 }
+
+/* v3.0.0.6 - rustige teamindeling en mobiele ledenlijst */
+.member-directory{display:grid;gap:12px}
+.directory-count{margin:-4px 0 0;font-size:10px}
+.member-directory-list{display:grid;gap:10px}
+.directory-member-card{padding:14px;border:1px solid var(--line);border-radius:15px;background:#fff;display:grid;gap:12px}
+.directory-member-head{display:grid;grid-template-columns:42px minmax(0,1fr);gap:10px;align-items:center}
+.directory-member-head>div{min-width:0;display:grid;gap:2px}.directory-member-head strong{font-size:13px}.directory-member-head small{font-size:9px;color:var(--muted)}
+.directory-member-data{margin:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.directory-member-data div{min-width:0}.directory-member-data dt{font-size:8px;font-weight:900;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.directory-member-data dd{margin:3px 0 0;font-size:10px;font-weight:700;overflow-wrap:anywhere}.directory-member-data .directory-email{grid-column:1/-1}
+.directory-member-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.directory-member-actions .mini-action{width:100%;min-height:38px}
+.directory-member-actions .reset{background:#fff7ed;color:var(--og-orange-dark);border-color:#fed7aa}.directory-member-actions button:disabled{opacity:.45}
+
+@media(max-width:560px){
+  .team-members-admin .admin-form-grid{grid-template-columns:1fr;gap:10px}
+  .member-row{grid-template-columns:42px minmax(0,1fr) 42px!important;grid-template-rows:auto auto;gap:8px 10px!important;align-items:start!important;padding:13px!important}
+  .member-row>.member-avatar{grid-column:1;grid-row:1/span 2;margin-top:1px}
+  .member-row>.member-copy{grid-column:2;grid-row:1;min-width:0;padding-right:2px}
+  .member-row>select{grid-column:2;grid-row:2;width:100%!important;max-width:180px;min-height:39px;font-size:12px!important}
+  .member-row>.remove-member{grid-column:3;grid-row:1/span 2;align-self:center;width:42px;height:42px}
+  .member-copy .admin-coach-push{width:max-content;max-width:100%;white-space:normal;line-height:1.25}
+  .member-copy .link-account-inline{display:block;width:max-content;max-width:100%;text-align:left;line-height:1.25;margin-top:5px}
+  .directory-member-data{grid-template-columns:1fr}.directory-member-data .directory-email{grid-column:auto}
+}

@@ -1854,6 +1854,12 @@ function AdminPanel({ session, onMessage, onChanged }) {
   const [usernamePerson, setUsernamePerson] = useState(null)
   const [usernameValue, setUsernameValue] = useState('')
   const [usernameFeedback, setUsernameFeedback] = useState('')
+  const [directoryMembers, setDirectoryMembers] = useState([])
+  const [directorySearch, setDirectorySearch] = useState('')
+  const [directoryLoading, setDirectoryLoading] = useState(false)
+  const [directoryFeedback, setDirectoryFeedback] = useState('')
+  const [editingDirectoryMember, setEditingDirectoryMember] = useState(null)
+  const [directoryForm, setDirectoryForm] = useState({first_name:'',last_name:'',jersey_number:'',primary_position:'',secondary_positions:'',date_of_birth:'',username:''})
 
   useEffect(() => {
     if (open) loadAdminData()
@@ -1912,10 +1918,61 @@ function AdminPanel({ session, onMessage, onChanged }) {
     setInviteSent(false)
     setShowLocationForm(false)
     setEditingLocationId(null)
+    setDirectoryFeedback('')
+    if (nextView === 'directory') loadDirectoryMembers()
     if (nextView === 'members' && !selectedTeamId) {
       const candidate = teams.find(team => String(team.season_id) === String(selectedSeasonId) && team.is_active)
       if (candidate) setSelectedTeamId(String(candidate.id))
     }
+  }
+
+  async function loadDirectoryMembers() {
+    setDirectoryLoading(true)
+    try {
+      const response=await fetch('/api/admin/members',{headers:{Authorization:`Bearer ${session.access_token}`}})
+      const payload=await response.json()
+      if(!response.ok) throw new Error(payload.error||'Ledenlijst laden mislukt.')
+      setDirectoryMembers(payload.members||[])
+    } catch(error) { setDirectoryFeedback(error.message) }
+    setDirectoryLoading(false)
+  }
+
+  function openDirectoryEditor(person) {
+    setEditingDirectoryMember(person)
+    setDirectoryFeedback('')
+    setDirectoryForm({
+      first_name:person.first_name||'',last_name:person.last_name||'',jersey_number:person.jersey_number||'',
+      primary_position:person.primary_position||'',secondary_positions:(person.secondary_positions||[]).join(', '),
+      date_of_birth:person.date_of_birth||'',username:person.username||''
+    })
+  }
+
+  async function saveDirectoryMember(e) {
+    e.preventDefault(); if(!editingDirectoryMember)return
+    setBusy(true);setDirectoryFeedback('')
+    const {error}=await supabase.rpc('update_member_directory',{
+      target_profile_id:editingDirectoryMember.id,new_first_name:directoryForm.first_name,new_last_name:directoryForm.last_name,
+      new_jersey_number:directoryForm.jersey_number,new_primary_position:directoryForm.primary_position,
+      new_secondary_positions:directoryForm.secondary_positions.split(',').map(value=>value.trim()).filter(Boolean),
+      new_date_of_birth:directoryForm.date_of_birth||null,new_username:directoryForm.username
+    })
+    setBusy(false)
+    if(error)return setDirectoryFeedback(error.message)
+    setEditingDirectoryMember(null);setDirectoryFeedback('Lidgegevens opgeslagen ✓')
+    await Promise.all([loadDirectoryMembers(),loadAdminData()]);onChanged?.()
+  }
+
+  async function sendMemberReset(person) {
+    if(!person.email)return
+    if(!window.confirm(`Wachtwoord-resetmail sturen naar ${person.email}?`))return
+    setBusy(true);setDirectoryFeedback('')
+    try {
+      const response=await fetch('/api/admin/reset-email',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${session.access_token}`},body:JSON.stringify({profile_id:person.id})})
+      const payload=await response.json()
+      if(!response.ok)throw new Error(payload.error||'Resetmail versturen mislukt.')
+      setDirectoryFeedback(`Resetmail verstuurd naar ${payload.email} ✓`)
+    } catch(error) { setDirectoryFeedback(error.message) }
+    setBusy(false)
   }
 
   async function addClubStaff(e) {
@@ -2164,6 +2221,9 @@ function AdminPanel({ session, onMessage, onChanged }) {
     if (!search) return true
     return `${personName(profile)} ${profile.jersey_number || ''}`.toLowerCase().includes(search)
   })
+  const directoryQuery=directorySearch.trim().toLowerCase()
+  const visibleDirectoryMembers=directoryMembers.filter(person=>!directoryQuery||`${person.first_name||''} ${person.last_name||''} ${person.username||''} ${person.email||''} ${person.jersey_number||''} ${(person.primary_position||'')} ${(person.secondary_positions||[]).join(' ')}`.toLowerCase().includes(directoryQuery))
+  const memberAge=value=>{if(!value)return null;const birth=new Date(`${value}T12:00:00`);if(Number.isNaN(birth.getTime()))return null;const now=new Date();let age=now.getFullYear()-birth.getFullYear();if(now.getMonth()<birth.getMonth()||(now.getMonth()===birth.getMonth()&&now.getDate()<birth.getDate()))age--;return age}
 
   return (
     <>
@@ -2179,7 +2239,7 @@ function AdminPanel({ session, onMessage, onChanged }) {
           <section className="club-admin-modal" role="dialog" aria-modal="true" aria-label="Clubbeheer">
             <header className="sheet-header">
               {view !== 'menu' ? <button className="sheet-icon-button" onClick={() => setView('menu')} aria-label="Terug"><Icon name="back" /></button> : <span className="sheet-icon-spacer" />}
-              <div><p className="eyebrow orange">BEHEERDER</p><h2>{view === 'menu' ? 'Clubbeheer' : view === 'seasons' ? 'Seizoenen' : view === 'teams' ? 'Teams' : view === 'members' ? 'Teamindeling' : view === 'locations' ? 'Locaties' : view === 'staff' ? 'Clubmedewerkers' : 'Lid uitnodigen'}</h2></div>
+              <div><p className="eyebrow orange">BEHEERDER</p><h2>{view === 'menu' ? 'Clubbeheer' : view === 'seasons' ? 'Seizoenen' : view === 'teams' ? 'Teams' : view === 'members' ? 'Teamindeling' : view === 'directory' ? 'Ledenlijst' : view === 'locations' ? 'Locaties' : view === 'staff' ? 'Clubmedewerkers' : 'Lid uitnodigen'}</h2></div>
               <button className="sheet-icon-button" onClick={closeAdmin} aria-label="Sluiten"><Icon name="close" /></button>
             </header>
 
@@ -2190,6 +2250,7 @@ function AdminPanel({ session, onMessage, onChanged }) {
                     <AdminMenuItem icon="calendar" title="Seizoenen" subtitle={`${seasons.length} seizoen${seasons.length === 1 ? '' : 'en'} · ${seasons.find(s => s.is_active)?.name || 'geen actief seizoen'}`} onClick={() => goTo('seasons')} />
                     <AdminMenuItem icon="team" title="Teams" subtitle={`${teams.filter(t => t.is_active).length} actieve teams`} onClick={() => goTo('teams')} />
                     <AdminMenuItem icon="people" title="Teamindeling" subtitle="Spelers en coaches koppelen" onClick={() => goTo('members')} />
+                    <AdminMenuItem icon="person" title="Ledenlijst" subtitle="Gegevens, posities en resetmails" onClick={() => goTo('directory')} />
                     <AdminMenuItem icon="person" title="Clubmedewerkers" subtitle="Trainers, scoorders en begeleiding" onClick={() => goTo('staff')} />
                     <AdminMenuItem icon="pin" title="Locaties" subtitle="Clubadressen, Maps en reistijd" onClick={() => goTo('locations')} />
                     <AdminMenuItem icon="person" title="Lid uitnodigen" subtitle="Nieuw Mijn OG-account per e-mail" onClick={() => goTo('invite')} />
@@ -2272,6 +2333,22 @@ function AdminPanel({ session, onMessage, onChanged }) {
                   </div>
                 )}
 
+                {view === 'directory' && (
+                  <div className="admin-block member-directory">
+                    <label className="member-search">Zoeken<input type="search" placeholder="Naam, rugnummer, positie, gebruikersnaam of e-mail" value={directorySearch} onChange={e=>setDirectorySearch(e.target.value)}/></label>
+                    <p className="muted directory-count">{visibleDirectoryMembers.length} van {directoryMembers.length} leden</p>
+                    {directoryFeedback&&<div className="push-feedback" role="status">{directoryFeedback}</div>}
+                    {directoryLoading?<div className="subtle-loading">Ledenlijst laden…</div>:<div className="member-directory-list">
+                      {visibleDirectoryMembers.map(person=>{const age=memberAge(person.date_of_birth);const positions=[person.primary_position,...(person.secondary_positions||[])].filter(Boolean).join(', ');return <article className="directory-member-card" key={person.id}>
+                        <div className="directory-member-head"><span className="member-avatar">{initials(person)}</span><div><strong>{personName(person)}</strong><small>{age!=null?`${age} jaar`:'Leeftijd niet ingevuld'}{person.jersey_number?` · #${person.jersey_number}`:''}</small></div></div>
+                        <dl className="directory-member-data"><div><dt>Posities</dt><dd>{positions||'Niet ingevuld'}</dd></div><div><dt>Gebruikersnaam</dt><dd>{person.username?`@${person.username}`:'Niet ingesteld'}</dd></div><div className="directory-email"><dt>E-mailadres</dt><dd>{person.email||'Geen gekoppeld account'}</dd></div></dl>
+                        <div className="directory-member-actions"><button className="mini-action" type="button" onClick={()=>openDirectoryEditor(person)}>Bewerken</button><button className="mini-action reset" type="button" disabled={busy||!person.email} onClick={()=>sendMemberReset(person)}>{person.email?'Resetmail sturen':'Geen e-mail'}</button></div>
+                      </article>})}
+                      {!visibleDirectoryMembers.length&&<div className="admin-empty">Geen leden gevonden.</div>}
+                    </div>}
+                  </div>
+                )}
+
                 {view === 'members' && (
                   <div className="admin-block team-members-admin">
                     <div className="admin-form-grid">
@@ -2338,6 +2415,14 @@ function AdminPanel({ session, onMessage, onChanged }) {
         </form>
       </SettingsModal>}
       {usernamePerson && <SettingsModal title="Gebruikersnaam aanpassen" onClose={()=>{setUsernamePerson(null);setUsernameFeedback('')}}><form className="form-stack" onSubmit={saveUsername}><p className="settings-modal-intro">Stel de gebruikersnaam in voor <strong>{personName(usernamePerson)}</strong>. Inloggen met het e-mailadres blijft ook mogelijk.</p><label>Gebruikersnaam<input value={usernameValue} onChange={e=>setUsernameValue(e.target.value.toLowerCase().replace(/\s+/g,''))} placeholder="bijv. bas13" autoCapitalize="none" autoCorrect="off" minLength="3" maxLength="30" pattern="[a-z0-9._-]+"/><small className="field-help">3–30 tekens: letters, cijfers, punt, streepje of underscore.</small></label>{usernameFeedback&&<div className="push-feedback">{usernameFeedback}</div>}<button className="primary" disabled={busy}>{busy?'Opslaan…':'Gebruikersnaam opslaan'}</button></form></SettingsModal>}
+      {editingDirectoryMember&&<SettingsModal title="Lid aanpassen" onClose={()=>setEditingDirectoryMember(null)}><form className="form-stack directory-edit-form" onSubmit={saveDirectoryMember}>
+        <div className="admin-form-grid"><label>Voornaam<input value={directoryForm.first_name} onChange={e=>setDirectoryForm({...directoryForm,first_name:e.target.value})} required/></label><label>Achternaam<input value={directoryForm.last_name} onChange={e=>setDirectoryForm({...directoryForm,last_name:e.target.value})} required/></label></div>
+        <div className="admin-form-grid"><label>Geboortedatum<input type="date" value={directoryForm.date_of_birth} onChange={e=>setDirectoryForm({...directoryForm,date_of_birth:e.target.value})}/></label><label>Rugnummer<input value={directoryForm.jersey_number} onChange={e=>setDirectoryForm({...directoryForm,jersey_number:e.target.value})}/></label></div>
+        <div className="admin-form-grid"><label>Primaire positie<input value={directoryForm.primary_position} onChange={e=>setDirectoryForm({...directoryForm,primary_position:e.target.value})} placeholder="Bijv. SS"/></label><label>Andere posities<input value={directoryForm.secondary_positions} onChange={e=>setDirectoryForm({...directoryForm,secondary_positions:e.target.value})} placeholder="2B, 3B"/></label></div>
+        <label>Gebruikersnaam<input value={directoryForm.username} onChange={e=>setDirectoryForm({...directoryForm,username:e.target.value.toLowerCase().replace(/\s+/g,'')})} minLength="3" maxLength="30" pattern="[a-z0-9._-]+"/></label>
+        <label>E-mailadres<input value={editingDirectoryMember.email||'Geen gekoppeld account'} disabled/><small className="field-help">Het e-mailadres komt uit het beveiligde inlogaccount en wordt hier alleen getoond.</small></label>
+        {directoryFeedback&&<div className="push-feedback">{directoryFeedback}</div>}<button className="primary" disabled={busy}>{busy?'Opslaan…':'Lidgegevens opslaan'}</button>
+      </form></SettingsModal>}
     </>
   )
 }
@@ -2466,7 +2551,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
         <SettingsRow icon="lock" title="Wachtwoord" subtitle="Wachtwoord wijzigen via resetmail" onClick={() => setSettingsView('password')} />
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.0.0.5" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.0.0.6" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -2505,7 +2590,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 3.0.0.5</h3>
+        <h3>Versie 3.0.0.6</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS agenda</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>
