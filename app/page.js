@@ -605,7 +605,6 @@ function ShareWhatsAppButton({ event }) {
 }
 
 const LINEUP_FIELD_POSITIONS = ['LF','CF','RF','SS','2B','3B','P','1B','C']
-const LINEUP_SPECIAL_ROLES = ['DP','FLEX','OPO']
 
 function normalizePlayerPositions(person) {
   const values = []
@@ -619,8 +618,9 @@ function LineupMakerModal({ event, team, profiles = [], memberships = [], gameAt
   const [tab,setTab]=useState('field')
   const [field,setField]=useState({})
   const [special,setSpecial]=useState({DP:null,FLEX:null,OPO:null})
-  const [order,setOrder]=useState(Array(9).fill(null))
+  const [order,setOrder]=useState([])
   const [substitutes,setSubstitutes]=useState([])
+  const [excludedSubs,setExcludedSubs]=useState([])
   const [picker,setPicker]=useState(null)
   const [busy,setBusy]=useState(true)
   const [saving,setSaving]=useState(false)
@@ -637,22 +637,62 @@ function LineupMakerModal({ event, team, profiles = [], memberships = [], gameAt
   const attendanceMap=Object.fromEntries(gameAttendance.filter(r=>r.event_key===key).map(r=>[r.profile_id,r.status]))
   guestIds.forEach(id=>{ if(!attendanceMap[id]) attendanceMap[id]='present' })
 
+  function presentForBench(id){return attendanceMap[id]==='present'||attendanceMap[id]==='late'}
+  function player(id){return players.find(p=>p.id===id)}
+  function fieldIds(source=field){return LINEUP_FIELD_POSITIONS.map(pos=>source[pos]).filter(Boolean)}
+  function starterIds(sourceField=field,sourceSpecial=special){return [...new Set([...fieldIds(sourceField),sourceSpecial.DP].filter(Boolean))]}
+  function desiredOrder(sourceField=field,sourceSpecial=special){
+    const ids=[...fieldIds(sourceField)]
+    if(sourceSpecial.DP&&!ids.includes(sourceSpecial.DP))ids.push(sourceSpecial.DP)
+    return sourceSpecial.FLEX?ids.filter(id=>id!==sourceSpecial.FLEX):ids
+  }
+  function reconcileOrder(current,sourceField=field,sourceSpecial=special){
+    const desired=desiredOrder(sourceField,sourceSpecial)
+    const kept=(Array.isArray(current)?current:[]).filter((id,i,arr)=>id&&desired.includes(id)&&arr.indexOf(id)===i)
+    desired.forEach(id=>{if(!kept.includes(id))kept.push(id)})
+    return kept
+  }
+  function eligibleBench(sourceField=field,sourceSpecial=special){
+    const starters=new Set(starterIds(sourceField,sourceSpecial))
+    return players.filter(p=>presentForBench(p.id)&&!starters.has(p.id)).map(p=>p.id)
+  }
+
   useEffect(()=>{ let live=true; (async()=>{
     setBusy(true); setFeedback('')
     const {data,error}=await supabase.from('game_lineups').select('*').eq('event_key',key).eq('team_id',Number(team.id)).maybeSingle()
     if(!live)return
     if(error){ setFeedback(error.message.includes('game_lineups')?'Voer eerst de SQL-update voor de Line-up Maker uit.':error.message); setBusy(false); return }
     if(data){
-      setField(data.field_positions||{})
-      setSpecial({...{DP:null,FLEX:null,OPO:null},...(data.special_roles||{})})
-      setOrder(Array.isArray(data.batting_order)?[...data.batting_order,...Array(9).fill(null)].slice(0,9):Array(9).fill(null))
-      setSubstitutes(Array.isArray(data.substitutes)?data.substitutes:[])
+      const nextField=data.field_positions||{}
+      const nextSpecial={DP:null,FLEX:null,OPO:null,...(data.special_roles||{})}
+      const nextOrder=reconcileOrder(Array.isArray(data.batting_order)?data.batting_order:[],nextField,nextSpecial)
+      const defaults=eligibleBench(nextField,nextSpecial)
+      const savedSubs=Array.isArray(data.substitutes)?data.substitutes.filter(id=>defaults.includes(id)):defaults
+      setField(nextField)
+      setSpecial(nextSpecial)
+      setOrder(nextOrder)
+      setSubstitutes(savedSubs)
+      setExcludedSubs(defaults.filter(id=>!savedSubs.includes(id)))
+    } else {
+      setOrder([])
+      setSubstitutes(eligibleBench({}, {DP:null,FLEX:null,OPO:null}))
+      setExcludedSubs([])
     }
     setBusy(false)
   })(); return()=>{live=false} },[key,team.id])
 
-  const assignedIds=new Set([...Object.values(field),...Object.values(special),...order,...substitutes].filter(Boolean))
-  const currentSelection = picker?.kind==='field' ? field[picker.value] : picker?.kind==='special' ? special[picker.value] : picker?.kind==='order' ? order[picker.value] : null
+  useEffect(()=>{
+    if(busy)return
+    const defaults=eligibleBench(field,special)
+    setSubstitutes(cur=>{
+      const keep=cur.filter(id=>defaults.includes(id)&&!excludedSubs.includes(id))
+      defaults.forEach(id=>{if(!keep.includes(id)&&!excludedSubs.includes(id))keep.push(id)})
+      return keep
+    })
+  },[field,special.DP,busy])
+
+  const assignedIds=new Set([...fieldIds(),special.DP,special.FLEX].filter(Boolean))
+  const currentSelection = picker?.kind==='field' ? field[picker.value] : picker?.kind==='dp' ? special.DP : null
 
   function sortedPlayers(targetPosition){
     return [...players].sort((a,b)=>{
@@ -669,73 +709,101 @@ function LineupMakerModal({ event, team, profiles = [], memberships = [], gameAt
     })
   }
 
-  function addToOrderIfNeeded(personId){
-    setOrder(cur=>{
-      if(cur.includes(personId))return cur
-      const idx=cur.findIndex(id=>!id)
-      if(idx<0)return cur
-      const next=[...cur];next[idx]=personId;return next
-    })
+  function applyStarterChange(nextField,nextSpecial,orderCandidate=order){
+    if(!nextSpecial.DP)nextSpecial={...nextSpecial,FLEX:null}
+    if(nextSpecial.FLEX&&!fieldIds(nextField).includes(nextSpecial.FLEX))nextSpecial={...nextSpecial,FLEX:null}
+    const nextOrder=reconcileOrder(orderCandidate,nextField,nextSpecial)
+    setField(nextField);setSpecial(nextSpecial);setOrder(nextOrder)
   }
 
   function setSelection(person){
     const status=attendanceMap[person.id]
     if((status==='absent'||status==='injured')&&!window.confirm(`Let op, ${personName(person)} is afwezig. Weet je zeker dat je die wilt opstellen?`)) return
     if(picker.kind==='field'){
-      setField(cur=>{
-        const next={...cur}
-        Object.keys(next).forEach(pos=>{if(next[pos]===person.id&&pos!==picker.value)delete next[pos]})
-        next[picker.value]=person.id
-        return next
-      })
-      addToOrderIfNeeded(person.id)
+      const nextField={...field}
+      const displaced=nextField[picker.value]
+      Object.keys(nextField).forEach(pos=>{if(nextField[pos]===person.id)delete nextField[pos]})
+      nextField[picker.value]=person.id
+      let nextSpecial={...special}
+      if(nextSpecial.DP===person.id)nextSpecial={...nextSpecial,DP:null,FLEX:null}
+      if(displaced&&displaced!==person.id&&nextSpecial.FLEX===displaced)nextSpecial={...nextSpecial,FLEX:null}
+      let candidate=[...order]
+      if(displaced&&displaced!==person.id&&!candidate.includes(person.id))candidate=candidate.map(id=>id===displaced?person.id:id)
+      applyStarterChange(nextField,nextSpecial,candidate)
+      setExcludedSubs(cur=>cur.filter(id=>id!==displaced))
     }
-    if(picker.kind==='special'){
-      setSpecial(cur=>({...cur,[picker.value]:person.id}))
-      if(picker.value==='DP'||picker.value==='OPO')addToOrderIfNeeded(person.id)
+    if(picker.kind==='dp'){
+      const nextField={...field}
+      Object.keys(nextField).forEach(pos=>{if(nextField[pos]===person.id)delete nextField[pos]})
+      let nextSpecial={...special,DP:person.id,FLEX:special.FLEX===person.id?null:special.FLEX}
+      applyStarterChange(nextField,nextSpecial,order)
     }
-    if(picker.kind==='order') setOrder(cur=>cur.map((id,i)=>i===picker.value?person.id:id))
-    if(picker.kind==='sub') setSubstitutes(cur=>cur.includes(person.id)?cur:[...cur,person.id])
+    if(picker.kind==='sub'){
+      setExcludedSubs(cur=>cur.filter(id=>id!==person.id))
+      setSubstitutes(cur=>cur.includes(person.id)?cur:[...cur,person.id])
+    }
     setPicker(null)
   }
   function clearSelection(){
-    if(picker.kind==='field') setField(cur=>{const n={...cur};delete n[picker.value];return n})
-    if(picker.kind==='special') setSpecial(cur=>({...cur,[picker.value]:null}))
-    if(picker.kind==='order') setOrder(cur=>cur.map((id,i)=>i===picker.value?null:id))
+    if(picker.kind==='field'){
+      const removed=field[picker.value]
+      const nextField={...field};delete nextField[picker.value]
+      let nextSpecial={...special}
+      if(nextSpecial.FLEX===removed)nextSpecial={...nextSpecial,FLEX:null}
+      applyStarterChange(nextField,nextSpecial,order)
+      if(removed&&presentForBench(removed))setExcludedSubs(cur=>cur.filter(id=>id!==removed))
+    }
+    if(picker.kind==='dp'){
+      applyStarterChange(field,{...special,DP:null,FLEX:null},order)
+      if(special.DP&&presentForBench(special.DP))setExcludedSubs(cur=>cur.filter(id=>id!==special.DP))
+    }
     setPicker(null)
   }
-  function removeSub(id){setSubstitutes(cur=>cur.filter(x=>x!==id))}
-  function player(id){return players.find(p=>p.id===id)}
-  function playerPosition(id){return Object.entries(field).find(([,pid])=>pid===id)?.[0]||Object.entries(special).find(([,pid])=>pid===id)?.[0]||''}
+  function setFlex(id){
+    if(!special.DP)return
+    const nextSpecial={...special,FLEX:id}
+    setSpecial(nextSpecial)
+    setOrder(cur=>reconcileOrder(cur,field,nextSpecial))
+  }
+  function clearFlex(){
+    const nextSpecial={...special,FLEX:null}
+    setSpecial(nextSpecial)
+    setOrder(cur=>reconcileOrder(cur,field,nextSpecial))
+  }
+  function removeSub(id){
+    setSubstitutes(cur=>cur.filter(x=>x!==id))
+    setExcludedSubs(cur=>cur.includes(id)?cur:[...cur,id])
+  }
+  function playerPosition(id){
+    if(special.DP===id)return 'DP'
+    return Object.entries(field).find(([,pid])=>pid===id)?.[0]||''
+  }
   function moveOrder(from,to){
     if(from===null||to===null||from===to)return
     setOrder(cur=>{const next=[...cur];const [item]=next.splice(from,1);next.splice(to,0,item);return next})
   }
   async function save(){
     setSaving(true);setFeedback('')
-    const payload={event_key:key,team_id:Number(team.id),event_title:event.title,event_start:event.start,field_positions:field,special_roles:special,batting_order:order,substitutes,updated_at:new Date().toISOString()}
+    const cleanOrder=reconcileOrder(order,field,special)
+    const payload={event_key:key,team_id:Number(team.id),event_title:event.title,event_start:event.start,field_positions:field,special_roles:{DP:special.DP,FLEX:special.FLEX,OPO:null},batting_order:cleanOrder,substitutes,updated_at:new Date().toISOString()}
     const {error}=await supabase.from('game_lineups').upsert(payload,{onConflict:'event_key,team_id'})
     setSaving(false); setFeedback(error?error.message:'Line-up opgeslagen ✓')
   }
-  function autoFillOrder(){
-    const ids=[...LINEUP_FIELD_POSITIONS.map(pos=>field[pos]).filter(Boolean)]
-    const dp=special.DP
-    if(dp&&!ids.includes(dp))ids.unshift(dp)
-    setOrder([...ids,...Array(9).fill(null)].slice(0,9))
-  }
+  function autoFillOrder(){setOrder(reconcileOrder([],field,special))}
   function pdfEscape(text=''){return String(text).replace(/\\/g,'\\\\').replace(/\(/g,'\\(').replace(/\)/g,'\\)').replace(/[^\x20-\xFF]/g,'?')}
   function buildLineupPdf(){
-    const rows=order.map((id,i)=>{const p=id?player(id):null;return {nr:String(i+1),name:p?(p.jersey_number?`#${p.jersey_number} `:'')+personName(p):'-',pos:p?playerPosition(id):''}})
-    const extras=[]
-    ;['DP','FLEX','OPO'].forEach(role=>{const id=special[role],p=id?player(id):null;if(p)extras.push({nr:role,name:(p.jersey_number?`#${p.jersey_number} `:'')+personName(p),pos:role})})
-    substitutes.forEach((id,i)=>{const p=player(id);if(p)extras.push({nr:`W${i+1}`,name:(p.jersey_number?`#${p.jersey_number} `:'')+personName(p),pos:playerPosition(id)})})
+    const officialOrder=reconcileOrder(order,field,special).slice(0,9)
+    const rows=officialOrder.map((id,i)=>{const p=id?player(id):null;return {nr:String(i+1),name:p?(p.jersey_number?`#${p.jersey_number} `:'')+personName(p):'-',pos:p?playerPosition(id):''}})
+    if(special.DP&&special.FLEX){const p=player(special.FLEX);if(p)rows.push({nr:'10',name:(p.jersey_number?`#${p.jersey_number} `:'')+personName(p),pos:`FLEX · ${playerPosition(p.id)}`})}
+    const extras=substitutes.map((id,i)=>{const p=player(id);return p?{nr:`W${i+1}`,name:(p.jersey_number?`#${p.jersey_number} `:'')+personName(p),pos:normalizePlayerPositions(p).join('/')}:null}).filter(Boolean)
     const lines=[]
     const t=(x,y,size,text,bold=false)=>lines.push(`BT /F${bold?2:1} ${size} Tf ${x} ${y} Td (${pdfEscape(text)}) Tj ET`)
     t(48,800,18,'MIJN OG - LINE UP',true);t(48,780,11,team.name,true);t(48,765,9,event.title);t(48,750,9,formatShortDate(event.start))
     lines.push('0.85 G 48 735 m 547 735 l S')
     t(48,718,9,'#',true);t(82,718,9,'Naam',true);t(455,718,9,'Pos.',true)
     let y=700
-    ;[...rows,...extras].forEach(r=>{t(48,y,9,r.nr);t(82,y,9,r.name||'-');t(455,y,9,r.pos||'');lines.push(`0.92 G 48 ${y-6} m 547 ${y-6} l S`);y-=24})
+    rows.forEach(r=>{t(48,y,9,r.nr);t(82,y,9,r.name||'-');t(455,y,9,r.pos||'');lines.push(`0.92 G 48 ${y-6} m 547 ${y-6} l S`);y-=24})
+    if(extras.length){y-=6;t(48,y,9,'WISSELS',true);y-=20;extras.forEach(r=>{t(48,y,9,r.nr);t(82,y,9,r.name||'-');t(455,y,9,r.pos||'');lines.push(`0.92 G 48 ${y-6} m 547 ${y-6} l S`);y-=24})}
     const stream=lines.join('\n')
     const objects=[]
     objects.push('<< /Type /Catalog /Pages 2 0 R >>')
@@ -749,21 +817,28 @@ function LineupMakerModal({ event, team, profiles = [], memberships = [], gameAt
     const xref=pdf.length;pdf+=`xref\n0 ${objects.length+1}\n0000000000 65535 f \n`;for(let i=1;i<offsets.length;i++)pdf+=String(offsets[i]).padStart(10,'0')+' 00000 n \n';pdf+=`trailer\n<< /Size ${objects.length+1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`
     return new Blob([new Uint8Array([...pdf].map(c=>c.charCodeAt(0)&255))],{type:'application/pdf'})
   }
+  function canExport(){return !special.DP||!!special.FLEX}
   function exportPdf(){
+    if(!canExport()){setFeedback('Kies in de slagvolgorde eerst welke veldspeelster FLEX is.');setTab('order');return}
     const blob=buildLineupPdf();const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`line-up-${team.name}-${formatShortDate(event.start)}`.replace(/[^a-z0-9._-]+/gi,'-')+'.pdf';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500)
   }
   async function sharePdf(){
+    if(!canExport()){setFeedback('Kies in de slagvolgorde eerst welke veldspeelster FLEX is.');setTab('order');return}
     const blob=buildLineupPdf();const file=new File([blob],`line-up-${team.name}.pdf`,{type:'application/pdf'})
     if(navigator.share&&(!navigator.canShare||navigator.canShare({files:[file]}))){try{await navigator.share({title:`Line-up ${team.name}`,text:`Starting line-up · ${event.title}`,files:[file]});return}catch(e){if(e?.name==='AbortError')return}}
     exportPdf();setFeedback('PDF gedownload. Deel het bestand daarna via WhatsApp.')
   }
 
-  return <div className="modal-backdrop lineup-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}><section className="detail-modal lineup-modal" role="dialog" aria-modal="true"><header className="detail-modal-header"><div><p className="eyebrow orange">STARTING LINE-UP</p><h2>{team.name}</h2><small>{event.title} · {formatShortDate(event.start)}</small></div><button className="sheet-icon-button" onClick={onClose}><Icon name="close"/></button></header><div className="lineup-tabs"><button className={tab==='field'?'active':''} onClick={()=>setTab('field')}>Veld</button><button className={tab==='order'?'active':''} onClick={()=>setTab('order')}>Slagvolgorde</button><button className={tab==='wbsc'?'active':''} onClick={()=>setTab('wbsc')}>LINE UP</button></div><div className="detail-modal-body lineup-body">{busy?<p className="muted">Line-up laden…</p>:<>
-    {tab==='field'&&<><div className="softball-field">{LINEUP_FIELD_POSITIONS.map(pos=>{const p=player(field[pos]);return <button key={pos} className={`field-position field-${pos.toLowerCase()} ${p?'filled':''}`} onClick={()=>setPicker({kind:'field',value:pos,target:pos})}><span>{pos}</span><strong>{p?teamDisplayName(p):'+'}</strong>{p?.jersey_number&&<small>#{p.jersey_number}</small>}</button>})}</div><div className="lineup-special"><h3>DP / FLEX / OPO</h3><div>{LINEUP_SPECIAL_ROLES.map(role=>{const p=player(special[role]);return <button key={role} className={p?'filled':''} onClick={()=>setPicker({kind:'special',value:role,target:role})}><span>{role}</span><strong>{p?teamDisplayName(p):'Kies speelster'}</strong></button>})}</div></div></>}
-    {tab==='order'&&<><div className="lineup-order-head"><div><h3>Slagvolgorde</h3><p>De veldopstelling wordt automatisch meegenomen. Sleep aan ≡ om de volgorde te wijzigen.</p></div><button className="secondary orange-outline" onClick={autoFillOrder}>Opnieuw uit veld</button></div><div className="batting-order-list">{order.map((id,index)=>{const p=player(id);return <div key={index} className={`batting-order-row ${dragIndex===index?'dragging':''}`} draggable onDragStart={()=>setDragIndex(index)} onDragOver={e=>e.preventDefault()} onDrop={()=>{moveOrder(dragIndex,index);setDragIndex(null)}} onDragEnd={()=>setDragIndex(null)} data-order-index={index}><button className="drag-handle" aria-label="Sleep slagpositie" onTouchStart={()=>{touchDragIndex.current=index}} onTouchMove={e=>{const touch=e.touches[0];const el=document.elementFromPoint(touch.clientX,touch.clientY)?.closest('[data-order-index]');if(el){const to=Number(el.dataset.orderIndex);if(Number.isFinite(to)&&to!==touchDragIndex.current){moveOrder(touchDragIndex.current,to);touchDragIndex.current=to}}}} onTouchEnd={()=>{touchDragIndex.current=null}}>≡</button><button className="batting-player-button" onClick={()=>setPicker({kind:'order',value:index,target:null})}><span className="batting-number">{index+1}</span><span><strong>{p?personName(p):'Kies slagvrouw'}</strong><small>{p?`${p.jersey_number?`#${p.jersey_number} · `:''}${playerPosition(id)}`:'Tik om toe te voegen'}</small></span><Icon name="chevron"/></button></div>})}</div><div className="lineup-subs"><div className="lineup-subs-head"><div><h3>Wissels</h3><p>Reserve-/wisselspeelsters voor deze line-up.</p></div><button className="secondary orange-outline" onClick={()=>setPicker({kind:'sub',value:null,target:null})}>+ Wissel</button></div>{substitutes.length===0?<p className="muted">Nog geen wissels toegevoegd.</p>:<div className="lineup-sub-list">{substitutes.map(id=>{const p=player(id);return p?<div key={id}><span className="lineup-player-number">{p.jersey_number||'—'}</span><span><strong>{personName(p)}</strong><small>{normalizePlayerPositions(p).join(' / ')||'Geen positie'}</small></span><button onClick={()=>removeSub(id)} aria-label="Verwijder wissel">×</button></div>:null})}</div>}</div></>}
-    {tab==='wbsc'&&<div className="lineup-final"><div className="wbsc-preview"><div className="wbsc-preview-title"><span>OG</span><div><strong>LINE UP</strong><small>{event.title}</small></div></div><div className="wbsc-grid"><div className="wbsc-row wbsc-head"><span>#</span><span>Naam</span><span>Pos.</span></div>{order.map((id,index)=>{const p=player(id);return <div className="wbsc-row" key={index}><span>{index+1}</span><span>{p?`${p.jersey_number?`#${p.jersey_number} `:''}${personName(p)}`:'—'}</span><span>{id?playerPosition(id):''}</span></div>})}{LINEUP_SPECIAL_ROLES.map(role=>{const id=special[role],p=player(id);return id?<div className="wbsc-row special-row" key={role}><span>{role}</span><span>{p?`${p.jersey_number?`#${p.jersey_number} `:''}${personName(p)}`:'—'}</span><span>{role}</span></div>:null})}{substitutes.map((id,index)=>{const p=player(id);return p?<div className="wbsc-row substitute-row" key={id}><span>W{index+1}</span><span>{`${p.jersey_number?`#${p.jersey_number} `:''}${personName(p)}`}</span><span>{playerPosition(id)}</span></div>:null})}</div></div><div className="lineup-export-actions"><button className="secondary orange-outline" onClick={exportPdf}>Exporteer PDF</button><button className="whatsapp-share-button compact" onClick={sharePdf}><span className="whatsapp-mark">W</span><span><strong>Deel via WhatsApp</strong><small>Deel de PDF</small></span></button></div></div>}
+  const flexPlayer=special.FLEX?player(special.FLEX):null
+  const selectableFlex=fieldIds().map(id=>player(id)).filter(Boolean)
+  const removedBench=eligibleBench().filter(id=>excludedSubs.includes(id))
+
+  return <div className="modal-backdrop lineup-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}><section className="detail-modal lineup-modal" role="dialog" aria-modal="true"><header className="detail-modal-header lineup-header"><div><p className="eyebrow orange">STARTING LINE-UP</p><h2>{team.name}</h2><small>{event.title} · {formatShortDate(event.start)}</small></div><button className="sheet-icon-button" onClick={onClose}><Icon name="close"/></button></header><div className="lineup-nav-wrap"><div className="lineup-tabs"><button className={tab==='field'?'active':''} onClick={()=>setTab('field')}>Veld</button><button className={tab==='order'?'active':''} onClick={()=>setTab('order')}>Slagvolgorde</button><button className={tab==='wbsc'?'active':''} onClick={()=>setTab('wbsc')}>LINE UP</button></div></div><div className="detail-modal-body lineup-body">{busy?<p className="muted">Line-up laden…</p>:<>
+    {tab==='field'&&<><div className="softball-field">{LINEUP_FIELD_POSITIONS.map(pos=>{const p=player(field[pos]);return <button key={pos} className={`field-position field-${pos.toLowerCase()} ${p?'filled':''}`} onClick={()=>setPicker({kind:'field',value:pos,target:pos})}><span>{pos}</span><strong>{p?teamDisplayName(p):'+'}</strong>{p?.jersey_number&&<small>#{p.jersey_number}</small>}</button>})}{(()=>{const p=player(special.DP);return <button className={`field-position field-dp ${p?'filled':''}`} onClick={()=>setPicker({kind:'dp',value:'DP',target:null})}><span>DP</span><strong>{p?teamDisplayName(p):'+'}</strong>{p?.jersey_number&&<small>#{p.jersey_number}</small>}</button>})()}</div><div className="dp-help"><strong>DP</strong><span>De DP staat alleen in de slagvolgorde. Kies daarna bij Slagvolgorde welke veldspeelster FLEX is en dus niet slaat.</span></div></>}
+    {tab==='order'&&<><div className="lineup-order-head"><div><h3>Slagvolgorde</h3><p>Alle starters uit het veld en de DP worden automatisch meegenomen. Sleep aan ≡ om de volgorde te wijzigen.</p></div><button className="secondary orange-outline" onClick={autoFillOrder}>Opnieuw uit veld</button></div>{special.DP&&<div className={`flex-selector ${special.FLEX?'complete':''}`}><div><strong>Wie slaat niet?</strong><span>{special.FLEX?`${personName(flexPlayer)} is FLEX en staat als nummer 10 op de officiële line-up.`:'Kies één van de veldspeelsters als FLEX. De DP neemt haar plek in de slagvolgorde over.'}</span></div><div className="flex-choice-list">{selectableFlex.map(p=><button key={p.id} className={special.FLEX===p.id?'active':''} onClick={()=>special.FLEX===p.id?clearFlex():setFlex(p.id)}><span>{p.jersey_number?`#${p.jersey_number}`:'—'}</span><strong>{personName(p)}</strong><small>{playerPosition(p.id)}</small></button>)}</div></div>}<div className="batting-order-list">{order.map((id,index)=>{const p=player(id);return <div key={id||index} className={`batting-order-row ${dragIndex===index?'dragging':''}`} draggable onDragStart={()=>setDragIndex(index)} onDragOver={e=>e.preventDefault()} onDrop={()=>{moveOrder(dragIndex,index);setDragIndex(null)}} onDragEnd={()=>setDragIndex(null)} data-order-index={index}><button className="drag-handle" aria-label="Sleep slagpositie" onTouchStart={()=>{touchDragIndex.current=index}} onTouchMove={e=>{const touch=e.touches[0];const el=document.elementFromPoint(touch.clientX,touch.clientY)?.closest('[data-order-index]');if(el){const to=Number(el.dataset.orderIndex);if(Number.isFinite(to)&&to!==touchDragIndex.current){moveOrder(touchDragIndex.current,to);touchDragIndex.current=to}}}} onTouchEnd={()=>{touchDragIndex.current=null}}>≡</button><div className="batting-player-button"><span className="batting-number">{index+1}</span><span><strong>{p?personName(p):'—'}</strong><small>{p?`${p.jersey_number?`#${p.jersey_number} · `:''}${playerPosition(id)}`:''}</small></span></div></div>})}</div>{special.DP&&special.FLEX&&flexPlayer&&<div className="flex-lineup-row"><span className="batting-number">10</span><span><strong>{personName(flexPlayer)}</strong><small>{flexPlayer.jersey_number?`#${flexPlayer.jersey_number} · `:''}{playerPosition(flexPlayer.id)} · FLEX · slaat niet</small></span></div>}<div className="lineup-subs"><div className="lineup-subs-head"><div><h3>Wissels</h3><p>Iedere aanwezige speelster die geen starter is, staat hier automatisch.</p></div>{removedBench.length>0&&<button className="secondary orange-outline" onClick={()=>setPicker({kind:'sub',value:null,target:null})}>+ Terugzetten</button>}</div>{substitutes.length===0?<p className="muted">Geen wissels in deze line-up.</p>:<div className="lineup-sub-list">{substitutes.map(id=>{const p=player(id);return p?<div key={id}><span className="lineup-player-number">{p.jersey_number||'—'}</span><span><strong>{personName(p)}</strong><small>{p.isLineupGuest?'Invaller · ':''}{normalizePlayerPositions(p).join(' / ')||'Geen positie'}</small></span><button onClick={()=>removeSub(id)} aria-label="Verwijder wissel">×</button></div>:null})}</div>}</div></>}
+    {tab==='wbsc'&&<div className="lineup-final">{special.DP&&!special.FLEX&&<div className="lineup-warning">Kies bij <strong>Slagvolgorde</strong> eerst welke veldspeelster FLEX is. Daarna is de officiële line-up compleet.</div>}<div className="wbsc-preview"><div className="wbsc-preview-title"><span>OG</span><div><strong>LINE UP</strong><small>{event.title}</small></div></div><div className="wbsc-grid"><div className="wbsc-row wbsc-head"><span>#</span><span>Naam</span><span>Pos.</span></div>{reconcileOrder(order,field,special).slice(0,9).map((id,index)=>{const p=player(id);return <div className="wbsc-row" key={id||index}><span>{index+1}</span><span>{p?`${p.jersey_number?`#${p.jersey_number} `:''}${personName(p)}`:'—'}</span><span>{id?playerPosition(id):''}</span></div>})}{special.DP&&special.FLEX&&flexPlayer&&<div className="wbsc-row flex-row"><span>10</span><span>{`${flexPlayer.jersey_number?`#${flexPlayer.jersey_number} `:''}${personName(flexPlayer)}`}</span><span>FLEX · {playerPosition(flexPlayer.id)}</span></div>}{substitutes.length>0&&<><div className="wbsc-section-label">Wissels</div>{substitutes.map((id,index)=>{const p=player(id);return p?<div className="wbsc-row substitute-row" key={id}><span>W{index+1}</span><span>{`${p.jersey_number?`#${p.jersey_number} `:''}${personName(p)}`}</span><span>{normalizePlayerPositions(p).join('/')}</span></div>:null})}</>}</div></div><div className="lineup-export-actions"><button className="secondary orange-outline" onClick={exportPdf}>Exporteer PDF</button><button className="whatsapp-share-button compact" onClick={sharePdf}><span className="whatsapp-mark">W</span><span><strong>Deel via WhatsApp</strong><small>Deel de PDF</small></span></button></div></div>}
     {feedback&&<div className="push-feedback">{feedback}</div>}<button className="primary lineup-save" disabled={saving} onClick={save}>{saving?'Opslaan…':'Starting line-up opslaan'}</button></>}</div></section>
-    {picker&&<div className="lineup-picker-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setPicker(null)}}><section className="lineup-picker"><header><div><p className="eyebrow orange">{picker.kind==='order'?`SLAGPLEK ${picker.value+1}`:picker.kind==='sub'?'WISSELS':`POSITIE ${picker.value}`}</p><h3>Kies een speelster</h3></div><button className="sheet-icon-button" onClick={()=>setPicker(null)}><Icon name="close"/></button></header><div className="lineup-player-list">{sortedPlayers(picker.target).filter(person=>picker.kind!=='sub'||(!Object.values(field).includes(person.id)&&!Object.values(special).includes(person.id)&&!order.includes(person.id)&&!substitutes.includes(person.id))).map(person=>{const status=attendanceMap[person.id];const pos=normalizePlayerPositions(person);const isAssigned=assignedIds.has(person.id)&&currentSelection!==person.id;const unavailable=status==='absent'||status==='injured';return <button key={person.id} className={`${isAssigned?'already-assigned':''} ${unavailable?'unavailable':''}`} onClick={()=>setSelection(person)}><span className="lineup-player-number">{person.jersey_number||'—'}</span><span><strong>{personName(person)}</strong><small>{person.isLineupGuest?`Invaller · `:''}{pos.join(' / ')||'Geen positie'} · {attendanceStatusLabel(status)}</small></span>{isAssigned&&<em>Opgesteld</em>}</button>})}</div>{currentSelection&&<button className="lineup-remove" onClick={clearSelection}>Verwijder uit deze plek</button>}</section></div>}
+    {picker&&<div className="lineup-picker-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setPicker(null)}}><section className="lineup-picker"><header><div><p className="eyebrow orange">{picker.kind==='sub'?'WISSELS':picker.kind==='dp'?'DP':`POSITIE ${picker.value}`}</p><h3>Kies een speelster</h3></div><button className="sheet-icon-button" onClick={()=>setPicker(null)}><Icon name="close"/></button></header><div className="lineup-player-list">{sortedPlayers(picker.target).filter(person=>picker.kind!=='sub'||removedBench.includes(person.id)).map(person=>{const status=attendanceMap[person.id];const pos=normalizePlayerPositions(person);const isAssigned=assignedIds.has(person.id)&&currentSelection!==person.id;const unavailable=status==='absent'||status==='injured';return <button key={person.id} className={`${isAssigned?'already-assigned':''} ${unavailable?'unavailable':''}`} onClick={()=>setSelection(person)}><span className="lineup-player-number">{person.jersey_number||'—'}</span><span><strong>{personName(person)}</strong><small>{person.isLineupGuest?`Invaller · `:''}{pos.join(' / ')||'Geen positie'} · {attendanceStatusLabel(status)}</small></span>{isAssigned&&<em>Opgesteld</em>}</button>})}</div>{currentSelection&&<button className="lineup-remove" onClick={clearSelection}>Verwijder uit deze plek</button>}</section></div>}
   </div>
 }
 
@@ -2762,7 +2837,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
         <SettingsRow icon="lock" title="Wachtwoord" subtitle="Wachtwoord wijzigen via resetmail" onClick={() => setSettingsView('password')} />
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.0.0.11" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.0.0.12" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -2800,7 +2875,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 3.0.0.11</h3>
+        <h3>Versie 3.0.0.12</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS agenda</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>
