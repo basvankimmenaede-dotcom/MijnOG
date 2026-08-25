@@ -2,7 +2,7 @@
 
 Agenda refresh met kaartweergave en team-aware FOYS filtering.
 
-## v3.0.0.8 - Starting Line-up Maker + WhatsApp delen
+## v3.0.0.9 - Starting Line-up Maker + WhatsApp delen
 - Line-up maken is alleen beschikbaar bij wedstrijden (handmatig of FOYS) en alleen zichtbaar voor coaches van het betreffende team.
 - Starting lineup met veld, slagvolgorde en DP/FLEX/OPO; spelers kunnen worden toegevoegd, vervangen en verwijderd.
 - Bevestigde invallers uit het bestaande invallerssysteem worden meegenomen.
@@ -17,7 +17,7 @@ Agenda refresh met kaartweergave en team-aware FOYS filtering.
 - Typefilter Alles / Wedstrijden / Trainingen.
 - FOYS-herkenning per team via `teams.foys_match_text`.
 - Clubbeheer > Teams kan de FOYS-herkenning aanpassen.
-- Over Mijn OG: versie 3.0.0.8.
+- Over Mijn OG: versie 3.0.0.9.
 
 ## v2.9.9.9 - Coachbeheer speelsters & invallers
 
