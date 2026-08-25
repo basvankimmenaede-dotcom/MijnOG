@@ -2361,3 +2361,33 @@ button.swing-primary { width: 100%; margin-top: 12px; border: 0; background: var
   .member-copy .link-account-inline{display:block;width:max-content;max-width:100%;text-align:left;line-height:1.25;margin-top:5px}
   .directory-member-data{grid-template-columns:1fr}.directory-member-data .directory-email{grid-column:auto}
 }
+
+/* v3.0.0.8 - Line-up Maker + WhatsApp delen */
+.whatsapp-share-button,.lineup-open-button{width:100%;display:flex;align-items:center;gap:12px;border-radius:16px;padding:14px 15px;margin-top:14px;text-align:left}
+.whatsapp-share-button{border:1px solid #d8e9dc;background:#f7fbf8;color:#17231a}
+.whatsapp-share-button>span:nth-child(2),.lineup-open-button>span:nth-child(2){display:flex;flex-direction:column;gap:2px;flex:1}
+.whatsapp-share-button small,.lineup-open-button small{font-size:12px;opacity:.7;font-weight:500}
+.whatsapp-mark{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:#25d366;color:white;font-weight:900;font-size:16px;flex:0 0 auto}
+.lineup-open-button{border:0;background:#ef7d00;color:#fff}
+.lineup-open-button svg{width:22px;height:22px}
+.lineup-backdrop{z-index:80}
+.lineup-modal{max-width:620px;max-height:94vh;overflow:hidden;display:flex;flex-direction:column}
+.lineup-modal .detail-modal-header small{display:block;margin-top:4px;color:var(--muted,#747474)}
+.lineup-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:0 18px 14px;border-bottom:1px solid #eee}
+.lineup-tabs button{border:0;background:#f3f3f3;border-radius:12px;padding:10px;font-weight:700}
+.lineup-tabs button.active{background:#ef7d00;color:#fff}
+.lineup-body{overflow-y:auto;padding-bottom:28px}
+.softball-field{position:relative;width:min(100%,500px);aspect-ratio:1/1;margin:4px auto 18px;border-radius:40% 40% 20% 20%;overflow:hidden;background:linear-gradient(145deg,#d8ead0 0 58%,#d5b58a 58% 100%)}
+.field-diamond{position:absolute;width:42%;aspect-ratio:1;left:29%;top:39%;background:#caa477;transform:rotate(45deg);border:3px solid rgba(255,255,255,.8);border-radius:8px}
+.field-position{position:absolute;transform:translate(-50%,-50%);width:78px;min-height:58px;border:2px solid #fff;border-radius:50%;background:#fff;box-shadow:0 5px 18px rgba(0,0,0,.13);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6px;color:#222}
+.field-position span{font-size:10px;font-weight:900;color:#ef7d00;letter-spacing:.05em}
+.field-position strong{font-size:11px;line-height:1.1;max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.field-position small{font-size:9px;color:#777}
+.field-position.filled{background:#fff7ec;border-color:#ef7d00}
+.field-lf{left:18%;top:19%}.field-cf{left:50%;top:11%}.field-rf{left:82%;top:19%}.field-ss{left:35%;top:40%}.field-2b{left:65%;top:40%}.field-3b{left:19%;top:59%}.field-p{left:50%;top:58%}.field-1b{left:81%;top:59%}.field-c{left:50%;top:85%}
+.lineup-special{margin-top:8px}.lineup-special h3,.lineup-order-head h3{margin:0 0 4px}.lineup-special>div{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.lineup-special button{border:1px solid #ddd;background:#fff;border-radius:14px;padding:11px 8px;display:flex;flex-direction:column;gap:3px}.lineup-special button span{font-size:11px;color:#ef7d00;font-weight:900}.lineup-special button strong{font-size:12px}.lineup-special button.filled{border-color:#ef7d00;background:#fff8ef}
+.lineup-order-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.lineup-order-head p{margin:0;color:#777;font-size:12px}.lineup-order-head button{white-space:nowrap}
+.batting-order-list{display:flex;flex-direction:column;gap:8px;margin-top:14px}.batting-order-list>button{display:flex;align-items:center;gap:12px;border:1px solid #e4e4e4;background:#fff;border-radius:14px;padding:10px 12px;text-align:left}.batting-order-list>button>span:nth-child(2){display:flex;flex-direction:column;gap:2px;flex:1}.batting-order-list small{color:#777}.batting-number{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:#ef7d00;color:#fff;font-weight:900}
+.wbsc-preview{border:1px solid #ddd;border-radius:16px;overflow:hidden;background:#fff}.wbsc-preview-title{display:flex;align-items:center;gap:12px;background:#111;color:#fff;padding:13px}.wbsc-preview-title>span{font-size:18px;font-weight:900}.wbsc-preview-title div{display:flex;flex-direction:column}.wbsc-preview-title small{opacity:.7}.wbsc-grid{display:flex;flex-direction:column}.wbsc-row{display:grid;grid-template-columns:42px 1fr 58px;gap:8px;padding:9px 12px;border-top:1px solid #ececec;font-size:13px}.wbsc-head{background:#f4f4f4;font-weight:800}.flex-row{background:#fff8ef}.wbsc-preview>p{padding:12px;margin:0;color:#777;font-size:12px}.lineup-save{width:100%;margin-top:16px}
+.lineup-picker-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.48);display:flex;align-items:flex-end;justify-content:center;z-index:95}.lineup-picker{width:min(100%,620px);max-height:78vh;background:#fff;border-radius:22px 22px 0 0;padding:16px;display:flex;flex-direction:column}.lineup-picker header{display:flex;justify-content:space-between;align-items:center;padding-bottom:10px}.lineup-picker h3{margin:0}.lineup-player-list{display:flex;flex-direction:column;gap:7px;overflow-y:auto;padding-bottom:8px}.lineup-player-list>button{display:flex;align-items:center;gap:11px;border:1px solid #e4e4e4;background:#fff;border-radius:13px;padding:10px;text-align:left}.lineup-player-list>button>span:nth-child(2){display:flex;flex-direction:column;gap:2px;flex:1}.lineup-player-list small{color:#777}.lineup-player-number{width:34px;height:34px;border-radius:50%;background:#f1f1f1;display:grid;place-items:center;font-weight:800}.lineup-player-list button.already-assigned{opacity:.45}.lineup-player-list button.unavailable{border-style:dashed}.lineup-player-list em{font-style:normal;font-size:10px;color:#777;background:#eee;border-radius:999px;padding:4px 7px}.lineup-remove{border:0;background:#f7eeee;color:#9b2929;border-radius:12px;padding:11px;font-weight:700;margin-top:8px}
+@media(max-width:520px){.field-position{width:66px;min-height:52px}.field-position strong{max-width:54px;font-size:10px}.lineup-special>div{grid-template-columns:1fr}.lineup-order-head{flex-direction:column}.lineup-order-head button{width:100%}}
