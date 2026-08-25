@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" role="img" aria-label="Softbalveld">
+  <defs>
+    <linearGradient id="grass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2f8f57"/>
+      <stop offset="1" stop-color="#69ab63"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="5" stdDeviation="7" flood-opacity=".16"/>
+    </filter>
+  </defs>
+  <path d="M400 744 L55 399 A488 488 0 0 1 745 399 Z" fill="url(#grass)"/>
+  <path d="M400 735 L147 482 L400 229 L653 482 Z" fill="#c89c66" filter="url(#shadow)"/>
+  <path d="M400 735 L205 540 A277 277 0 0 1 595 540 Z" fill="#59a45f"/>
+  <circle cx="400" cy="482" r="54" fill="#c89c66"/>
+  <circle cx="400" cy="482" r="9" fill="#f4eee4"/>
+  <path d="M400 735 L55 390 M400 735 L745 390" stroke="#fff" stroke-width="5" opacity=".94"/>
+  <path d="M400 735 L147 482 L400 229 L653 482 Z" fill="none" stroke="#f6f2e9" stroke-width="5"/>
+  <g fill="#fff" stroke="#d8d8d8" stroke-width="2">
+    <rect x="390" y="218" width="20" height="20" transform="rotate(45 400 228)"/>
+    <rect x="643" y="472" width="20" height="20" transform="rotate(45 653 482)"/>
+    <rect x="137" y="472" width="20" height="20" transform="rotate(45 147 482)"/>
+  </g>
+  <path d="M388 720 L412 720 L421 735 L400 752 L379 735 Z" fill="#fff" stroke="#d8d8d8" stroke-width="2"/>
+  <path d="M85 402 A455 455 0 0 1 715 402" fill="none" stroke="#fff" stroke-width="3" opacity=".28"/>
+  <path d="M120 421 A410 410 0 0 1 680 421" fill="none" stroke="#fff" stroke-width="3" opacity=".20"/>
+</svg>
