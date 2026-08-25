@@ -1569,7 +1569,7 @@ function PlayerProfileModal({ person, team, viewerProfile, viewerMembership, att
       </div>
       {canEditPlayerDetails&&<button type="button" className="secondary orange-outline player-details-edit" onClick={()=>setDetailsEditor(true)}><Icon name="edit"/> Spelersgegevens aanpassen</button>}
       <section className="player-custom-cards">
-        <div className="player-cards-heading"><div><p className="eyebrow orange">PERSOONLIJKE STATS</p><h3>Stats & ontwikkeling</h3></div>{canManageCards&&<button className="primary compact" onClick={()=>setCardEditor({})}>+ Kaart toevoegen</button>}</div>
+        <div className="player-cards-heading"><div><p className="eyebrow orange">PERSOONLIJKE STATS</p><h3>Stats & ontwikkeling</h3></div></div>
         {canSeePlayerStats&&<article className="player-measurement-card player-game-stats-card">
           <div className="player-measurement-card-head"><span className="player-measurement-card-icon"><Icon name="stats"/></span><div><strong>Wedstrijdstats</strong><small>Handmatig & iScore · seizoen 2026</small></div></div>
           <div className="player-profile-stats-grid">{[['AVG',statRate(performance.avg)],['OPS',statRate(performance.ops)],['Hits',performance.h],['RBI',performance.rbi],['SB',performance.sb]].map(([label,value])=><div key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>
@@ -1590,7 +1590,7 @@ function PlayerProfileModal({ person, team, viewerProfile, viewerMembership, att
             })}</div>:<p className="muted player-card-empty">Nog geen meetpunten ingesteld.</p>}
           </article>
         })}
-        {!cards.length&&<div className="player-cards-empty"><Icon name="stats"/><strong>Nog geen meetkaarten</strong><p>{canManageCards?'Voeg een kaart toe en kies wat je voor deze speelster wilt meten.':'De coach heeft nog geen aanvullende meetpunten voor jou ingesteld.'}</p></div>}
+        {!cards.length&&<div className="player-cards-empty"><Icon name="stats"/><strong>Nog geen aanvullende metingen</strong><p>Nieuwe metingen worden door de coach vanuit Team stats toegevoegd.</p></div>}
       </section>
       {canSeeAttendance && <section className="player-attendance-card">
         <div className="player-attendance-heading"><div><p className="eyebrow orange">AANWEZIGHEID</p><h3>{stats.percentage == null ? 'Nog geen percentage' : `${stats.percentage}%`}</h3></div><span>{stats.total} geregistreerde sessie{stats.total===1?'':'s'}</span></div>
@@ -1651,7 +1651,7 @@ function PlayerCardEditorModal({person,team,card,metrics=[],viewerProfile,onClos
     if(!card?.id||!window.confirm(`Kaart “${card.title}” met alle metingen verwijderen?`))return
     setBusy(true);const {error}=await supabase.from('player_cards').delete().eq('id',card.id);if(error){setFeedback(error.message);setBusy(false)}else await onSaved()
   }
-  return <SettingsModal title={card?'Kaart instellen':'Kaart toevoegen'} onClose={onClose}><div className="form-stack player-card-editor">
+  return <SettingsModal title="Kaart instellen" onClose={onClose}><div className="form-stack player-card-editor">
     {!card&&<><p className="settings-modal-intro">Kies een template of stel zelf een kaart samen voor {person?.first_name||'deze speelster'}.</p><div className="player-card-template-grid">{playerCardTemplates.map(template=><button type="button" key={template.key} onClick={()=>chooseTemplate(template)}><Icon name={template.icon}/><span><strong>{template.title}</strong><small>{template.metrics.length} meetpunten</small></span></button>)}</div></>}
     <label>Naam kaart<input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Bijv. Catching"/></label>
     <div className="player-card-editor-head"><strong>Meetpunten</strong><button type="button" className="text-button" onClick={()=>setRows([...rows,{label:'',unit:'',goal_direction:'higher',metric_key:''}])}>+ Meetpunt</button></div>
@@ -2435,11 +2435,6 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
   const [icsUrl, setIcsUrl] = useState(calendar?.ics_url ?? '')
   const [firstName, setFirstName] = useState(profile?.first_name ?? '')
   const [lastName, setLastName] = useState(profile?.last_name ?? '')
-  const [jerseyNumber, setJerseyNumber] = useState(profile?.jersey_number ?? '')
-  const [primaryPosition, setPrimaryPosition] = useState(profile?.primary_position ?? '')
-  const [secondaryPositions, setSecondaryPositions] = useState((profile?.secondary_positions ?? []).join(', '))
-  const [throwsHand, setThrowsHand] = useState(profile?.throws_hand ?? '')
-  const [batsSide, setBatsSide] = useState(profile?.bats_side ?? '')
   const [calendarBusy, setCalendarBusy] = useState(false)
   const [profileBusy, setProfileBusy] = useState(false)
   const [passwordBusy, setPasswordBusy] = useState(false)
@@ -2449,7 +2444,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
   const [ownProfileOpen, setOwnProfileOpen] = useState(false)
 
   useEffect(() => setIcsUrl(calendar?.ics_url ?? ''), [calendar])
-  useEffect(() => { setFirstName(profile?.first_name ?? ''); setLastName(profile?.last_name ?? ''); setJerseyNumber(profile?.jersey_number ?? ''); setPrimaryPosition(profile?.primary_position ?? ''); setSecondaryPositions((profile?.secondary_positions ?? []).join(', ')); setThrowsHand(profile?.throws_hand ?? ''); setBatsSide(profile?.bats_side ?? '') }, [profile])
+  useEffect(() => { setFirstName(profile?.first_name ?? ''); setLastName(profile?.last_name ?? '') }, [profile])
 
   const displayName = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ').trim() || 'Naam nog niet ingesteld'
   const teamLine = teams.length ? `${teams.map(team => team.name).join(' · ')}${profile?.jersey_number ? ` · #${profile.jersey_number}` : ''}` : (profile?.jersey_number ? `#${profile.jersey_number}` : 'Nog geen team gekoppeld')
@@ -2457,7 +2452,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
   async function saveProfile() {
     setProfileBusy(true)
     onMessage('')
-    const { error } = await supabase.from('profiles').update({ first_name: firstName.trim(), last_name: lastName.trim(), jersey_number: jerseyNumber.trim() || null, primary_position: primaryPosition.trim() || null, secondary_positions: secondaryPositions.split(',').map(v=>v.trim()).filter(Boolean), throws_hand: throwsHand || null, bats_side: batsSide || null }).eq('id', session.user.id)
+    const { error } = await supabase.from('profiles').update({ first_name: firstName.trim(), last_name: lastName.trim() }).eq('id', session.user.id)
     setProfileBusy(false)
     if (error) onMessage(`Profiel opslaan mislukt: ${error.message}`)
     else { onMessage('Profiel opgeslagen ✓'); setSettingsView(null); onSaved() }
@@ -2551,7 +2546,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
         <SettingsRow icon="lock" title="Wachtwoord" subtitle="Wachtwoord wijzigen via resetmail" onClick={() => setSettingsView('password')} />
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.0.0.6" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.0.0.7" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -2565,9 +2560,8 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
         <p className="settings-modal-intro">Pas hier je naam aan. Je e-mailadres blijft gekoppeld aan je account.</p>
         <label>Voornaam<input value={firstName} onChange={e => setFirstName(e.target.value)} autoComplete="given-name" /></label>
         <label>Achternaam<input value={lastName} onChange={e => setLastName(e.target.value)} autoComplete="family-name" /></label>
-        <div className="form-two equal-fields"><label>Rugnummer<input value={jerseyNumber} onChange={e=>setJerseyNumber(e.target.value)} placeholder="Bijv. 18" /></label><label>Primaire positie<input value={primaryPosition} onChange={e=>setPrimaryPosition(e.target.value)} placeholder="Bijv. OF" /></label></div>
-        <label>Secundaire posities<input value={secondaryPositions} onChange={e=>setSecondaryPositions(e.target.value)} placeholder="Bijv. 2B, SS" /></label>
-        <div className="form-two equal-fields"><label>Gooit<select value={throwsHand} onChange={e=>setThrowsHand(e.target.value)}><option value="">Niet ingesteld</option><option value="R">Rechts</option><option value="L">Links</option></select></label><label>Slaat<select value={batsSide} onChange={e=>setBatsSide(e.target.value)}><option value="">Niet ingesteld</option><option value="R">Rechts</option><option value="L">Links</option><option value="S">Switch</option></select></label></div>
+        <div className="profile-sport-readonly"><div><span>Rugnummer</span><strong>{profile?.jersey_number||'Niet ingesteld'}</strong></div><div><span>Primaire positie</span><strong>{profile?.primary_position||'Niet ingesteld'}</strong></div><div><span>Andere posities</span><strong>{(profile?.secondary_positions||[]).join(', ')||'Niet ingesteld'}</strong></div><div><span>Gooit</span><strong>{profile?.throws_hand==='L'?'Links':profile?.throws_hand==='R'?'Rechts':'Niet ingesteld'}</strong></div><div><span>Slaat</span><strong>{profile?.bats_side==='S'?'Switch':profile?.bats_side==='L'?'Links':profile?.bats_side==='R'?'Rechts':'Niet ingesteld'}</strong></div></div>
+        <p className="profile-sport-note">Rugnummer, posities, gooien en slaan worden door je coach beheerd.</p>
         <label>E-mailadres<input value={session.user.email || ''} disabled /></label>
         <button className="primary" onClick={saveProfile} disabled={profileBusy}>{profileBusy ? 'Opslaan…' : 'Opslaan'}</button>
         <button className="secondary" onClick={cancelProfileEdit}>Annuleren</button>
@@ -2590,7 +2584,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 3.0.0.6</h3>
+        <h3>Versie 3.0.0.7</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS agenda</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>
