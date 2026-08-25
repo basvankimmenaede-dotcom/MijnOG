@@ -8,7 +8,16 @@ Agenda refresh met kaartweergave en team-aware FOYS filtering.
 - Typefilter Alles / Wedstrijden / Trainingen.
 - FOYS-herkenning per team via `teams.foys_match_text`.
 - Clubbeheer > Teams kan de FOYS-herkenning aanpassen.
-- Over Mijn OG: versie 2.9.9.4.
+- Over Mijn OG: versie 2.9.9.5.
+
+## v2.9.9.5 - Activiteiten & complete invallerverzoeken
+
+- Coaches kunnen trainingen en wedstrijden aanmaken voor hun eigen coachteam(s).
+- Admins kunnen activiteiten voor alle actieve teams beheren.
+- De knop Training toevoegen heet nu Activiteit toevoegen, met keuze voor Training of Wedstrijd.
+- Invallerverzoeken bewaren en tonen datum, speeltijd, verzameltijd, locatie en adres.
+- De ontvangende coach krijgt bij ieder nieuw invallerverzoek automatisch een pushmelding wanneer push op het apparaat actief is.
+- Voer `supabase_v2995_activities_requests.sql` uit voordat deze versie wordt gebruikt.
 
 ## v2.9.9.4 - Spelersprofiel via Team stats
 
