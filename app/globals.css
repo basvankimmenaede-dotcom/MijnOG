@@ -2604,3 +2604,132 @@ button.swing-primary { width: 100%; margin-top: 12px; border: 0; background: var
 
 /* Clubbeheer 2.0 */
 .member-role-controls{display:grid;gap:6px;min-width:170px}.member-role-controls select{width:100%;min-height:38px}.club-admin-modal .admin-menu-list{gap:8px}@media(max-width:640px){.member-row{align-items:flex-start}.member-role-controls{width:100%;min-width:0;grid-column:2/-1}.member-role-controls select{font-size:16px}}
+
+/* v3.1.1 - Clubbeheer uitlijning */
+.club-admin-modal .team-admin-row{
+  display:grid;
+  grid-template-columns:minmax(0,1fr);
+  gap:14px;
+  align-items:start;
+  padding:16px;
+}
+.club-admin-modal .team-admin-row > div:first-child{
+  display:grid;
+  gap:4px;
+}
+.club-admin-modal .team-admin-row .admin-row-actions{
+  width:100%;
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:8px;
+}
+.club-admin-modal .team-admin-row .admin-row-actions .mini-action{
+  width:100%;
+  min-height:40px;
+  border-radius:12px;
+  padding:8px 10px;
+  text-align:center;
+}
+.club-admin-modal .team-members-admin .team-member-summary{
+  margin:14px 0 14px;
+}
+.club-admin-modal .team-members-admin .player-add-toolbar{
+  margin:0 0 18px;
+}
+.club-admin-modal .team-members-admin .member-list{
+  display:grid;
+}
+.club-admin-modal .team-members-admin .member-row{
+  grid-template-columns:46px minmax(0,1fr) minmax(150px,190px) 44px;
+  gap:12px;
+  padding:14px 14px;
+  align-items:center;
+}
+.club-admin-modal .team-members-admin .member-row > .member-avatar{
+  align-self:center;
+}
+.club-admin-modal .team-members-admin .member-row > .member-copy{
+  min-width:0;
+}
+.club-admin-modal .team-members-admin .member-role-controls{
+  min-width:0;
+  width:100%;
+  display:grid;
+  gap:7px;
+}
+.club-admin-modal .team-members-admin .member-role-controls select{
+  width:100%;
+  min-width:0;
+  min-height:40px;
+  border-radius:12px;
+}
+.club-admin-modal .team-members-admin .remove-member{
+  align-self:center;
+  justify-self:end;
+  width:40px;
+  height:40px;
+}
+
+@media(max-width:640px){
+  .club-admin-modal .team-admin-row .admin-row-actions{
+    grid-template-columns:1fr 1fr;
+  }
+  .club-admin-modal .team-admin-row .admin-row-actions .mini-action:first-child{
+    grid-column:1 / -1;
+  }
+  .club-admin-modal .team-members-admin .member-row{
+    grid-template-columns:44px minmax(0,1fr) 42px!important;
+    grid-template-rows:auto auto;
+    gap:9px 10px!important;
+    padding:14px 12px!important;
+    align-items:start!important;
+  }
+  .club-admin-modal .team-members-admin .member-row > .member-avatar{
+    grid-column:1;
+    grid-row:1 / span 2;
+    margin-top:1px;
+  }
+  .club-admin-modal .team-members-admin .member-row > .member-copy{
+    grid-column:2;
+    grid-row:1;
+    padding-right:0;
+  }
+  .club-admin-modal .team-members-admin .member-role-controls{
+    grid-column:2;
+    grid-row:2;
+    width:100%;
+    min-width:0;
+  }
+  .club-admin-modal .team-members-admin .member-role-controls select{
+    width:100%!important;
+    max-width:none;
+    min-height:42px;
+    font-size:16px;
+  }
+  .club-admin-modal .team-members-admin .member-row > .remove-member{
+    grid-column:3;
+    grid-row:1;
+    align-self:start;
+    justify-self:end;
+    width:42px;
+    height:42px;
+  }
+}
+
+@media(max-width:390px){
+  .club-admin-modal .team-admin-row .admin-row-actions{
+    grid-template-columns:1fr;
+  }
+  .club-admin-modal .team-admin-row .admin-row-actions .mini-action:first-child{
+    grid-column:auto;
+  }
+}
+
+/* v3.1.3 - gedeelde personenzoeker */
+.person-search{position:relative;display:grid;grid-template-columns:34px minmax(0,1fr) auto;align-items:center;width:100%;min-height:50px;margin:12px 0 14px;border:1px solid #dedbd7;border-radius:14px;background:#fff;overflow:hidden}
+.person-search:focus-within{border-color:var(--orange,#ef7d00);box-shadow:0 0 0 3px rgba(239,125,0,.10)}
+.person-search-icon{display:grid;place-items:center;color:#777;font-size:22px;line-height:1}
+.person-search input{width:100%;min-width:0;height:48px;border:0!important;outline:0!important;box-shadow:none!important;background:transparent!important;padding:0 8px 0 0!important;font-size:16px!important}
+.person-search small{padding:0 12px 0 6px;color:#8a8783;font-size:10px;font-weight:700;white-space:nowrap}
+.lineup-picker>.person-search{margin:0 0 10px}
+@media(max-width:430px){.person-search{grid-template-columns:32px minmax(0,1fr)}.person-search small{grid-column:2;padding:0 8px 7px 0;margin-top:-7px;white-space:normal}.person-search input{height:44px}}

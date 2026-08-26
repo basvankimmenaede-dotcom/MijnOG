@@ -114,7 +114,7 @@ Voer de SQL uit die bij deze release in de ChatGPT-conversatie is meegeleverd vo
 - Analysehistorie per speelster en optionele exit velo.
 - Voer `supabase_v295_swing_analyzer.sql` uit in Supabase voordat de module wordt gebruikt.
 
-## v3.1.0 - Clubbeheer 2.0
+## v3.1.3 - Clubbeheer team aanpassen
 - Clubbeheer opnieuw geordend rond Ledenlijst, Teams, Rollen & rechten en Vrijwilligers.
 - Dubbele menu-ingangen voor Teamindeling en Lid uitnodigen verwijderd; teamtoewijzing loopt via Teams en nieuwe leden via Ledenlijst.
 - Teamleden krijgen naast speler/coaching/teamstaf een gedetailleerde teamfunctie, waaronder mental coach, fysio en teammanager.
