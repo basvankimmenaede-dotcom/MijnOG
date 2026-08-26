@@ -121,3 +121,7 @@ Voer de SQL uit die bij deze release in de ChatGPT-conversatie is meegeleverd vo
 - Functie en toekomstige apprechten zijn conceptueel gescheiden; dit bereidt vertrouwelijke begeleiding op de spelerskaart voor.
 - Gebruikersterm Medewerkers vervangen door Vrijwilligers waar het om activiteitplanning gaat.
 - Line-up PDF-knop heet nu PDF delen; Android/iOS openen de native deelkeuze zodat WhatsApp gekozen kan worden.
+
+
+## v3.1.7
+- Line-up: tijdelijke rugnummer-override per wedstrijd bij dubbele rugnummers. Het spelersprofiel blijft ongewijzigd.
