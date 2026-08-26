@@ -113,3 +113,11 @@ Voer de SQL uit die bij deze release in de ChatGPT-conversatie is meegeleverd vo
 - Coach-assisted beoordeling op 8 technische onderdelen met focuspunten en drills.
 - Analysehistorie per speelster en optionele exit velo.
 - Voer `supabase_v295_swing_analyzer.sql` uit in Supabase voordat de module wordt gebruikt.
+
+## v3.1.0 - Clubbeheer 2.0
+- Clubbeheer opnieuw geordend rond Ledenlijst, Teams, Rollen & rechten en Vrijwilligers.
+- Dubbele menu-ingangen voor Teamindeling en Lid uitnodigen verwijderd; teamtoewijzing loopt via Teams en nieuwe leden via Ledenlijst.
+- Teamleden krijgen naast speler/coaching/teamstaf een gedetailleerde teamfunctie, waaronder mental coach, fysio en teammanager.
+- Functie en toekomstige apprechten zijn conceptueel gescheiden; dit bereidt vertrouwelijke begeleiding op de spelerskaart voor.
+- Gebruikersterm Medewerkers vervangen door Vrijwilligers waar het om activiteitplanning gaat.
+- Line-up PDF-knop heet nu PDF delen; Android/iOS openen de native deelkeuze zodat WhatsApp gekozen kan worden.

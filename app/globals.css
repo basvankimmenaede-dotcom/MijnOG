@@ -2601,3 +2601,6 @@ button.swing-primary { width: 100%; margin-top: 12px; border: 0; background: var
 }
 
 /* v3.0.0.15 Extra invited players included in activity attendance rosters */
+
+/* Clubbeheer 2.0 */
+.member-role-controls{display:grid;gap:6px;min-width:170px}.member-role-controls select{width:100%;min-height:38px}.club-admin-modal .admin-menu-list{gap:8px}@media(max-width:640px){.member-row{align-items:flex-start}.member-role-controls{width:100%;min-width:0;grid-column:2/-1}.member-role-controls select{font-size:16px}}

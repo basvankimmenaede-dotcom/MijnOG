@@ -82,7 +82,7 @@ export default function HomePage() {
       supabase.from('events').select('*').order('start_at', { ascending: true }),
       supabase.from('attendance').select('*'),
       supabase.from('profiles').select('id, first_name, last_name, jersey_number, role, avatar_url, primary_position, secondary_positions, throws_hand, bats_side, is_placeholder'),
-      supabase.from('team_members').select('id,team_id,profile_id,member_role'),
+      supabase.from('team_members').select('id,team_id,profile_id,member_role,team_function'),
       supabase.from('event_teams').select('event_id,team_id,teams(id,name,sport)'),
       supabase.from('event_participants').select('event_id,profile_id'),
       supabase.from('club_locations').select('*').eq('is_active', true).order('name'),
@@ -838,7 +838,7 @@ function LineupMakerModal({ event, team, profiles = [], memberships = [], gameAt
   return <div className="modal-backdrop lineup-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}><section className="detail-modal lineup-modal" role="dialog" aria-modal="true"><header className="detail-modal-header lineup-header"><div><p className="eyebrow orange">STARTING LINE-UP</p><h2>{team.name}</h2><small>{event.title} · {formatShortDate(event.start)}</small></div><button className="sheet-icon-button" onClick={onClose}><Icon name="close"/></button></header><div className="lineup-nav-wrap"><div className="lineup-tabs"><button className={tab==='field'?'active':''} onClick={()=>setTab('field')}>Veld</button><button className={tab==='order'?'active':''} onClick={()=>setTab('order')}>Slagvolgorde</button><button className={tab==='wbsc'?'active':''} onClick={()=>setTab('wbsc')}>LINE UP</button></div></div><div className="detail-modal-body lineup-body">{busy?<p className="muted">Line-up laden…</p>:<>
     {tab==='field'&&<><div className="softball-field">{LINEUP_FIELD_POSITIONS.map(pos=>{const p=player(field[pos]);return <button key={pos} className={`field-position field-${pos.toLowerCase()} ${p?'filled':''}`} onClick={()=>setPicker({kind:'field',value:pos,target:pos})}><span>{pos}</span><strong>{p?teamDisplayName(p):'+'}</strong>{p?.jersey_number&&<small>#{p.jersey_number}</small>}</button>})}{(()=>{const p=player(special.DP);return <button className={`field-position field-dp ${p?'filled':''}`} onClick={()=>setPicker({kind:'dp',value:'DP',target:null})}><span>DP</span><strong>{p?teamDisplayName(p):'+'}</strong>{p?.jersey_number&&<small>#{p.jersey_number}</small>}</button>})()}</div><div className="dp-help"><strong>DP</strong><span>De DP staat alleen in de slagvolgorde. Kies daarna bij Slagvolgorde welke veldspeelster FLEX is en dus niet slaat.</span></div></>}
     {tab==='order'&&<><div className="lineup-order-head"><div><h3>Slagvolgorde</h3><p>Alle starters uit het veld en de DP worden automatisch meegenomen. Sleep aan ≡ om de volgorde te wijzigen.</p></div><button className="secondary orange-outline" onClick={autoFillOrder}>Opnieuw uit veld</button></div>{special.DP&&<div className={`flex-selector flex-selector-compact ${special.FLEX?'complete':''}`}><div className="flex-inline-label"><span className="flex-kicker">FLEX</span><strong>Slaat niet</strong></div><div className="flex-select-wrap"><select value={special.FLEX||''} onChange={e=>e.target.value?setFlex(e.target.value):clearFlex()} aria-label="Kies FLEX speelster"><option value="">Kies veldspeelster…</option>{selectableFlex.map(p=><option key={p.id} value={p.id}>{p.jersey_number?`#${p.jersey_number} · `:''}{personName(p)} · {playerPosition(p.id)}</option>)}</select>{special.FLEX&&<button type="button" className="flex-clear" onClick={clearFlex} aria-label="Wis FLEX">×</button>}</div><small className="flex-inline-help">Blijft in het veld en staat als nummer 10 op de line-up.</small></div>}<div className="batting-order-list">{order.map((id,index)=>{const p=player(id);return <div key={id||index} className={`batting-order-row ${dragIndex===index?'dragging':''}`} onDragOver={e=>e.preventDefault()} onDrop={()=>{moveOrder(dragIndex,index);setDragIndex(null)}} data-order-index={index}><button type="button" className="drag-handle" aria-label="Sleep slagpositie" draggable onDragStart={e=>{setDragIndex(index);e.dataTransfer.effectAllowed='move'}} onDragEnd={()=>setDragIndex(null)} onContextMenu={e=>e.preventDefault()} onTouchStart={e=>{touchDragIndex.current=index;e.currentTarget.focus({preventScroll:true})}} onTouchMove={e=>{e.preventDefault();const touch=e.touches[0];const el=document.elementFromPoint(touch.clientX,touch.clientY)?.closest('[data-order-index]');if(el){const to=Number(el.dataset.orderIndex);if(Number.isFinite(to)&&to!==touchDragIndex.current){moveOrder(touchDragIndex.current,to);touchDragIndex.current=to}}}} onTouchEnd={()=>{touchDragIndex.current=null}}>≡</button><div className="batting-player-button"><span className="batting-number">{index+1}</span><span><strong>{p?personName(p):'—'}</strong><small>{p?`${p.jersey_number?`#${p.jersey_number} · `:''}${playerPosition(id)}`:''}</small></span></div></div>})}</div>{special.DP&&special.FLEX&&flexPlayer&&<div className="flex-lineup-row"><span className="batting-number">10</span><span><strong>{personName(flexPlayer)}</strong><small>{flexPlayer.jersey_number?`#${flexPlayer.jersey_number} · `:''}{playerPosition(flexPlayer.id)} · FLEX · slaat niet</small></span></div>}<div className="lineup-subs"><div className="lineup-subs-head"><div><h3>Wissels</h3><p>Iedere aanwezige speelster die geen starter is, staat hier automatisch.</p></div>{removedBench.length>0&&<button className="secondary orange-outline" onClick={()=>setPicker({kind:'sub',value:null,target:null})}>+ Terugzetten</button>}</div>{substitutes.length===0?<p className="muted">Geen wissels in deze line-up.</p>:<div className="lineup-sub-list">{substitutes.map(id=>{const p=player(id);return p?<div key={id}><span className="lineup-player-number">{p.jersey_number||'—'}</span><span><strong>{personName(p)}</strong><small>{p.isLineupGuest?'Invaller · ':''}{normalizePlayerPositions(p).join(' / ')||'Geen positie'}</small></span><button onClick={()=>removeSub(id)} aria-label="Verwijder wissel">×</button></div>:null})}</div>}</div></>}
-    {tab==='wbsc'&&<div className="lineup-final">{special.DP&&!special.FLEX&&<div className="lineup-warning">Kies bij <strong>Slagvolgorde</strong> eerst welke veldspeelster FLEX is. Daarna is de officiële line-up compleet.</div>}<div className="wbsc-preview"><div className="wbsc-preview-title"><span>OG</span><div><strong>LINE UP</strong><small>{event.title}</small></div></div><div className="wbsc-grid"><div className="wbsc-row wbsc-head"><span>#</span><span>Naam</span><span>Pos.</span></div>{reconcileOrder(order,field,special).slice(0,9).map((id,index)=>{const p=player(id);return <div className="wbsc-row" key={id||index}><span>{index+1}</span><span>{p?`${p.jersey_number?`#${p.jersey_number} `:''}${personName(p)}`:'—'}</span><span>{id?playerPosition(id):''}</span></div>})}{special.DP&&special.FLEX&&flexPlayer&&<div className="wbsc-row flex-row"><span>10</span><span>{`${flexPlayer.jersey_number?`#${flexPlayer.jersey_number} `:''}${personName(flexPlayer)}`}</span><span>FLEX · {playerPosition(flexPlayer.id)}</span></div>}{substitutes.length>0&&<><div className="wbsc-section-label">Wissels</div>{substitutes.map((id,index)=>{const p=player(id);return p?<div className="wbsc-row substitute-row" key={id}><span>W{index+1}</span><span>{`${p.jersey_number?`#${p.jersey_number} `:''}${personName(p)}`}</span><span>{normalizePlayerPositions(p).join('/')}</span></div>:null})}</>}</div></div><div className="lineup-export-actions"><button className="secondary orange-outline" onClick={exportPdf}>Exporteer PDF</button><button className="whatsapp-share-button compact" onClick={sharePdf}><span className="whatsapp-mark">W</span><span><strong>Deel via WhatsApp</strong><small>Deel de PDF</small></span></button></div></div>}
+    {tab==='wbsc'&&<div className="lineup-final">{special.DP&&!special.FLEX&&<div className="lineup-warning">Kies bij <strong>Slagvolgorde</strong> eerst welke veldspeelster FLEX is. Daarna is de officiële line-up compleet.</div>}<div className="wbsc-preview"><div className="wbsc-preview-title"><span>OG</span><div><strong>LINE UP</strong><small>{event.title}</small></div></div><div className="wbsc-grid"><div className="wbsc-row wbsc-head"><span>#</span><span>Naam</span><span>Pos.</span></div>{reconcileOrder(order,field,special).slice(0,9).map((id,index)=>{const p=player(id);return <div className="wbsc-row" key={id||index}><span>{index+1}</span><span>{p?`${p.jersey_number?`#${p.jersey_number} `:''}${personName(p)}`:'—'}</span><span>{id?playerPosition(id):''}</span></div>})}{special.DP&&special.FLEX&&flexPlayer&&<div className="wbsc-row flex-row"><span>10</span><span>{`${flexPlayer.jersey_number?`#${flexPlayer.jersey_number} `:''}${personName(flexPlayer)}`}</span><span>FLEX · {playerPosition(flexPlayer.id)}</span></div>}{substitutes.length>0&&<><div className="wbsc-section-label">Wissels</div>{substitutes.map((id,index)=>{const p=player(id);return p?<div className="wbsc-row substitute-row" key={id}><span>W{index+1}</span><span>{`${p.jersey_number?`#${p.jersey_number} `:''}${personName(p)}`}</span><span>{normalizePlayerPositions(p).join('/')}</span></div>:null})}</>}</div></div><div className="lineup-export-actions"><button className="secondary orange-outline" onClick={exportPdf}>Exporteer PDF</button><button className="whatsapp-share-button compact" onClick={sharePdf}><span className="whatsapp-mark">W</span><span><strong>PDF delen</strong><small>Kies WhatsApp in het deelmenu</small></span></button></div></div>}
     {feedback&&<div className="push-feedback">{feedback}</div>}<button className="primary lineup-save" disabled={saving} onClick={save}>{saving?'Opslaan…':'Starting line-up opslaan'}</button></>}</div></section>
     {picker&&<div className="lineup-picker-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setPicker(null)}}><section className="lineup-picker"><header><div><p className="eyebrow orange">{picker.kind==='sub'?'WISSELS':picker.kind==='dp'?'DP':`POSITIE ${picker.value}`}</p><h3>Kies een speelster</h3></div><button className="sheet-icon-button" onClick={()=>setPicker(null)}><Icon name="close"/></button></header><div className="lineup-player-list">{sortedPlayers(picker.target).filter(person=>picker.kind!=='sub'||removedBench.includes(person.id)).map(person=>{const status=attendanceMap[person.id];const pos=normalizePlayerPositions(person);const isAssigned=assignedIds.has(person.id)&&currentSelection!==person.id;const unavailable=status==='absent'||status==='injured';return <button key={person.id} className={`${isAssigned?'already-assigned':''} ${unavailable?'unavailable':''}`} onClick={()=>setSelection(person)}><span className="lineup-player-number">{person.jersey_number||'—'}</span><span><strong>{personName(person)}</strong><small>{person.isLineupGuest?`Invaller · `:''}{pos.join(' / ')||'Geen positie'} · {attendanceStatusLabel(status)}</small></span>{isAssigned&&<em>Opgesteld</em>}</button>})}</div>{currentSelection&&<button className="lineup-remove" onClick={clearSelection}>Verwijder uit deze plek</button>}</section></div>}
   </div>
@@ -1080,7 +1080,7 @@ function PlayerInvitationCards({ session, requests = [], candidates = [], teams 
 }
 
 function staffRoleLabel(role) {
-  return ({trainer:'Trainer',pitching_trainer:'Pitchingtrainer',catching_trainer:'Catchingtrainer',scorer:'Scoorder',team_manager:'Teammanager',physio:'Fysio',begeleider:'Begeleider',other:'Overig'})[role] || role || 'Medewerker'
+  return ({trainer:'Coach',head_coach:'Hoofdcoach',assistant_coach:'Assistent-coach',pitching_trainer:'Pitching coach',catching_trainer:'Catching coach',scorer:'Scorer',team_manager:'Teammanager',physio:'Fysiotherapeut',mental_coach:'Mental coach',strength_conditioning:'Strength & Conditioning',video_performance:'Video / Performance',volunteer:'Vrijwilliger',begeleider:'Begeleider',other:'Overig'})[role] || role || 'Vrijwilliger'
 }
 
 function StaffInvitations({ session, events = [], onChanged }) {
@@ -1089,17 +1089,17 @@ function StaffInvitations({ session, events = [], onChanged }) {
   async function respond(id,status){const {error}=await supabase.rpc('respond_event_staff_assignment',{assignment_id:id,new_status:status});if(!error){setRows(current=>current.map(row=>row.id===id?{...row,status}:row));onChanged?.()}}
   const open=rows.filter(row=>['invited','available','confirmed'].includes(row.status))
   if(!open.length)return null
-  return <section className="player-invite-stack staff-invite-stack"><p className="eyebrow orange">MEDEWERKERSUITNODIGINGEN</p>{open.map(row=>{const event=events.find(item=>Number(item.id)===Number(row.event_id));return <article className="player-invite-card" key={row.id}><div className="player-invite-copy"><span>{staffRoleLabel(row.task_role)}</span><h3>{event?.title||'Clubactiviteit'}</h3>{event&&<small>{formatLongDate(event.start)} · {formatTimeRange(event.start,event.end)}</small>}</div>{row.status==='invited'?<div className="player-invite-actions"><button className="primary" onClick={()=>respond(row.id,'available')}>Ik kan</button><button className="secondary" onClick={()=>respond(row.id,'unavailable')}>Ik kan niet</button></div>:<div className="invite-response-state">{row.status==='confirmed'?'Je bent bevestigd.':'Beschikbaar doorgegeven; de coach bevestigt.'}</div>}</article>})}</section>
+  return <section className="player-invite-stack staff-invite-stack"><p className="eyebrow orange">VRIJWILLIGERSUITNODIGINGEN</p>{open.map(row=>{const event=events.find(item=>Number(item.id)===Number(row.event_id));return <article className="player-invite-card" key={row.id}><div className="player-invite-copy"><span>{staffRoleLabel(row.task_role)}</span><h3>{event?.title||'Clubactiviteit'}</h3>{event&&<small>{formatLongDate(event.start)} · {formatTimeRange(event.start,event.end)}</small>}</div>{row.status==='invited'?<div className="player-invite-actions"><button className="primary" onClick={()=>respond(row.id,'available')}>Ik kan</button><button className="secondary" onClick={()=>respond(row.id,'unavailable')}>Ik kan niet</button></div>:<div className="invite-response-state">{row.status==='confirmed'?'Je bent bevestigd.':'Beschikbaar doorgegeven; de coach bevestigt.'}</div>}</article>})}</section>
 }
 
 function StaffPlanner({ session, events = [], onClose, onChanged }) {
   const [staff,setStaff]=useState([]), [rows,setRows]=useState([]), [eventId,setEventId]=useState(''), [busy,setBusy]=useState(false), [feedback,setFeedback]=useState('')
   useEffect(()=>{Promise.all([supabase.from('club_staff').select('id,profile_id,staff_role,label,profiles(id,first_name,last_name)').eq('is_active',true),supabase.from('event_staff_assignments').select('*')]).then(([a,b])=>{setStaff(a.data||[]);setRows(b.data||[])})},[])
   const selected=rows.filter(row=>String(row.event_id)===String(eventId))
-  async function toggle(person){if(!eventId)return setFeedback('Kies eerst een activiteit.');setBusy(true);const existing=selected.find(row=>row.club_staff_id===person.id);const result=existing?await supabase.from('event_staff_assignments').delete().eq('id',existing.id):await supabase.from('event_staff_assignments').insert({event_id:Number(eventId),club_staff_id:person.id,task_role:person.staff_role,status:'invited',invited_by:session.user.id}).select('*').single();setBusy(false);if(result.error)return setFeedback(result.error.message);setRows(current=>existing?current.filter(row=>row.id!==existing.id):[...current,result.data]);if(!existing){try{await fetch('/api/push/staff-assignment',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${session.access_token}`},body:JSON.stringify({assignmentId:result.data.id})})}catch{}}setFeedback(existing?'Medewerker verwijderd.':'Uitnodiging toegevoegd en push verstuurd.');onChanged?.()}
-  async function confirm(row){const {data,error}=await supabase.rpc('confirm_event_staff_assignment',{assignment_id:row.id});if(error)return setFeedback(error.message);setRows(current=>current.map(item=>item.id===row.id?data:item));setFeedback('Medewerker bevestigd.');onChanged?.()}
+  async function toggle(person){if(!eventId)return setFeedback('Kies eerst een activiteit.');setBusy(true);const existing=selected.find(row=>row.club_staff_id===person.id);const result=existing?await supabase.from('event_staff_assignments').delete().eq('id',existing.id):await supabase.from('event_staff_assignments').insert({event_id:Number(eventId),club_staff_id:person.id,task_role:person.staff_role,status:'invited',invited_by:session.user.id}).select('*').single();setBusy(false);if(result.error)return setFeedback(result.error.message);setRows(current=>existing?current.filter(row=>row.id!==existing.id):[...current,result.data]);if(!existing){try{await fetch('/api/push/staff-assignment',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${session.access_token}`},body:JSON.stringify({assignmentId:result.data.id})})}catch{}}setFeedback(existing?'Vrijwilliger verwijderd.':'Uitnodiging toegevoegd en push verstuurd.');onChanged?.()}
+  async function confirm(row){const {data,error}=await supabase.rpc('confirm_event_staff_assignment',{assignment_id:row.id});if(error)return setFeedback(error.message);setRows(current=>current.map(item=>item.id===row.id?data:item));setFeedback('Vrijwilliger bevestigd.');onChanged?.()}
   const chosenEvent=events.find(event=>String(event.id)===String(eventId));const hasScorer=selected.some(row=>row.task_role==='scorer');const hasTrainer=selected.some(row=>['trainer','pitching_trainer','catching_trainer'].includes(row.task_role))
-  return <SettingsModal title="Medewerkers plannen" onClose={onClose}><div className="form-stack"><label>Activiteit<select value={eventId} onChange={e=>setEventId(e.target.value)}><option value="">Kies training of wedstrijd</option>{events.map(event=><option key={event.id} value={event.id}>{formatShortDate(event.start)} · {event.title}</option>)}</select></label>{chosenEvent&&<div className="staff-role-warning">{chosenEvent.type==='game'&&!hasScorer?'Nog geen scoorder gekoppeld.':chosenEvent.type==='training'&&!hasTrainer?'Nog geen trainer gekoppeld.':'Benodigde basisrol is bezet.'}</div>}<div className="participant-check-list">{staff.map(person=>{const assignment=selected.find(row=>row.club_staff_id===person.id);return <article className="team-check" key={person.id}><label><input type="checkbox" checked={Boolean(assignment)} disabled={busy} onChange={()=>toggle(person)}/><span><strong>{personName(person.profiles)}</strong><small>{staffRoleLabel(person.staff_role)}{person.label?` · ${person.label}`:''}</small></span></label>{assignment?.status==='available'&&<button type="button" className="mini-action" onClick={()=>confirm(assignment)}>Bevestigen</button>}{assignment?.status==='confirmed'&&<span className="active-badge">Bevestigd</span>}</article>})}</div>{!staff.length&&<div className="admin-empty">Beheerder moet eerst clubmedewerkers toevoegen.</div>}{feedback&&<div className="push-feedback">{feedback}</div>}</div></SettingsModal>
+  return <SettingsModal title="Vrijwilligers plannen" onClose={onClose}><div className="form-stack"><label>Activiteit<select value={eventId} onChange={e=>setEventId(e.target.value)}><option value="">Kies training of wedstrijd</option>{events.map(event=><option key={event.id} value={event.id}>{formatShortDate(event.start)} · {event.title}</option>)}</select></label>{chosenEvent&&<div className="staff-role-warning">{chosenEvent.type==='game'&&!hasScorer?'Nog geen scoorder gekoppeld.':chosenEvent.type==='training'&&!hasTrainer?'Nog geen trainer gekoppeld.':'Benodigde basisrol is bezet.'}</div>}<div className="participant-check-list">{staff.map(person=>{const assignment=selected.find(row=>row.club_staff_id===person.id);return <article className="team-check" key={person.id}><label><input type="checkbox" checked={Boolean(assignment)} disabled={busy} onChange={()=>toggle(person)}/><span><strong>{personName(person.profiles)}</strong><small>{staffRoleLabel(person.staff_role)}{person.label?` · ${person.label}`:''}</small></span></label>{assignment?.status==='available'&&<button type="button" className="mini-action" onClick={()=>confirm(assignment)}>Bevestigen</button>}{assignment?.status==='confirmed'&&<span className="active-badge">Bevestigd</span>}</article>})}</div>{!staff.length&&<div className="admin-empty">Beheerder moet eerst vrijwilligers toevoegen.</div>}{feedback&&<div className="push-feedback">{feedback}</div>}</div></SettingsModal>
 }
 
 function CoachDashboard({ session, profile, teams, gameStats = [], measurements = [], pitchingStats = [], playerCards = [], playerCardMetrics = [], trainingEvents = [], calendarEvents = [], attendance = [], gameAttendance = [], profiles = [], memberships = [], messages = [], playerRequests = [], playerCandidates = [], pushSubscriptions = [], ownAttendance = {}, onAttendance, attendanceBusy = false, clubLocations = [], transportEvents = [], transportResponses = [], onRefresh, onMessage, swingAccess }) {
@@ -1192,7 +1192,7 @@ function CoachDashboard({ session, profile, teams, gameStats = [], measurements 
       <button onClick={()=>{setEditingCoachEvent(null);setTrainingEditorOpen(true)}}><span><Icon name="calendar"/></span><strong>Activiteit toevoegen</strong><small>Training of wedstrijd</small></button>
       <button onClick={()=>setMessageOpen(true)}><span><Icon name="bell"/></span><strong>Teambericht</strong><small>Ook als pushmelding</small></button>
       <button onClick={()=>setRequestOpen(true)}><span><Icon name="people"/></span><strong>Invaller aanvragen</strong><small>Verzoek aan coach van ander team</small></button>
-      <button onClick={()=>setStaffPlannerOpen(true)}><span><Icon name="person"/></span><strong>Medewerkers plannen</strong><small>Trainer, scoorder of begeleiding</small></button>
+      <button onClick={()=>setStaffPlannerOpen(true)}><span><Icon name="person"/></span><strong>Vrijwilligers plannen</strong><small>Trainer, scoorder of begeleiding</small></button>
       <button onClick={()=>setCoachStatsOpen(true)}><span><Icon name="stats"/></span><strong>Team stats</strong><small>Team & persoonlijke cijfers</small></button>
       {(profile?.role === 'admin' || swingAccess === 'coach' || swingAccess === 'admin') && <button className="swing-launch" onClick={()=>setSwingAnalyzerOpen(true)}><span><Icon name="swing"/></span><strong>Swing Analyzer</strong><small>Video, coachanalyse & drills</small></button>}
     </div>
@@ -2095,7 +2095,7 @@ function TeamModal({ team, currentProfile, currentMembership, members, busy, onT
       </header>
       <div className="team-modal-body">
         <div className="team-modal-title"><p className="eyebrow orange">{capitalize(team.sport)}</p><h2>{team.name}</h2></div>
-        <TeamPeopleSection title="Staff" rows={staff} admin={currentProfile?.role==='admin'} busy={busy} onAvatar={onAvatar} />
+        <TeamPeopleSection title="Teamstaf" rows={staff} admin={currentProfile?.role==='admin'} busy={busy} onAvatar={onAvatar} />
         <TeamPeopleSection title="Spelers" rows={players} admin={currentProfile?.role==='admin'} busy={busy} onAvatar={onAvatar} onPerson={onPerson} canOpenPerson={person => currentProfile?.role==='admin' || currentMembership?.member_role==='coach' || currentProfile?.id===person?.id} />
       </div>
     </section>
@@ -2172,7 +2172,7 @@ function AdminPanel({ session, onMessage, onChanged }) {
       supabase.from('seasons').select('*').order('starts_on', { ascending: false }),
       supabase.from('teams').select('id,name,sport,is_active,season_id,foys_match_text,seasons(name,is_active)').order('name'),
       supabase.from('profiles').select('id,first_name,last_name,username,jersey_number,role,avatar_url,primary_position,secondary_positions,throws_hand,bats_side,is_placeholder').order('first_name'),
-      supabase.from('team_members').select('id,team_id,profile_id,member_role'),
+      supabase.from('team_members').select('id,team_id,profile_id,member_role,team_function'),
       supabase.from('club_locations').select('*').order('name'),
       supabase.from('push_subscriptions').select('profile_id,enabled').eq('enabled', true),
       supabase.from('club_staff').select('*').order('staff_role')
@@ -2190,7 +2190,7 @@ function AdminPanel({ session, onMessage, onChanged }) {
     else setTeams(teamResult.data ?? [])
     if (profileResult.error) onMessage(`Leden laden mislukt: ${profileResult.error.message}`)
     else setProfiles(profileResult.data ?? [])
-    if (memberResult.error) onMessage(`Teamindeling laden mislukt: ${memberResult.error.message}`)
+    if (memberResult.error) onMessage(`Teamtoewijzingen laden mislukt: ${memberResult.error.message}`)
     else setMemberships(memberResult.data ?? [])
     if (locationResult.error) onMessage(`Locaties laden mislukt: ${locationResult.error.message}`)
     else setLocations(locationResult.data ?? [])
@@ -2279,8 +2279,8 @@ function AdminPanel({ session, onMessage, onChanged }) {
   async function addClubStaff(e) {
     e.preventDefault(); if(!staffForm.profile_id)return
     setBusy(true); const {error}=await supabase.from('club_staff').upsert({profile_id:staffForm.profile_id,staff_role:staffForm.staff_role,label:staffForm.label.trim()||null,is_active:true,created_by:session.user.id},{onConflict:'profile_id,staff_role'});setBusy(false)
-    if(error)return onMessage(`Medewerker toevoegen mislukt: ${error.message}`)
-    setStaffForm({profile_id:'',staff_role:'trainer',label:''});onMessage('Clubmedewerker toegevoegd ✓');await loadAdminData()
+    if(error)return onMessage(`Vrijwilliger toevoegen mislukt: ${error.message}`)
+    setStaffForm({profile_id:'',staff_role:'trainer',label:''});onMessage('Vrijwilliger toegevoegd ✓');await loadAdminData()
   }
   async function saveUsername(e){e.preventDefault();if(!usernamePerson)return;setBusy(true);setUsernameFeedback('');const {error}=await supabase.rpc('set_profile_username',{target_profile_id:usernamePerson.id,new_username:usernameValue.trim()||null});setBusy(false);if(error)return setUsernameFeedback(error.message);setUsernameFeedback('Gebruikersnaam opgeslagen ✓');await loadAdminData();setTimeout(()=>{setUsernamePerson(null);setUsernameFeedback('')},500)}
   async function toggleClubStaff(row){setBusy(true);const {error}=await supabase.from('club_staff').update({is_active:!row.is_active}).eq('id',row.id);setBusy(false);if(error)onMessage(error.message);else await loadAdminData()}
@@ -2371,12 +2371,12 @@ function AdminPanel({ session, onMessage, onChanged }) {
     if (!selectedTeamId) return
     setBusy(true); onMessage('')
     const { error } = await supabase.from('team_members').insert({
-      team_id: Number(selectedTeamId), profile_id: profileId, member_role: role
+      team_id: Number(selectedTeamId), profile_id: profileId, member_role: role, team_function: role === 'coach' ? 'head_coach' : role === 'staff' ? 'team_manager' : null
     })
     setBusy(false)
     if (error) onMessage(`Lid toevoegen mislukt: ${error.message}`)
     else {
-      onMessage(`Lid toegevoegd als ${role === 'coach' ? 'coach' : 'speler'} ✓`)
+      onMessage(`Lid toegevoegd als ${role === 'coach' ? 'coach' : role === 'staff' ? 'teamstaf' : 'speler'} ✓`)
       await loadAdminData()
       onChanged?.()
     }
@@ -2384,13 +2384,25 @@ function AdminPanel({ session, onMessage, onChanged }) {
 
   async function changeMemberRole(membershipId, role) {
     setBusy(true); onMessage('')
-    const { error } = await supabase.from('team_members').update({ member_role: role }).eq('id', membershipId)
+    const patch = { member_role: role }
+    if (role === 'player') patch.team_function = null
+    if (role === 'coach') patch.team_function = 'head_coach'
+    if (role === 'staff') patch.team_function = 'team_manager'
+    const { error } = await supabase.from('team_members').update(patch).eq('id', membershipId)
     setBusy(false)
     if (error) onMessage(`Teamrol wijzigen mislukt: ${error.message}`)
     else {
       await loadAdminData()
       onChanged?.()
     }
+  }
+
+  async function changeTeamFunction(membershipId, teamFunction) {
+    setBusy(true); onMessage('')
+    const { error } = await supabase.from('team_members').update({ team_function: teamFunction || null }).eq('id', membershipId)
+    setBusy(false)
+    if (error) onMessage(`Functie wijzigen mislukt: ${error.message}`)
+    else { await loadAdminData(); onChanged?.() }
   }
 
   async function removeMember(membership) {
@@ -2530,7 +2542,7 @@ function AdminPanel({ session, onMessage, onChanged }) {
     <>
       <button className="admin-launcher" onClick={() => setOpen(true)}>
         <span className="settings-icon"><Icon name="settings" /></span>
-        <span className="settings-copy"><strong>Clubbeheer</strong><small>Seizoenen, teams, teamindeling en locaties</small></span>
+        <span className="settings-copy"><strong>Clubbeheer</strong><small>Leden, teams, rollen, vrijwilligers en locaties</small></span>
         <span className="admin-badge">Admin</span>
         <Icon name="chevron" />
       </button>
@@ -2540,7 +2552,7 @@ function AdminPanel({ session, onMessage, onChanged }) {
           <section className="club-admin-modal" role="dialog" aria-modal="true" aria-label="Clubbeheer">
             <header className="sheet-header">
               {view !== 'menu' ? <button className="sheet-icon-button" onClick={() => setView('menu')} aria-label="Terug"><Icon name="back" /></button> : <span className="sheet-icon-spacer" />}
-              <div><p className="eyebrow orange">BEHEERDER</p><h2>{view === 'menu' ? 'Clubbeheer' : view === 'seasons' ? 'Seizoenen' : view === 'teams' ? 'Teams' : view === 'members' ? 'Teamindeling' : view === 'directory' ? 'Ledenlijst' : view === 'locations' ? 'Locaties' : view === 'staff' ? 'Clubmedewerkers' : 'Lid uitnodigen'}</h2></div>
+              <div><p className="eyebrow orange">BEHEERDER</p><h2>{view === 'menu' ? 'Clubbeheer' : view === 'seasons' ? 'Seizoenen' : view === 'teams' ? 'Teams' : view === 'members' ? 'Team toewijzen' : view === 'directory' ? 'Ledenlijst' : view === 'locations' ? 'Locaties' : view === 'staff' ? 'Vrijwilligers' : view === 'roles' ? 'Rollen & rechten' : 'Lid uitnodigen'}</h2></div>
               <button className="sheet-icon-button" onClick={closeAdmin} aria-label="Sluiten"><Icon name="close" /></button>
             </header>
 
@@ -2548,13 +2560,12 @@ function AdminPanel({ session, onMessage, onChanged }) {
               <div className="sheet-body">
                 {view === 'menu' && (
                   <div className="admin-menu-list">
+                    <AdminMenuItem icon="person" title="Ledenlijst" subtitle="Iedereen één keer aanmaken en beheren" onClick={() => goTo('directory')} />
+                    <AdminMenuItem icon="team" title="Teams" subtitle={`${teams.filter(t => t.is_active).length} actieve teams · spelers en staf toewijzen`} onClick={() => goTo('teams')} />
+                    <AdminMenuItem icon="people" title="Rollen & rechten" subtitle="Coaching, teammanager, fysio, mental coach en meer" onClick={() => goTo('roles')} />
+                    <AdminMenuItem icon="person" title="Vrijwilligers" subtitle="Vrijwilligers voor trainingen en wedstrijden" onClick={() => goTo('staff')} />
                     <AdminMenuItem icon="calendar" title="Seizoenen" subtitle={`${seasons.length} seizoen${seasons.length === 1 ? '' : 'en'} · ${seasons.find(s => s.is_active)?.name || 'geen actief seizoen'}`} onClick={() => goTo('seasons')} />
-                    <AdminMenuItem icon="team" title="Teams" subtitle={`${teams.filter(t => t.is_active).length} actieve teams`} onClick={() => goTo('teams')} />
-                    <AdminMenuItem icon="people" title="Teamindeling" subtitle="Spelers en coaches koppelen" onClick={() => goTo('members')} />
-                    <AdminMenuItem icon="person" title="Ledenlijst" subtitle="Gegevens, posities en resetmails" onClick={() => goTo('directory')} />
-                    <AdminMenuItem icon="person" title="Clubmedewerkers" subtitle="Trainers, scoorders en begeleiding" onClick={() => goTo('staff')} />
                     <AdminMenuItem icon="pin" title="Locaties" subtitle="Clubadressen, Maps en reistijd" onClick={() => goTo('locations')} />
-                    <AdminMenuItem icon="person" title="Lid uitnodigen" subtitle="Nieuw Mijn OG-account per e-mail" onClick={() => goTo('invite')} />
                   </div>
                 )}
 
@@ -2592,7 +2603,7 @@ function AdminPanel({ session, onMessage, onChanged }) {
                       <button className="primary" disabled={busy}>{busy ? 'Opslaan…' : editingTeamId ? 'Team opslaan' : 'Team toevoegen'}</button>
                     </form>}
                     <div className="admin-list">
-                      {seasonTeams.map(team => <article className={`admin-row team-admin-row${team.is_active ? '' : ' inactive'}`} key={team.id}><div><strong>{team.name}</strong><small>{capitalize(team.sport)} · {team.is_active ? 'Actief' : 'Gearchiveerd'}</small><small>FOYS: {team.foys_match_text || 'nog niet ingesteld'}</small></div><div className="admin-row-actions"><button className="mini-action" disabled={busy} onClick={() => editTeam(team)}>Aanpassen</button><button className="mini-action" disabled={busy} onClick={() => toggleTeam(team)}>{team.is_active ? 'Archiveren' : 'Activeren'}</button></div></article>)}
+                      {seasonTeams.map(team => <article className={`admin-row team-admin-row${team.is_active ? '' : ' inactive'}`} key={team.id}><div><strong>{team.name}</strong><small>{capitalize(team.sport)} · {team.is_active ? 'Actief' : 'Gearchiveerd'}</small><small>FOYS: {team.foys_match_text || 'nog niet ingesteld'}</small></div><div className="admin-row-actions"><button className="mini-action" disabled={busy} onClick={() => { setSelectedTeamId(String(team.id)); goTo('members') }}>Leden & staf</button><button className="mini-action" disabled={busy} onClick={() => editTeam(team)}>Aanpassen</button><button className="mini-action" disabled={busy} onClick={() => toggleTeam(team)}>{team.is_active ? 'Archiveren' : 'Activeren'}</button></div></article>)}
                       {!seasonTeams.length && <div className="admin-empty">Geen teams in dit seizoen.</div>}
                     </div>
                   </div>
@@ -2602,10 +2613,24 @@ function AdminPanel({ session, onMessage, onChanged }) {
                   <div className="admin-block">
                     <form className="sheet-form form-stack" onSubmit={addClubStaff}>
                       <label>Persoon<select value={staffForm.profile_id} onChange={e=>setStaffForm({...staffForm,profile_id:e.target.value})} required><option value="">Kies clublid</option>{profiles.map(person=><option key={person.id} value={person.id}>{personName(person)}</option>)}</select></label>
-                      <div className="admin-form-grid"><label>Clubrol<select value={staffForm.staff_role} onChange={e=>setStaffForm({...staffForm,staff_role:e.target.value})}>{['trainer','pitching_trainer','catching_trainer','scorer','team_manager','physio','begeleider','other'].map(role=><option key={role} value={role}>{staffRoleLabel(role)}</option>)}</select></label><label>Toelichting<input value={staffForm.label} onChange={e=>setStaffForm({...staffForm,label:e.target.value})} placeholder="Bijv. jeugd of senioren"/></label></div>
-                      <button className="primary" disabled={busy}>Medewerker toevoegen</button>
+                      <div className="admin-form-grid"><label>Clubrol<select value={staffForm.staff_role} onChange={e=>setStaffForm({...staffForm,staff_role:e.target.value})}>{['head_coach','assistant_coach','pitching_trainer','catching_trainer','team_manager','physio','mental_coach','strength_conditioning','video_performance','scorer','volunteer','other'].map(role=><option key={role} value={role}>{staffRoleLabel(role)}</option>)}</select></label><label>Toelichting<input value={staffForm.label} onChange={e=>setStaffForm({...staffForm,label:e.target.value})} placeholder="Bijv. jeugd of senioren"/></label></div>
+                      <button className="primary" disabled={busy}>Vrijwilliger toevoegen</button>
                     </form>
-                    <div className="admin-list">{clubStaffRows.map(row=>{const person=profiles.find(p=>p.id===row.profile_id);return <article className={`admin-row${row.is_active?'':' inactive'}`} key={row.id}><div><strong>{personName(person)}</strong><small>{staffRoleLabel(row.staff_role)}{row.label?` · ${row.label}`:''}</small></div><button className="mini-action" onClick={()=>toggleClubStaff(row)}>{row.is_active?'Archiveren':'Activeren'}</button></article>})}{!clubStaffRows.length&&<div className="admin-empty">Nog geen clubmedewerkers.</div>}</div>
+                    <div className="admin-list">{clubStaffRows.map(row=>{const person=profiles.find(p=>p.id===row.profile_id);return <article className={`admin-row${row.is_active?'':' inactive'}`} key={row.id}><div><strong>{personName(person)}</strong><small>{staffRoleLabel(row.staff_role)}{row.label?` · ${row.label}`:''}</small></div><button className="mini-action" onClick={()=>toggleClubStaff(row)}>{row.is_active?'Archiveren':'Activeren'}</button></article>})}{!clubStaffRows.length&&<div className="admin-empty">Nog geen vrijwilligers.</div>}</div>
+                  </div>
+                )}
+
+                {view === 'roles' && (
+                  <div className="admin-block">
+                    <div className="invite-intro"><p className="eyebrow orange">STRUCTUUR</p><h3>Functie is niet hetzelfde als toegang</h3><p className="muted">Een teamfunctie bepaalt wat iemand binnen het team doet. Apprechten bepalen welke onderdelen van Mijn OG die persoon mag openen of beheren.</p></div>
+                    <div className="admin-list">
+                      <article className="admin-row"><div><strong>Coaching</strong><small>Hoofdcoach · Assistent-coach · Pitching coach · Catching coach</small></div><span className="active-badge">Coachrechten</span></article>
+                      <article className="admin-row"><div><strong>Teammanager</strong><small>Teamagenda, aanwezigheid en organisatie</small></div><span className="active-badge">Teamtoegang</span></article>
+                      <article className="admin-row"><div><strong>Fysiotherapeut</strong><small>Teamagenda · later eigen begeleiding/medisch dossier</small></div><span className="active-badge">Beperkt</span></article>
+                      <article className="admin-row"><div><strong>Mental coach</strong><small>Teamagenda · later afspraken en coaching op spelerskaart</small></div><span className="active-badge">Vertrouwelijk</span></article>
+                      <article className="admin-row"><div><strong>Overige teamstaf</strong><small>Strength & Conditioning · Video / Performance · Scorer</small></div><span className="active-badge">Instelbaar</span></article>
+                    </div>
+                    <div className="notice"><strong>Privacy spelerskaart</strong><br/>Begeleidingsitems worden later per item zichtbaar voor speelster + toegewezen mental coach, met coaching alleen wanneer dat expliciet is toegestaan.</div>
                   </div>
                 )}
 
@@ -2626,7 +2651,7 @@ function AdminPanel({ session, onMessage, onChanged }) {
                       <label>E-mailadres<input type="email" value={inviteForm.email} onChange={e => setInviteForm({...inviteForm, email:e.target.value})} autoComplete="off" required /></label>
                       <div className="admin-form-grid">
                         <label>Team<select value={inviteForm.team_id} onChange={e => setInviteForm({...inviteForm, team_id:e.target.value})} required><option value="">Kies team</option>{teams.filter(t => t.is_active).map(team => <option key={team.id} value={team.id}>{team.name}{team.seasons?.name ? ` · ${team.seasons.name}` : ''}</option>)}</select></label>
-                        <label>Rol<select value={inviteForm.member_role} onChange={e => setInviteForm({...inviteForm, member_role:e.target.value})}><option value="player">Speler</option><option value="coach">Coach</option><option value="staff">Staff</option></select></label>
+                        <label>Rol<select value={inviteForm.member_role} onChange={e => setInviteForm({...inviteForm, member_role:e.target.value})}><option value="player">Speler</option><option value="coach">Coach</option><option value="staff">Teamstaf</option></select></label>
                       </div>
                       <button className="primary" disabled={busy}>{busy ? 'Uitnodigen…' : 'Uitnodiging versturen'}</button>
                       {inviteSent && <div className="notice success">Uitnodiging verstuurd. Het account verschijnt automatisch in de teamindeling.</div>}
@@ -2636,6 +2661,8 @@ function AdminPanel({ session, onMessage, onChanged }) {
 
                 {view === 'directory' && (
                   <div className="admin-block member-directory">
+                    <div className="admin-toolbar"><div><p className="eyebrow orange">CENTRAAL</p><h3>Alle clubleden</h3></div><button className="mini-action" type="button" onClick={()=>goTo('invite')}>+ Nieuw lid</button></div>
+                    <p className="muted">Maak een persoon hier één keer aan. Team, functie en rechten wijs je daarna apart toe.</p>
                     <label className="member-search">Zoeken<input type="search" placeholder="Naam, rugnummer, positie, gebruikersnaam of e-mail" value={directorySearch} onChange={e=>setDirectorySearch(e.target.value)}/></label>
                     <p className="muted directory-count">{visibleDirectoryMembers.length} van {directoryMembers.length} leden</p>
                     {directoryFeedback&&<div className="push-feedback" role="status">{directoryFeedback}</div>}
@@ -2658,7 +2685,7 @@ function AdminPanel({ session, onMessage, onChanged }) {
                     </div>
 
                     {!selectedTeam ? <div className="admin-empty spacious">Kies eerst een team om de teamindeling te beheren.</div> : <>
-                      <div className="team-member-summary"><div><p className="eyebrow orange">TEAM</p><h3>{selectedTeam.name}</h3></div><span>{currentMemberships.length} leden</span></div>
+                      <div className="team-member-summary"><div><p className="eyebrow orange">TEAMTOEWIJZING</p><h3>{selectedTeam.name}</h3></div><span>{currentMemberships.length} leden</span></div>
 
                       <div className="player-add-toolbar">
                         <button className="primary compact" type="button" onClick={() => setShowPlaceholderForm(v=>!v)}>+ Speler toevoegen</button>
@@ -2674,27 +2701,27 @@ function AdminPanel({ session, onMessage, onChanged }) {
                       </form>}
                       {placeholderFeedback && <div className="push-feedback" role="status">{placeholderFeedback}</div>}
 
-                      <SectionTitle title="Huidige teamleden" />
+                      <SectionTitle title="Spelers & teamstaf" />
                       <div className="member-list">
                         {currentMemberships.map(membership => {
                           const person = profiles.find(profile => profile.id === membership.profile_id)
                           return <article className="member-row" key={membership.id}>
                             <span className="member-avatar">{initials(person)}</span>
-                            <div className="member-copy"><strong>{personName(person)}</strong><small>{person?.jersey_number ? `#${person.jersey_number} · ` : ''}{person?.is_placeholder ? 'Nog geen Mijn OG-account' : person?.role === 'admin' ? 'Clubbeheerder' : 'Mijn OG-lid'}</small>{membership.member_role==='coach' && <span className={`admin-coach-push ${adminPushEnabledIds.has(person?.id)?'active':'inactive'}`}>{adminPushEnabledIds.has(person?.id)?'Meldingen actief':'Meldingen nog niet ingeschakeld'}</span>}{person?.is_placeholder ? <button type="button" className="link-account-inline" onClick={()=>{setLinkPlayer(person);setLinkEmail('');setLinkFeedback('')}}>Account koppelen</button> : <button type="button" className="link-account-inline" onClick={()=>{setUsernamePerson(person);setUsernameValue(person.username||'');setUsernameFeedback('')}}>{person?.username?`@${person.username}`:'Gebruikersnaam instellen'}</button>}</div>
-                            <select aria-label={`Teamrol van ${personName(person)}`} value={membership.member_role} onChange={e => changeMemberRole(membership.id, e.target.value)} disabled={busy}><option value="player">Speler</option><option value="coach">Coach</option><option value="staff">Staff</option></select>
+                            <div className="member-copy"><strong>{personName(person)}</strong><small>{person?.jersey_number ? `#${person.jersey_number} · ` : ''}{membership.member_role==='player' ? (person?.is_placeholder ? 'Nog geen Mijn OG-account' : 'Speelster') : staffRoleLabel(membership.team_function || (membership.member_role==='coach'?'head_coach':'team_manager'))}</small>{membership.member_role==='coach' && <span className={`admin-coach-push ${adminPushEnabledIds.has(person?.id)?'active':'inactive'}`}>{adminPushEnabledIds.has(person?.id)?'Meldingen actief':'Meldingen nog niet ingeschakeld'}</span>}{person?.is_placeholder ? <button type="button" className="link-account-inline" onClick={()=>{setLinkPlayer(person);setLinkEmail('');setLinkFeedback('')}}>Account koppelen</button> : <button type="button" className="link-account-inline" onClick={()=>{setUsernamePerson(person);setUsernameValue(person.username||'');setUsernameFeedback('')}}>{person?.username?`@${person.username}`:'Gebruikersnaam instellen'}</button>}</div>
+                            <div className="member-role-controls"><select aria-label={`Type van ${personName(person)}`} value={membership.member_role} onChange={e => changeMemberRole(membership.id, e.target.value)} disabled={busy}><option value="player">Speler</option><option value="coach">Coaching</option><option value="staff">Teamstaf</option></select>{membership.member_role !== 'player' && <select aria-label={`Functie van ${personName(person)}`} value={membership.team_function || (membership.member_role==='coach'?'head_coach':'team_manager')} onChange={e=>changeTeamFunction(membership.id,e.target.value)} disabled={busy}>{membership.member_role==='coach'?<><option value="head_coach">Hoofdcoach</option><option value="assistant_coach">Assistent-coach</option><option value="pitching_trainer">Pitching coach</option><option value="catching_trainer">Catching coach</option></>:<><option value="team_manager">Teammanager</option><option value="physio">Fysiotherapeut</option><option value="mental_coach">Mental coach</option><option value="strength_conditioning">Strength & Conditioning</option><option value="video_performance">Video / Performance</option><option value="scorer">Scorer</option><option value="volunteer">Vrijwilliger</option><option value="other">Overig</option></>}</select>}</div>
                             <button className="remove-member" onClick={() => removeMember(membership)} disabled={busy} aria-label={`${personName(person)} verwijderen`}><Icon name="trash" /></button>
                           </article>
                         })}
                         {!currentMemberships.length && <div className="admin-empty">Nog niemand aan dit team gekoppeld.</div>}
                       </div>
 
-                      <SectionTitle title="Lid toevoegen" />
+                      <SectionTitle title="Persoon aan team koppelen" />
                       <label className="member-search">Zoeken<input type="search" placeholder="Zoek op naam of rugnummer" value={memberSearch} onChange={e => setMemberSearch(e.target.value)} /></label>
                       <div className="available-member-list">
                         {availableProfiles.slice(0, 30).map(person => <article className="available-member-row" key={person.id}>
                           <span className="member-avatar small">{initials(person)}</span>
                           <div className="member-copy"><strong>{personName(person)}</strong><small>{person.jersey_number ? `#${person.jersey_number}` : 'Geen rugnummer'}</small></div>
-                          <div className="add-member-actions"><button className="mini-action" disabled={busy} onClick={() => addMember(person.id, 'player')}>+ Speler</button><button className="mini-action coach" disabled={busy} onClick={() => addMember(person.id, 'coach')}>+ Coach</button><button className="mini-action" disabled={busy} onClick={() => addMember(person.id, 'staff')}>+ Staff</button></div>
+                          <div className="add-member-actions"><button className="mini-action" disabled={busy} onClick={() => addMember(person.id, 'player')}>+ Speler</button><button className="mini-action coach" disabled={busy} onClick={() => addMember(person.id, 'coach')}>+ Coach</button><button className="mini-action" disabled={busy} onClick={() => addMember(person.id, 'staff')}>+ Teamstaf</button></div>
                         </article>)}
                         {!availableProfiles.length && <div className="admin-empty">Geen beschikbare leden gevonden.</div>}
                       </div>
@@ -2847,7 +2874,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
         <SettingsRow icon="lock" title="Wachtwoord" subtitle="Wachtwoord wijzigen via resetmail" onClick={() => setSettingsView('password')} />
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.0.0.15" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.1.0" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -2885,7 +2912,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 3.0.0.15</h3>
+        <h3>Versie 3.1.0</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS agenda</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>
