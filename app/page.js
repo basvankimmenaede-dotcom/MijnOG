@@ -631,7 +631,9 @@ function LineupMakerModal({ event, team, profiles = [], memberships = [], gameAt
 
   const ownIds = memberships.filter(m=>Number(m.team_id)===Number(team.id)&&m.member_role==='player').map(m=>m.profile_id)
   const relevantRequestIds = playerRequests.filter(r=>Number(r.requesting_team_id)===Number(team.id)&&r.event_key===key).map(r=>Number(r.id))
-  const guestIds = playerCandidates.filter(c=>relevantRequestIds.includes(Number(c.request_id))&&c.response==='confirmed').map(c=>c.profile_id)
+  const requestGuestIds = playerCandidates.filter(c=>relevantRequestIds.includes(Number(c.request_id))&&c.response==='confirmed').map(c=>c.profile_id)
+  const eventGuestIds = event.guestProfileIds || []
+  const guestIds = [...new Set([...requestGuestIds, ...eventGuestIds])]
   const rosterIds=[...new Set([...ownIds,...guestIds])]
   const players=rosterIds.map(id=>profiles.find(p=>p.id===id)).filter(Boolean).map(person=>({...person,isLineupGuest:guestIds.includes(person.id)}))
   const attendanceMap=Object.fromEntries(gameAttendance.filter(r=>r.event_key===key).map(r=>[r.profile_id,r.status]))
@@ -1132,6 +1134,14 @@ function CoachDashboard({ session, profile, teams, gameStats = [], measurements 
   const teamMemberRows = memberships.filter(m => Number(m.team_id) === teamId && m.member_role === 'player')
   const teamMemberIds = teamMemberRows.map(m => m.profile_id)
   const teamPlayers = teamMemberIds.map(id => profiles.find(p => p.id === id)).filter(Boolean)
+  function attendancePlayersForEvent(ev) {
+    const baseIds = ev?.audienceMode === 'selected'
+      ? [...(ev?.guestProfileIds || [])]
+      : [...teamMemberIds, ...(ev?.guestProfileIds || [])]
+    const requestIds = playerRequests.filter(r => Number(r.requesting_team_id) === teamId && r.event_key === eventTransportKey(ev)).map(r => Number(r.id))
+    const confirmedGuestIds = playerCandidates.filter(c => requestIds.includes(Number(c.request_id)) && c.response === 'confirmed').map(c => c.profile_id)
+    return [...new Set([...baseIds, ...confirmedGuestIds])].map(id => profiles.find(p => p.id === id)).filter(Boolean)
+  }
   const teamTrainingEvents = trainingEvents.filter(ev => (ev.teamIds || [ev.teamId]).map(Number).includes(teamId))
   const teamGames = calendarEvents.filter(ev => selectedTeam && eventTeamMatches(ev, [selectedTeam]).includes(teamId))
   const now = Date.now()
@@ -1218,7 +1228,7 @@ function CoachDashboard({ session, profile, teams, gameStats = [], measurements 
     {requestOpen && <PlayerRequestModal session={session} team={selectedTeam} teams={coachTeams} profiles={profiles} memberships={memberships} calendarEvents={calendarEvents} trainingEvents={trainingEvents} onClose={()=>setRequestOpen(false)} onSaved={async()=>{setRequestOpen(false);await onRefresh()}} onMessage={onMessage} />}
     {staffPlannerOpen && <StaffPlanner session={session} events={teamTrainingEvents} onClose={()=>setStaffPlannerOpen(false)} onChanged={onRefresh} />}
     {nominateRequest && <NominatePlayersModal session={session} request={nominateRequest} team={selectedTeam} profiles={profiles} memberships={memberships} onClose={()=>setNominateRequest(null)} onSaved={async()=>{setNominateRequest(null);await onRefresh()}} onMessage={onMessage} />}
-    {finalizeSession && <FinalizeAttendanceModal event={finalizeSession} team={selectedTeam} players={teamPlayers} attendance={attendance} gameAttendance={gameAttendance} onClose={()=>setFinalizeSession(null)} onSaved={onRefresh} onMessage={onMessage} />}
+    {finalizeSession && <FinalizeAttendanceModal event={finalizeSession} team={selectedTeam} players={attendancePlayersForEvent(finalizeSession)} attendance={attendance} gameAttendance={gameAttendance} onClose={()=>setFinalizeSession(null)} onSaved={onRefresh} onMessage={onMessage} />}
     {requestDetail && <PlayerRequestDetailModal request={requestDetail} selectedTeam={selectedTeam} allTeams={allTeams} profiles={profiles} candidates={playerCandidates.filter(c=>c.request_id===requestDetail.id)} onConfirm={confirmCandidate} onNominate={()=>{setNominateRequest(requestDetail);setRequestDetail(null)}} onDelete={()=>deletePlayerRequest(requestDetail)} onClose={()=>setRequestDetail(null)} />}
     {detailEvent?.type === 'training' && <TrainingDetailModal event={detailEvent} current={ownAttendance[String(detailEvent.id)]} onAttendance={onAttendance} busy={attendanceBusy} canManage={true} onEdit={()=>{setEditingCoachEvent(detailEvent);setDetailEvent(null);setTrainingEditorOpen(true)}} onManageAttendance={()=>setFinalizeSession(detailEvent)} onClose={()=>setDetailEvent(null)} attendance={attendance.filter(row=>String(row.event_id)===String(detailEvent.id))} profiles={profiles} memberships={memberships} />}
     {detailEvent && detailEvent.type !== 'training' && <ActivityDetailModal event={detailEvent} profile={profile} teams={[selectedTeam]} profiles={profiles} memberships={memberships} gameAttendance={gameAttendance} playerRequests={playerRequests} playerCandidates={playerCandidates} clubLocations={clubLocations} transportEvent={findTransportEvent(detailEvent, transportEvents)} transportResponses={transportResponses} onChanged={onRefresh} onEdit={detailEvent.source==='supabase'?()=>{setEditingCoachEvent(detailEvent);setDetailEvent(null);setTrainingEditorOpen(true)}:null} onManageAttendance={()=>setFinalizeSession(detailEvent)} onClose={()=>setDetailEvent(null)} />}
@@ -2837,7 +2847,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
         <SettingsRow icon="lock" title="Wachtwoord" subtitle="Wachtwoord wijzigen via resetmail" onClick={() => setSettingsView('password')} />
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.0.0.14" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.0.0.15" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -2875,7 +2885,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 3.0.0.14</h3>
+        <h3>Versie 3.0.0.15</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS agenda</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>
