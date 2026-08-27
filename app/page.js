@@ -2287,6 +2287,9 @@ function AdminPanel({ session, onMessage, onChanged }) {
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
   const [showSeasonForm, setShowSeasonForm] = useState(false)
+  const [showSeasonCopy,setShowSeasonCopy]=useState(false)
+  const [seasonCopy,setSeasonCopy]=useState({source_id:'',target_id:'',copy_members:true})
+  const [seasonCopyFeedback,setSeasonCopyFeedback]=useState('')
   const [showTeamForm, setShowTeamForm] = useState(false)
   const [seasonForm, setSeasonForm] = useState({ name: '', starts_on: '', ends_on: '' })
   const [teamForm, setTeamForm] = useState({ name: '', sport: 'softbal', season_id: '', foys_match_text: '' })
@@ -2510,6 +2513,16 @@ function AdminPanel({ session, onMessage, onChanged }) {
       await loadAdminData()
       onChanged?.()
     }
+  }
+
+  async function copySeasonTeams(e){
+    e.preventDefault();if(!seasonCopy.source_id||!seasonCopy.target_id)return
+    if(seasonCopy.source_id===seasonCopy.target_id)return setSeasonCopyFeedback('Kies twee verschillende seizoenen.')
+    setBusy(true);setSeasonCopyFeedback('')
+    const {data,error}=await supabase.rpc('copy_season_teams',{source_season_id:Number(seasonCopy.source_id),target_season_id:Number(seasonCopy.target_id),include_members:seasonCopy.copy_members})
+    setBusy(false);if(error)return setSeasonCopyFeedback(error.message)
+    setSeasonCopyFeedback(`${data?.teams_created||0} teams aangemaakt · ${data?.members_copied||0} teamkoppelingen gekopieerd ✓`)
+    await loadAdminData();onChanged?.()
   }
 
   async function saveTeam(e) {
@@ -2780,6 +2793,8 @@ function AdminPanel({ session, onMessage, onChanged }) {
                       <div className="admin-form-grid"><label>Startdatum<input type="date" value={seasonForm.starts_on} onChange={e => setSeasonForm({...seasonForm, starts_on:e.target.value})} /></label><label>Einddatum<input type="date" value={seasonForm.ends_on} onChange={e => setSeasonForm({...seasonForm, ends_on:e.target.value})} /></label></div>
                       <button className="primary" disabled={busy}>{busy ? 'Opslaan…' : 'Seizoen toevoegen'}</button>
                     </form>}
+                    <button className="secondary orange-outline season-copy-open" type="button" onClick={()=>{setShowSeasonCopy(value=>!value);setSeasonCopyFeedback('');if(!seasonCopy.source_id&&seasons.length)setSeasonCopy({...seasonCopy,source_id:String(seasons[1]?.id||seasons[0]?.id||''),target_id:String(seasons[0]?.id||'')})}}>{showSeasonCopy?'Kopiëren sluiten':'Teams kopiëren naar ander seizoen'}</button>
+                    {showSeasonCopy&&<form className="sheet-form form-stack season-copy-form" onSubmit={copySeasonTeams}><div><p className="eyebrow orange">TEAMSTRUCTUUR OVERNEMEN</p><h3>Teams kopiëren</h3><p className="muted">Bestaande teams in het doelseizoen worden niet dubbel aangemaakt.</p></div><div className="admin-form-grid"><label>Van seizoen<select value={seasonCopy.source_id} onChange={e=>setSeasonCopy({...seasonCopy,source_id:e.target.value})} required><option value="">Kies bron</option>{seasons.map(season=><option key={season.id} value={season.id}>{season.name}</option>)}</select></label><label>Naar seizoen<select value={seasonCopy.target_id} onChange={e=>setSeasonCopy({...seasonCopy,target_id:e.target.value})} required><option value="">Kies doel</option>{seasons.map(season=><option key={season.id} value={season.id}>{season.name}</option>)}</select></label></div><label className="check-line"><input type="checkbox" checked={seasonCopy.copy_members} onChange={e=>setSeasonCopy({...seasonCopy,copy_members:e.target.checked})}/><span>Speelsters, coaches en Staff met hun functies meenemen</span></label>{seasonCopyFeedback&&<div className="push-feedback">{seasonCopyFeedback}</div>}<button className="primary" disabled={busy}>{busy?'Kopiëren…':'Teams kopiëren'}</button></form>}
                     <div className="admin-list">
                       {seasons.map(season => <article className="admin-row" key={season.id}><div><strong>{season.name}</strong><small>{formatSeasonRange(season)}</small></div>{season.is_active ? <span className="active-badge">Actief</span> : <button className="mini-action" disabled={busy} onClick={() => activateSeason(season.id)}>Actief maken</button>}</article>)}
                       {!seasons.length && <div className="admin-empty">Nog geen seizoenen.</div>}
@@ -3085,7 +3100,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
         <SettingsRow icon="lock" title="Wachtwoord" subtitle="Wachtwoord wijzigen via resetmail" onClick={() => setSettingsView('password')} />
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.1.16" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.1.17" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -3123,7 +3138,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 3.1.16</h3>
+        <h3>Versie 3.1.17</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS agenda</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>
