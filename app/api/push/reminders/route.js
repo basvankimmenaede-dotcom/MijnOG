@@ -1,5 +1,6 @@
 import webpush from 'web-push'
 import { createClient } from '@supabase/supabase-js'
+import { filterRecipientsByPreference } from '../../../../lib/notification-preferences'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,7 +30,7 @@ export async function GET(request) {
     if (attendanceError) throw attendanceError
     if (!maybeRows?.length) return Response.json({ ok: true, checked: events.length, sent: 0 })
 
-    const profiles = [...new Set(maybeRows.map(r => r.profile_id))]
+    const profiles = await filterRecipientsByPreference(service,maybeRows.map(r => r.profile_id),'maybe_reminders')
     const { data: subscriptions, error: subError } = await service.from('push_subscriptions').select('*').in('profile_id', profiles).eq('enabled', true)
     if (subError) throw subError
     const subsByProfile = new Map()

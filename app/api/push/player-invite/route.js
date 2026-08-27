@@ -1,5 +1,6 @@
 import webpush from 'web-push'
 import { createClient } from '@supabase/supabase-js'
+import { filterRecipientsByPreference } from '../../../../lib/notification-preferences'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,7 +28,7 @@ export async function POST(request) {
     const { data: targetMembership } = await service.from('team_members').select('member_role').eq('profile_id', userData.user.id).eq('team_id', requestRow.target_team_id).maybeSingle()
     if (profile?.role !== 'admin' && requestingMembership?.member_role !== 'coach' && targetMembership?.member_role !== 'coach') return Response.json({ error: 'Geen rechten.' }, { status: 403 })
 
-    const ids = [...new Set((body.profileIds || []).filter(Boolean))]
+    const ids = await filterRecipientsByPreference(service,body.profileIds || [],'substitute_requests')
     const { data: subscriptions } = ids.length ? await service.from('push_subscriptions').select('*').in('profile_id', ids).eq('enabled', true) : { data: [] }
     webpush.setVapidDetails(subject, vapidPublic, vapidPrivate)
     let sent = 0

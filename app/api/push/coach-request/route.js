@@ -1,5 +1,6 @@
 import webpush from 'web-push'
 import { createClient } from '@supabase/supabase-js'
+import { filterRecipientsByPreference } from '../../../../lib/notification-preferences'
 export const dynamic='force-dynamic'
 export async function POST(request){
   try{
@@ -13,7 +14,7 @@ export async function POST(request){
     const {data:req}=await service.from('player_requests').select('*').eq('id',body.requestId).maybeSingle(); if(!req)return Response.json({error:'Verzoek niet gevonden.'},{status:404})
     const {data:profile}=await service.from('profiles').select('role').eq('id',userData.user.id).single(); const {data:membership}=await service.from('team_members').select('member_role').eq('profile_id',userData.user.id).eq('team_id',req.requesting_team_id).maybeSingle()
     if(profile?.role!=='admin'&&membership?.member_role!=='coach')return Response.json({error:'Geen rechten.'},{status:403})
-    const {data:coaches}=await service.from('team_members').select('profile_id').eq('team_id',req.target_team_id).eq('member_role','coach'); const ids=[...new Set((coaches||[]).map(r=>r.profile_id))]
+    const {data:coaches}=await service.from('team_members').select('profile_id').eq('team_id',req.target_team_id).eq('member_role','coach'); const ids=await filterRecipientsByPreference(service,(coaches||[]).map(r=>r.profile_id),'substitute_requests')
     const {data:subs}=ids.length?await service.from('push_subscriptions').select('*').in('profile_id',ids).eq('enabled',true):{data:[]}
     const date=new Date(req.event_start).toLocaleDateString('nl-NL',{weekday:'short',day:'numeric',month:'short',timeZone:'Europe/Amsterdam'})
     const time=new Date(req.event_start).toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit',timeZone:'Europe/Amsterdam'})

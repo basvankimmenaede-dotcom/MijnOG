@@ -1,5 +1,6 @@
 import webpush from 'web-push'
 import { createClient } from '@supabase/supabase-js'
+import { filterRecipientsByPreference } from '../../../../lib/notification-preferences'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,6 +16,8 @@ export async function POST(request) {
     const {data:assignment}=await service.from('event_staff_assignments').select('id,event_id,task_role,invited_by,club_staff(profile_id),events(title,start_at,team_id)').eq('id',assignmentId).maybeSingle()
     if(!assignment||assignment.invited_by!==userData.user.id)return Response.json({error:'Geen rechten.'},{status:403})
     const profileId=assignment.club_staff?.profile_id
+    const allowedIds=await filterRecipientsByPreference(service,[profileId],'staff_requests')
+    if(!allowedIds.length)return Response.json({ok:true,sent:0})
     const {data:subscriptions}=await service.from('push_subscriptions').select('*').eq('profile_id',profileId).eq('enabled',true)
     webpush.setVapidDetails(subject,vapidPublic,vapidPrivate);let sent=0
     for(const row of subscriptions||[]){try{await webpush.sendNotification({endpoint:row.endpoint,keys:{p256dh:row.p256dh,auth:row.auth}},JSON.stringify({title:'Nieuwe medewerkersuitnodiging',body:`${staffRoleLabel(assignment.task_role)} bij ${assignment.events?.title||'een OG-activiteit'}`,url:'/',tag:`staff-assignment-${assignment.id}`}));sent++}catch(error){if([404,410].includes(error?.statusCode))await service.from('push_subscriptions').delete().eq('id',row.id)}}

@@ -3022,7 +3022,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
         <SettingsRow icon="lock" title="Wachtwoord" subtitle="Wachtwoord wijzigen via resetmail" onClick={() => setSettingsView('password')} />
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.1.10" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.1.12" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -3060,7 +3060,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 3.1.10</h3>
+        <h3>Versie 3.1.12</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS agenda</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>
@@ -3099,6 +3099,8 @@ function PushSettings({ session, profile, onMessage }) {
   const [testing, setTesting] = useState(false)
   const [pushFeedback, setPushFeedback] = useState('')
   const [installed, setInstalled] = useState(true)
+  const [preferences,setPreferences]=useState({activities:true,team_messages:true,substitute_requests:true,maybe_reminders:true,staff_requests:true})
+  const [preferenceBusy,setPreferenceBusy]=useState('')
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -3114,6 +3116,23 @@ function PushSettings({ session, profile, onMessage }) {
       setEnabled(Boolean(subscription))
     }).catch(() => setSupported(false))
   }, [])
+
+  useEffect(()=>{
+    if(!session?.user?.id)return
+    supabase.from('notification_preferences').select('activities,team_messages,substitute_requests,maybe_reminders,staff_requests').eq('profile_id',session.user.id).maybeSingle().then(({data,error})=>{
+      if(data)setPreferences(data)
+      else if(error&&!/does not exist|schema cache/i.test(error.message||''))setPushFeedback(`Voorkeuren laden mislukt: ${error.message}`)
+    })
+  },[session?.user?.id])
+
+  async function togglePreference(key){
+    const next={...preferences,[key]:!preferences[key]}
+    setPreferenceBusy(key);setPushFeedback('')
+    const {error}=await supabase.from('notification_preferences').upsert({profile_id:session.user.id,...next,updated_at:new Date().toISOString()},{onConflict:'profile_id'})
+    setPreferenceBusy('')
+    if(error)return setPushFeedback(`Voorkeur opslaan mislukt: ${error.message}`)
+    setPreferences(next)
+  }
 
   async function enablePush() {
     if (!supported) return
@@ -3185,8 +3204,15 @@ function PushSettings({ session, profile, onMessage }) {
   }
 
 
+  const preferenceRows=[
+    ['activities','Activiteiten','Wijzigingen en herinneringen voor trainingen en wedstrijden.'],
+    ['team_messages','Teamberichten','Nieuwe berichten van coaches en clubbeheer.'],
+    ['substitute_requests','Invallersverzoeken','Verzoeken en uitnodigingen om mee te spelen.'],
+    ['maybe_reminders','Status Misschien','Herinnering om je aanwezigheid definitief door te geven.'],
+    ['staff_requests','Vrijwilligersverzoeken','Uitnodigingen voor begeleiding, scoring of andere taken.']
+  ]
   return <section className="notification-panel settings-popup-content">
-    <p className="settings-modal-intro">Ontvang herinneringen over trainingen en aanwezigheid.</p>
+    <p className="settings-modal-intro">Beheer welke pushmeldingen je ontvangt.</p>
     {!supported ? <div className="push-callout"><strong>Niet ondersteund</strong><p>Deze browser ondersteunt web-push niet.</p></div> : !installed ? <div className="push-callout"><strong>Installeer Mijn OG eerst</strong><p>Open Safari → Deel → Zet op beginscherm. Open Mijn OG daarna via het nieuwe icoon.</p></div> : <>
       <div className="push-status"><span className={`push-status-mark ${enabled ? 'on' : ''}`}><Icon name="bell" /></span><div><strong>{enabled ? 'Actief' : permission==='denied' ? 'Geblokkeerd' : 'Uitgeschakeld'}</strong><small>{enabled?'Je ontvangt belangrijke teamupdates.':permission==='denied'?'Sta meldingen opnieuw toe via de instellingen van je browser of telefoon.':'Zet meldingen aan om niets te missen.'}</small></div></div>
       <div className="push-actions">
@@ -3194,7 +3220,7 @@ function PushSettings({ session, profile, onMessage }) {
         {enabled && profile?.role === 'admin' && <button type="button" className="secondary" onClick={sendTest} disabled={testing}>{testing ? 'Versturen…' : 'Stuur testmelding naar mij'}</button>}
       </div>
       {pushFeedback && <div className="push-feedback" role="status" aria-live="polite">{pushFeedback}</div>}
-      <div className="push-info-list"><div><strong>Trainingen & wedstrijden</strong><span>Belangrijke herinneringen, wijzigingen en teamberichten.</span></div><div><strong>Invallersverzoeken</strong><span>Coaches en uitgenodigde speelsters ontvangen direct bericht.</span></div><div><strong>Misschien</strong><span>24 uur voor aanvang een verzoek om definitief te kiezen.</span></div></div>
+      <div className="notification-preferences"><div className="notification-preferences-head"><strong>Meldingstypen</strong><small>Je keuzes gelden op al je apparaten.</small></div>{preferenceRows.map(([key,title,description])=><div className="notification-preference-row" key={key}><span><strong>{title}</strong><small>{description}</small></span><button type="button" className={`preference-switch ${preferences[key]?'on':''}`} role="switch" aria-checked={preferences[key]} aria-label={`${title} ${preferences[key]?'uitschakelen':'inschakelen'}`} disabled={preferenceBusy===key} onClick={()=>togglePreference(key)}><i/></button></div>)}</div>
     </>}
   </section>
 }
