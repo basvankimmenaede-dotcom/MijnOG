@@ -28,7 +28,7 @@ export async function GET(request) {
     ])
     if(profileError) return Response.json({error:profileError.message},{status:500})
     if(authError) return Response.json({error:authError.message},{status:500})
-    const emails=new Map((authData?.users||[]).map(user=>[user.id,user.email||'']))
+    const emails=new Map((authData?.users||[]).map(user=>[user.id,String(user.email||'').endsWith('.mijn-og.invalid')?'':user.email||'']))
     return Response.json({members:(profiles||[]).map(profile=>({...profile,email:profile.is_placeholder?'':emails.get(profile.id)||''}))})
   } catch(error) {
     return Response.json({error:error?.message||'Ledenlijst laden mislukt.'},{status:500})

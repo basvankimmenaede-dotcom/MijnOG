@@ -1005,10 +1005,11 @@ function AttendanceSummary({ event, rows, profiles, memberships, expanded=false 
   eligible.forEach(id => {
     const row = responseMap[id]
     if (!row) groups.none.push({ profile_id:id })
+    else if(row.status==='late') groups.present.push(row)
     else groups[row.status]?.push(row)
   })
   const summaryText = `${groups.present.length} aanwezig · ${groups.maybe.length} misschien · ${groups.absent.length} afwezig · ${groups.none.length} geen reactie`
-  const content = <div className="attendance-summary-content"><div className="attendance-filter-row"><button className={filter==='all'?'active':''} onClick={() => setFilter('all')}>Iedereen</button>{(event.teams??[]).map(team => <button key={team.id} className={filter===`team-${team.id}`?'active':''} onClick={() => setFilter(`team-${team.id}`)}>{team.name}</button>)}{guestIds.size>0 && <button className={filter==='guests'?'active':''} onClick={() => setFilter('guests')}>Gasten</button>}</div><div className="attendance-groups">{[['present','Aanwezig'],['maybe','Misschien'],['absent','Afwezig'],['none','Geen reactie']].map(([key,label]) => <div key={key}><strong>{label} · {groups[key].length}</strong>{groups[key].length ? groups[key].map((row,i) => <p key={row.id || `${row.profile_id}-${i}`}>{personName(profileMap[row.profile_id])}{row.note ? ` — ${row.note}` : ''}</p>) : <p className="muted">Niemand</p>}</div>)}</div></div>
+  const content = <div className="attendance-summary-content"><div className="attendance-filter-row"><button className={filter==='all'?'active':''} onClick={() => setFilter('all')}>Iedereen</button>{(event.teams??[]).map(team => <button key={team.id} className={filter===`team-${team.id}`?'active':''} onClick={() => setFilter(`team-${team.id}`)}>{team.name}</button>)}{guestIds.size>0 && <button className={filter==='guests'?'active':''} onClick={() => setFilter('guests')}>Gasten</button>}</div><div className="attendance-groups">{[['present','Aanwezig'],['maybe','Misschien'],['absent','Afwezig'],['none','Geen reactie']].map(([key,label]) => <div key={key}><strong>{label} · {groups[key].length}</strong>{groups[key].length ? groups[key].map((row,i) => <p key={row.id || `${row.profile_id}-${i}`}>{personName(profileMap[row.profile_id])}{row.status==='late'?' — Te laat':row.note?` — ${row.note}`:''}</p>) : <p className="muted">Niemand</p>}</div>)}</div></div>
   if (expanded) return <section className="attendance-expanded"><div className="attendance-counts"><strong>Aanwezigheid</strong><span>{summaryText}</span></div>{content}</section>
   return <details className="attendance-summary"><summary>{summaryText}</summary>{content}</details>
 }
@@ -1297,8 +1298,8 @@ function CoachDashboard({ session, profile, teams, gameStats = [], measurements 
     <SectionTitle title="Komend" />
     <div className="coach-session-list">{upcoming.length ? upcoming.map(ev=>{
       const rows=ev.type==='training'?attendance.filter(a=>String(a.event_id)===String(ev.id)):gameAttendance.filter(a=>eventKeyCandidates(ev).includes(a.event_key))
-      const yes=rows.filter(r=>r.status==='present').length, maybe=rows.filter(r=>r.status==='maybe').length
-      return <button type="button" className="coach-session-card" key={ev.uid||`${ev.type}-${ev.id}`} onClick={()=>setDetailEvent(ev)}><div><span className="coach-session-type">{eventTypeLabel(ev)}</span><strong>{ev.title}</strong><small>{formatShortDate(ev.start)} · {formatTimeRange(ev.start,ev.end)}</small></div><div className="coach-session-count"><strong>{yes}</strong><span>aanwezig</span>{maybe>0&&<small>{maybe} misschien</small>}<Icon name="chevron"/></div></button>
+      const yes=rows.filter(r=>r.status==='present'||r.status==='late').length, late=rows.filter(r=>r.status==='late').length, maybe=rows.filter(r=>r.status==='maybe').length
+      return <button type="button" className="coach-session-card" key={ev.uid||`${ev.type}-${ev.id}`} onClick={()=>setDetailEvent(ev)}><div><span className="coach-session-type">{eventTypeLabel(ev)}</span><strong>{ev.title}</strong><small>{formatShortDate(ev.start)} · {formatTimeRange(ev.start,ev.end)}</small></div><div className="coach-session-count"><strong>{yes}</strong><span>aanwezig</span>{late>0&&<small>{late} te laat</small>}{maybe>0&&<small>{maybe} misschien</small>}<Icon name="chevron"/></div></button>
     }) : <p className="muted coach-empty-line">Geen komende activiteiten voor dit team.</p>}</div>
 
     <SectionTitle title="Aanwezigheid & historie" />
@@ -2236,7 +2237,7 @@ function AdminPanel({ session, onMessage, onChanged }) {
   const [selectedSeasonId, setSelectedSeasonId] = useState('')
   const [selectedTeamId, setSelectedTeamId] = useState('')
   const [memberSearch, setMemberSearch] = useState('')
-  const [inviteForm, setInviteForm] = useState({ first_name: '', last_name: '', email: '', team_id: '', member_role: 'player' })
+  const [inviteForm, setInviteForm] = useState({ first_name:'',last_name:'',account_type:'username',username:'',password:'',password_confirm:'',email:'',team_id:'',member_role:'player' })
   const [inviteSent, setInviteSent] = useState(false)
   const [showPlaceholderForm, setShowPlaceholderForm] = useState(false)
   const [placeholderForm, setPlaceholderForm] = useState({ first_name:'', last_name:'', jersey_number:'', primary_position:'', secondary_positions:'', throws_hand:'R', bats_side:'R' })
@@ -2606,7 +2607,8 @@ function AdminPanel({ session, onMessage, onChanged }) {
 
   async function sendInvite(e) {
     e.preventDefault()
-    if (!inviteForm.email.trim() || !inviteForm.team_id) return
+    if (!inviteForm.team_id) return
+    if(inviteForm.account_type==='username' && inviteForm.password!==inviteForm.password_confirm)return onMessage('De wachtwoorden zijn niet gelijk.')
     setBusy(true); setInviteSent(false); onMessage('')
     try {
       const response = await fetch('/api/admin/invite', {
@@ -2614,6 +2616,9 @@ function AdminPanel({ session, onMessage, onChanged }) {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
         body: JSON.stringify({
           email: inviteForm.email.trim(),
+          account_type:inviteForm.account_type,
+          username:inviteForm.username.trim(),
+          password:inviteForm.password,
           first_name: inviteForm.first_name.trim(),
           last_name: inviteForm.last_name.trim(),
           team_id: Number(inviteForm.team_id),
@@ -2623,8 +2628,8 @@ function AdminPanel({ session, onMessage, onChanged }) {
       const payload = await response.json()
       if (!response.ok) throw new Error(payload.error || 'Uitnodiging versturen mislukt.')
       setInviteSent(true)
-      setInviteForm({ first_name: '', last_name: '', email: '', team_id: inviteForm.team_id, member_role: 'player' })
-      onMessage('Uitnodiging verstuurd ✓')
+      setInviteForm({first_name:'',last_name:'',account_type:inviteForm.account_type,username:'',password:'',password_confirm:'',email:'',team_id:inviteForm.team_id,member_role:'player'})
+      onMessage(payload.username_only?'Account aangemaakt ✓':'Uitnodiging verstuurd ✓')
       await loadAdminData()
       onChanged?.()
     } catch (error) { onMessage(error.message) }
@@ -2786,16 +2791,17 @@ function AdminPanel({ session, onMessage, onChanged }) {
 
                 {view === 'invite' && (
                   <div className="admin-block">
-                    <div className="invite-intro"><p className="eyebrow orange">NIEUW ACCOUNT</p><h3>Nodig een clublid uit</h3><p className="muted">De gebruiker ontvangt een e-mail, kiest zelf een wachtwoord en wordt automatisch aan het gekozen team gekoppeld.</p></div>
+                    <div className="invite-intro"><p className="eyebrow orange">NIEUW ACCOUNT</p><h3>Clublid aanmaken</h3><p className="muted">Maak direct een account met gebruikersnaam en wachtwoord, of verstuur een uitnodiging per e-mail.</p></div>
                     <form className="sheet-form form-stack" onSubmit={sendInvite}>
                       <div className="admin-form-grid"><label>Voornaam<input value={inviteForm.first_name} onChange={e => setInviteForm({...inviteForm, first_name:e.target.value})} required /></label><label>Achternaam<input value={inviteForm.last_name} onChange={e => setInviteForm({...inviteForm, last_name:e.target.value})} required /></label></div>
-                      <label>E-mailadres<input type="email" value={inviteForm.email} onChange={e => setInviteForm({...inviteForm, email:e.target.value})} autoComplete="off" required /></label>
+                      <label>Account aanmaken met<select value={inviteForm.account_type} onChange={e=>setInviteForm({...inviteForm,account_type:e.target.value})}><option value="username">Gebruikersnaam + wachtwoord</option><option value="email">E-mailadres + uitnodiging</option></select></label>
+                      {inviteForm.account_type==='username'?<><label>Gebruikersnaam<input value={inviteForm.username} onChange={e=>setInviteForm({...inviteForm,username:e.target.value.toLowerCase().replace(/\s+/g,'')})} minLength="3" maxLength="30" pattern="[a-z0-9._-]+" autoCapitalize="none" autoCorrect="off" required/><small className="field-help">3–30 tekens: letters, cijfers, punt, streepje of underscore.</small></label><div className="admin-form-grid"><label>Wachtwoord<input type="password" value={inviteForm.password} onChange={e=>setInviteForm({...inviteForm,password:e.target.value})} minLength="8" maxLength="72" autoComplete="new-password" required/></label><label>Herhaal wachtwoord<input type="password" value={inviteForm.password_confirm} onChange={e=>setInviteForm({...inviteForm,password_confirm:e.target.value})} minLength="8" maxLength="72" autoComplete="new-password" required/></label></div><small className="field-help">Zonder e-mailadres is wachtwoordherstel per mail nog niet mogelijk.</small></>:<label>E-mailadres<input type="email" value={inviteForm.email} onChange={e => setInviteForm({...inviteForm, email:e.target.value})} autoComplete="off" required /></label>}
                       <div className="admin-form-grid">
                         <label>Team<select value={inviteForm.team_id} onChange={e => setInviteForm({...inviteForm, team_id:e.target.value})} required><option value="">Kies team</option>{teams.filter(t => t.is_active).map(team => <option key={team.id} value={team.id}>{team.name}{team.seasons?.name ? ` · ${team.seasons.name}` : ''}</option>)}</select></label>
                         <label>Rol<select value={inviteForm.member_role} onChange={e => setInviteForm({...inviteForm, member_role:e.target.value})}><option value="player">Speler</option><option value="coach">Coach</option><option value="staff">Teamstaf</option></select></label>
                       </div>
-                      <button className="primary" disabled={busy}>{busy ? 'Uitnodigen…' : 'Uitnodiging versturen'}</button>
-                      {inviteSent && <div className="notice success">Uitnodiging verstuurd. Het account verschijnt automatisch in de teamindeling.</div>}
+                      <button className="primary" disabled={busy}>{busy?(inviteForm.account_type==='username'?'Aanmaken…':'Uitnodigen…'):(inviteForm.account_type==='username'?'Account aanmaken':'Uitnodiging versturen')}</button>
+                      {inviteSent && <div className="notice success">{inviteForm.account_type==='username'?'Account aangemaakt. De gebruiker kan direct inloggen.':'Uitnodiging verstuurd. Het account verschijnt automatisch in de teamindeling.'}</div>}
                     </form>
                   </div>
                 )}
@@ -2810,8 +2816,8 @@ function AdminPanel({ session, onMessage, onChanged }) {
                     {directoryLoading?<div className="subtle-loading">Ledenlijst laden…</div>:<div className="member-directory-list">
                       {visibleDirectoryMembers.map(person=>{const age=memberAge(person.date_of_birth);const positions=[person.primary_position,...(person.secondary_positions||[])].filter(Boolean).join(', ');return <article className="directory-member-card" key={person.id}>
                         <div className="directory-member-head"><span className="member-avatar">{initials(person)}</span><div><strong>{personName(person)}</strong><small>{age!=null?`${age} jaar`:'Leeftijd niet ingevuld'}{person.jersey_number?` · #${person.jersey_number}`:''}</small></div></div>
-                        <dl className="directory-member-data"><div><dt>Posities</dt><dd>{positions||'Niet ingevuld'}</dd></div><div><dt>Gebruikersnaam</dt><dd>{person.username?`@${person.username}`:'Niet ingesteld'}</dd></div><div className="directory-email"><dt>E-mailadres</dt><dd>{person.email||'Geen gekoppeld account'}</dd></div></dl>
-                        <div className="directory-member-actions"><button className="mini-action" type="button" onClick={()=>openDirectoryEditor(person)}>Bewerken</button><button className="mini-action" type="button" disabled={busy||person.is_placeholder||!person.email} onClick={()=>openPasswordEditor(person)}>{person.email&&!person.is_placeholder?'Wachtwoord wijzigen':'Geen account'}</button><button className="mini-action reset" type="button" disabled={busy||!person.email} onClick={()=>sendMemberReset(person)}>{person.email?'Resetmail sturen':'Geen e-mail'}</button></div>
+                        <dl className="directory-member-data"><div><dt>Posities</dt><dd>{positions||'Niet ingevuld'}</dd></div><div><dt>Gebruikersnaam</dt><dd>{person.username?`@${person.username}`:'Niet ingesteld'}</dd></div><div className="directory-email"><dt>E-mailadres</dt><dd>{person.email||'Geen e-mailadres'}</dd></div></dl>
+                        <div className="directory-member-actions"><button className="mini-action" type="button" onClick={()=>openDirectoryEditor(person)}>Bewerken</button><button className="mini-action" type="button" disabled={busy||person.is_placeholder} onClick={()=>openPasswordEditor(person)}>{person.is_placeholder?'Geen account':'Wachtwoord wijzigen'}</button><button className="mini-action reset" type="button" disabled={busy||!person.email} onClick={()=>sendMemberReset(person)}>{person.email?'Resetmail sturen':'Geen resetmail'}</button></div>
                       </article>})}
                       {!visibleDirectoryMembers.length&&<div className="admin-empty">Geen leden gevonden.</div>}
                     </div>}
@@ -3022,7 +3028,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
         <SettingsRow icon="lock" title="Wachtwoord" subtitle="Wachtwoord wijzigen via resetmail" onClick={() => setSettingsView('password')} />
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.1.8" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.1.9" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -3060,7 +3066,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 3.1.8</h3>
+        <h3>Versie 3.1.9</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS agenda</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>
@@ -3224,7 +3230,7 @@ function TeamMessageComposer({ session, teams, onSaved, onMessage }) {
 
 function TrainingOverview({ events = [], attendance = [], profiles = [], memberships = [], onClose }) {
   const upcoming = events.slice().sort((a,b)=>new Date(a.start)-new Date(b.start)).slice(0,20)
-  return <div className="settings-modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}><section className="settings-modal training-overview-modal"><header className="settings-modal-header"><h2>Centraal trainingsoverzicht</h2><button className="sheet-icon-button" onClick={onClose}><Icon name="close"/></button></header><div className="settings-modal-body"><p className="settings-modal-intro">Alle komende trainingen en direct hoeveel spelers aanwezig zijn.</p><div className="overview-list">{upcoming.map(ev=>{const rows=attendance.filter(a=>String(a.event_id)===String(ev.id));const yes=rows.filter(a=>a.status==='present').length;const maybe=rows.filter(a=>a.status==='maybe').length;const memberIds=new Set(memberships.filter(m=>(ev.teamIds||[ev.teamId]).map(String).includes(String(m.team_id))).map(m=>m.profile_id));return <article key={ev.id}><div><strong>{ev.title}</strong><span>{formatShortDate(ev.start)} · {formatTimeRange(ev.start,ev.end)}</span><small>{(ev.teams||[]).map(t=>t.name).join(' · ') || ev.location || 'Training'}</small></div><div className="overview-counts"><strong>{yes}/{memberIds.size || '–'}</strong><span>aanwezig</span>{maybe>0&&<small>{maybe} misschien</small>}</div></article>})}{!upcoming.length&&<p className="muted">Geen trainingen gevonden.</p>}</div></div></section></div>
+  return <div className="settings-modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}><section className="settings-modal training-overview-modal"><header className="settings-modal-header"><h2>Centraal trainingsoverzicht</h2><button className="sheet-icon-button" onClick={onClose}><Icon name="close"/></button></header><div className="settings-modal-body"><p className="settings-modal-intro">Alle komende trainingen en direct hoeveel spelers aanwezig zijn.</p><div className="overview-list">{upcoming.map(ev=>{const rows=attendance.filter(a=>String(a.event_id)===String(ev.id));const yes=rows.filter(a=>a.status==='present'||a.status==='late').length;const late=rows.filter(a=>a.status==='late').length;const maybe=rows.filter(a=>a.status==='maybe').length;const memberIds=new Set(memberships.filter(m=>(ev.teamIds||[ev.teamId]).map(String).includes(String(m.team_id))).map(m=>m.profile_id));return <article key={ev.id}><div><strong>{ev.title}</strong><span>{formatShortDate(ev.start)} · {formatTimeRange(ev.start,ev.end)}</span><small>{(ev.teams||[]).map(t=>t.name).join(' · ') || ev.location || 'Training'}</small></div><div className="overview-counts"><strong>{yes}/{memberIds.size || '–'}</strong><span>aanwezig</span>{late>0&&<small>{late} te laat</small>}{maybe>0&&<small>{maybe} misschien</small>}</div></article>})}{!upcoming.length&&<p className="muted">Geen trainingen gevonden.</p>}</div></div></section></div>
 }
 function messageIcon(kind){ return kind==='rain'?'cloud':kind==='gear'?'trophy':kind==='cancel'?'close':kind==='change'?'clock':'bell' }
 function formatMessageDate(value){ if(!value)return ''; return new Date(value).toLocaleString('nl-NL',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) }
