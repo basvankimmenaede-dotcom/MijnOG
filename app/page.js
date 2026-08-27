@@ -621,7 +621,7 @@ function ActivityDetailModal({ event, profile, teams, profiles, memberships, cur
     {event.location && !isPast && <LocationTravelCard location={null} fallbackDestination={event.locationAddress || event.location} />}{event.description && <p className="detail-description">{event.description}</p>}<ShareWhatsAppButton event={event} />{!isPast&&onAttendance&&<div className="detail-attendance"><h3>Ben je erbij?</h3><AttendanceButtons current={current?.status} onSelect={status=>onAttendance(event,status)} busy={attendanceBusy}/></div>}{lineupTeams.length>0 && <button className="primary lineup-open-button" onClick={()=>{if(lineupTeams.length===1){setLineupTeamChoice(lineupTeams[0]);setLineupOpen(true)}else{setLineupTeamChoice('choose')}}}><Icon name="people"/><span><strong>Line-up maken</strong><small>Starting lineup & slagvolgorde</small></span><Icon name="chevron"/></button>}{onEdit && <button className="primary detail-edit" onClick={onEdit}>Wedstrijd aanpassen</button>}{onManageAttendance && <button className="secondary orange-outline coach-attendance-manage" onClick={onManageAttendance}>Aanwezigheid beheren</button>}{!isPast&&<button className="transport-open-button" onClick={() => setTransportOpen(true)}><Icon name="car"/><span><strong>Vervoer</strong><small>{transportEvent ? transportStatusLabel(transportEvent, transportResponses) : 'Bekijk wie rijdt en wie mee moet'}</small></span><Icon name="chevron"/></button>}</div></section>
     {transportOpen && <TransportModal event={event} profile={profile} teams={teams} profiles={profiles} memberships={memberships} transportEvent={transportEvent} responses={transportResponses} onChanged={onChanged} onClose={() => setTransportOpen(false)} />}
     {highlightOpen&&<GameHighlightModal event={event} team={managedTeam} highlight={highlight} onClose={()=>setHighlightOpen(false)} onSaved={async()=>{setHighlightOpen(false);await onChanged()}}/>}
-    {statsOpen&&<GameStatsEntryModal event={event} team={managedTeam} profiles={profiles} memberships={memberships} onClose={()=>setStatsOpen(false)} onSaved={async()=>{setStatsOpen(false);await onChanged()}}/>}
+    {statsOpen&&<GameStatsEntryModal event={event} team={managedTeam} profiles={profiles} memberships={memberships} playerRequests={playerRequests} playerCandidates={playerCandidates} onClose={()=>setStatsOpen(false)} onSaved={async()=>{setStatsOpen(false);await onChanged()}}/>}
     {lineupTeamChoice==='choose'&&<div className="lineup-picker-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setLineupTeamChoice(null)}}><section className="lineup-picker"><header><div><p className="eyebrow orange">LINE-UP MAKEN</p><h3>Kies je team</h3></div><button className="sheet-icon-button" onClick={()=>setLineupTeamChoice(null)}><Icon name="close"/></button></header><div className="lineup-player-list">{lineupTeams.map(t=><button key={t.id} onClick={()=>{setLineupTeamChoice(t);setLineupOpen(true)}}><span className="lineup-player-number">OG</span><span><strong>{t.name}</strong><small>{capitalize(t.sport)}</small></span><Icon name="chevron"/></button>)}</div></section></div>}
     {lineupOpen&&lineupTeam&&<LineupMakerModal event={event} team={lineupTeam} profiles={profiles} memberships={memberships} gameAttendance={gameAttendance} playerRequests={playerRequests} playerCandidates={playerCandidates} onClose={()=>{setLineupOpen(false);setLineupTeamChoice(null)}} />}
   </div>
@@ -963,15 +963,30 @@ function iScoreRows(XLSX,workbook,sheetName){
   const headers=grid[headerIndex].map(cell=>String(cell??'').trim())
   return grid.slice(headerIndex+1).map(row=>Object.fromEntries(headers.map((key,index)=>[key,row[index]]))).filter(row=>row.Name&&String(row.Name).trim().toUpperCase()!=='TOTALS')
 }
-function GameStatsEntryModal({event,team,profiles=[],memberships=[],onClose,onSaved}){
-  const players=memberships.filter(m=>Number(m.team_id)===Number(team?.id)&&m.member_role==='player').map(m=>profiles.find(p=>p.id===m.profile_id)).filter(Boolean).sort((a,b)=>(Number(a.jersey_number)||999)-(Number(b.jersey_number)||999))
+function GameStatsEntryModal({event,team,profiles=[],memberships=[],playerRequests=[],playerCandidates=[],onClose,onSaved}){
+  const initialPlayers=memberships.filter(m=>Number(m.team_id)===Number(team?.id)&&m.member_role==='player').map(m=>profiles.find(p=>p.id===m.profile_id)).filter(Boolean).sort((a,b)=>(Number(a.jersey_number)||999)-(Number(b.jersey_number)||999))
+  const [activeTeam,setActiveTeam]=useState(team),[players,setPlayers]=useState(initialPlayers),[rosterBusy,setRosterBusy]=useState(true)
   const [rows,setRows]=useState(()=>Object.fromEntries(players.map(p=>[p.id,{ab:'',h:'',rbi:'',bb:'',hbp:'',sf:'',tb:'',sb:''}])))
-  const [mode,setMode]=useState('choose'),[busy,setBusy]=useState(false),[feedback,setFeedback]=useState(''),[importData,setImportData]=useState(null),[mapping,setMapping]=useState({})
+  const [mode,setMode]=useState('choose'),[busy,setBusy]=useState(false),[feedback,setFeedback]=useState(''),[importData,setImportData]=useState(null),[mapping,setMapping]=useState({}),[statsLocked,setStatsLocked]=useState(false)
+  useEffect(()=>{
+    let cancelled=false
+    async function loadRoster(){
+      setRosterBusy(true);let resolved=team
+      if(!resolved){const {data:allTeams}=await supabase.from('teams').select('id,name,sport,foys_match_text,is_active').eq('is_active',true);const matches=(allTeams||[]).filter(candidate=>eventTeamMatches(event,[candidate]).length);if(matches.length===1){resolved=matches[0];if(!cancelled)setActiveTeam(resolved)}}
+      if(!resolved?.id){if(!cancelled){setPlayers([]);setRosterBusy(false)};return}
+      const {data,error}=await supabase.from('team_members').select('profile_id,member_role,profiles(id,first_name,last_name,jersey_number,primary_position,secondary_positions,is_placeholder)').eq('team_id',resolved.id).eq('member_role','player')
+      if(cancelled)return
+      if(error){setFeedback(`Teamselectie laden mislukt: ${error.message}`);setPlayers(initialPlayers)}else{const roster=(data||[]).map(row=>row.profiles).filter(Boolean).sort((a,b)=>(Number(a.jersey_number)||999)-(Number(b.jersey_number)||999));setPlayers(roster);setRows(Object.fromEntries(roster.map(p=>[p.id,{ab:'',h:'',rbi:'',bb:'',hbp:'',sf:'',tb:'',sb:''}])))}
+      if(!error){const roster=(data||[]).map(row=>row.profiles).filter(Boolean),eventKeys=eventKeyCandidates(event),requestIds=playerRequests.filter(request=>Number(request.requesting_team_id)===Number(resolved.id)&&eventKeys.includes(request.event_key)).map(request=>Number(request.id)),guestIds=[...new Set([...(event.guestProfileIds||[]),...playerCandidates.filter(candidate=>requestIds.includes(Number(candidate.request_id))&&candidate.response==='confirmed').map(candidate=>candidate.profile_id)])],missingGuestIds=guestIds.filter(id=>!roster.some(person=>person.id===id));let guests=profiles.filter(person=>missingGuestIds.includes(person.id));const unresolved=missingGuestIds.filter(id=>!guests.some(person=>person.id===id));if(unresolved.length){const {data:guestRows}=await supabase.from('profiles').select('id,first_name,last_name,jersey_number,primary_position,secondary_positions,is_placeholder').in('id',unresolved);guests=[...guests,...(guestRows||[])]}const selectable=[...roster,...guests].filter((person,index,list)=>list.findIndex(item=>item.id===person.id)===index).sort((a,b)=>(Number(a.jersey_number)||999)-(Number(b.jersey_number)||999)||personName(a).localeCompare(personName(b),'nl'));const gameKey=eventTransportKey(event),[{data:previousImport},{data:savedStats}]=await Promise.all([supabase.from('iscore_game_imports').select('id').eq('game_key',gameKey).eq('team_id',resolved.id).maybeSingle(),supabase.from('player_game_stats').select('*').eq('game_key',gameKey).eq('team_id',resolved.id)]);const locked=Boolean(previousImport)||(savedStats||[]).length>0;setStatsLocked(locked);if(locked)setMode('manual');setPlayers(selectable);const savedByPlayer=Object.fromEntries((savedStats||[]).map(stat=>[stat.profile_id,stat]));setRows(Object.fromEntries(selectable.map(p=>{const stat=savedByPlayer[p.id]||{};return[p.id,{ab:stat.ab??'',h:stat.h??'',rbi:stat.rbi??'',bb:stat.bb??'',hbp:stat.hbp??'',sf:stat.sf??'',tb:stat.tb??'',sb:stat.sb??''}]})))}
+      setRosterBusy(false)
+    }
+    loadRoster();return()=>{cancelled=true}
+  },[team?.id,event?.id,event?.title,playerRequests.length,playerCandidates.length])
   function change(id,k,v){setRows(cur=>({...cur,[id]:{...cur[id],[k]:v}}))}
   async function saveManual(){
     setBusy(true);setFeedback('')
     const game_key=eventTransportKey(event), game_date=toDateInput(event.start)
-    const payloads=players.filter(p=>Object.values(rows[p.id]||{}).some(v=>v!=='')).map(p=>{const r=rows[p.id];const x={profile_id:p.id,team_id:Number(team.id),game_key,game_date,opponent:event.title,source:'manual'};['ab','h','rbi','bb','hbp','sf','tb','sb'].forEach(k=>x[k]=Number(r[k]||0));return x})
+    const payloads=players.filter(p=>Object.values(rows[p.id]||{}).some(v=>v!=='')).map(p=>{const r=rows[p.id];const x={profile_id:p.id,team_id:Number(activeTeam.id),game_key,game_date,opponent:event.title,source:'manual'};['ab','h','rbi','bb','hbp','sf','tb','sb'].forEach(k=>x[k]=Number(r[k]||0));return x})
     if(!payloads.length){setBusy(false);return setFeedback('Vul minimaal één speelster in.')}
     const {error}=await supabase.from('player_game_stats').upsert(payloads,{onConflict:'profile_id,game_key'})
     setBusy(false);if(error)return setFeedback(error.message);await onSaved()
@@ -996,16 +1011,18 @@ function GameStatsEntryModal({event,team,profiles=[],memberships=[],onClose,onSa
   }
   async function saveImport(){
     const missing=importData.sourcePlayers.filter(row=>!mapping[iScorePlayerKey(row)]);if(missing.length)return setFeedback(`Koppel eerst alle speelsters (${missing.length} resterend).`)
-    setBusy(true);setFeedback('');const game_key=eventTransportKey(event),game_date=toDateInput(event.start),base={team_id:Number(team.id),game_key,game_date,opponent:event.title,source:'iscore'},n=(row,key)=>Number(row?.[key]||0)
+    if(!activeTeam?.id)return setFeedback('Het wedstrijdteam kon niet worden vastgesteld.')
+    setBusy(true);setFeedback('');const game_key=eventTransportKey(event),game_date=toDateInput(event.start),base={team_id:Number(activeTeam.id),game_key,game_date,opponent:event.title,source:'iscore'},n=(row,key)=>Number(row?.[key]||0)
     const batting=importData.batting.map(row=>({...base,profile_id:mapping[iScorePlayerKey(row)],pa:n(row,'PA'),ab:n(row,'AB'),r:n(row,'R'),h:n(row,'H'),singles:n(row,'1B'),doubles:n(row,'2B'),triples:n(row,'3B'),hr:n(row,'HR'),rbi:n(row,'RBI'),bb:n(row,'BB'),so:n(row,'SO'),hbp:n(row,'HBP'),sb:n(row,'SB'),cs:n(row,'CS'),sf:n(row,'SF'),sac:n(row,'SAC'),tb:n(row,'TB')||n(row,'1B')+2*n(row,'2B')+3*n(row,'3B')+4*n(row,'HR')}))
     const pitching=importData.pitching.map(row=>({...base,profile_id:mapping[iScorePlayerKey(row)],innings_outs:iScoreInningsOuts(row.IP),batters_faced:n(row,'BF'),pitches:n(row,'PIT'),strikes:n(row,'Str'),balls:n(row,'Ball'),first_pitch_strikes:n(row,'FPS'),h:n(row,'H'),r:n(row,'R'),er:n(row,'ER'),bb:n(row,'BB'),hbp:n(row,'HB'),k:n(row,'K'),wp:n(row,'WP'),hr:n(row,'HR')}))
     let error=null;if(batting.length)({error}=await supabase.from('player_game_stats').upsert(batting,{onConflict:'profile_id,game_key'}));if(!error&&pitching.length)({error}=await supabase.from('player_pitching_stats').upsert(pitching,{onConflict:'profile_id,game_key'}))
-    if(!error){const {data:{user}}=await supabase.auth.getUser();({error}=await supabase.from('iscore_game_imports').upsert({game_key,team_id:Number(team.id),file_name:importData.fileName,game_title:importData.title||event.title,team_side:importData.side.toLowerCase(),batting:importData.batting,pitching:importData.pitching,fielding:importData.fielding,imported_by:user?.id},{onConflict:'game_key,team_id'}))}
+    if(!error){const {data:{user}}=await supabase.auth.getUser();({error}=await supabase.from('iscore_game_imports').upsert({game_key,team_id:Number(activeTeam.id),file_name:importData.fileName,game_title:importData.title||event.title,team_side:importData.side.toLowerCase(),batting:importData.batting,pitching:importData.pitching,fielding:importData.fielding,imported_by:user?.id},{onConflict:'game_key,team_id'}))}
     setBusy(false);if(error)return setFeedback(error.message);await onSaved()
   }
   return <SettingsModal title="Wedstrijdstats invoeren" onClose={onClose}><div className="game-stats-entry">
-    {mode==='choose'&&<div className="stats-entry-choice"><p className="muted">Kies hoe je de wedstrijdgegevens wilt toevoegen.</p><button onClick={()=>setMode('import')}><span>⇧</span><span><strong>iScore-bestand importeren</strong><small>Excel (.xls/.xlsx) of losse CSV-export</small></span><b>›</b></button><button onClick={()=>setMode('manual')}><span>✎</span><span><strong>Handmatig invoeren</strong><small>Voer de belangrijkste slagstatistieken per speelster in</small></span><b>›</b></button></div>}
-    {mode==='manual'&&<><button className="text-button stats-back" onClick={()=>setMode('choose')}>← Terug</button><p className="muted">Vul alleen speelsters in die hebben meegedaan. AVG en OPS worden automatisch berekend.</p>{players.map(p=><section className="game-stat-player" key={p.id}><strong>{teamDisplayName(p)}{p.jersey_number?` · #${p.jersey_number}`:''}</strong><div className="stat-entry-grid">{['ab','h','rbi','bb','hbp','sf','tb','sb'].map(k=><label key={k}>{k.toUpperCase()}<input type="number" min="0" value={rows[p.id]?.[k]||''} onChange={e=>change(p.id,k,e.target.value)}/></label>)}</div></section>)}<button className="primary" disabled={busy} onClick={saveManual}>{busy?'Opslaan…':'Alle stats opslaan'}</button></>}
+    {rosterBusy&&<p className="muted">Teamselectie laden…</p>}{!rosterBusy&&!players.length&&<div className="push-feedback">Geen speelsters gevonden. Controleer welk team aan deze wedstrijd is gekoppeld.</div>}{statsLocked&&<div className="iscore-summary"><span>Stats bevestigd</span><strong>Nieuwe import geblokkeerd</strong><small>Je kunt alleen de eerder opgeslagen waarden aanpassen.</small></div>}
+    {mode==='choose'&&!statsLocked&&<div className="stats-entry-choice"><p className="muted">Kies hoe je de wedstrijdgegevens wilt toevoegen. AVG, OBP, SLG en OPS worden door Mijn OG berekend.</p><button onClick={()=>setMode('import')}><span>⇧</span><span><strong>iScore-bestand importeren</strong><small>Excel (.xls/.xlsx) of losse CSV-export</small></span><b>›</b></button><button onClick={()=>setMode('manual')}><span>✎</span><span><strong>Handmatig invoeren</strong><small>Voer de belangrijkste slagstatistieken per speelster in</small></span><b>›</b></button></div>}
+    {mode==='manual'&&<>{!statsLocked&&<button className="text-button stats-back" onClick={()=>setMode('choose')}>← Terug</button>}<p className="muted">Vul alleen speelsters in die hebben meegedaan. AVG, OBP, SLG en OPS worden automatisch berekend.</p>{players.map(p=><section className="game-stat-player" key={p.id}><strong>{teamDisplayName(p)}{p.jersey_number?` · #${p.jersey_number}`:''}</strong><div className="stat-entry-grid">{['ab','h','rbi','bb','hbp','sf','tb','sb'].map(k=><label key={k}>{k.toUpperCase()}<input type="number" min="0" value={rows[p.id]?.[k]||''} onChange={e=>change(p.id,k,e.target.value)}/></label>)}</div></section>)}<button className="primary" disabled={busy} onClick={saveManual}>{busy?'Opslaan…':statsLocked?'Wijzigingen opslaan':'Alle stats opslaan'}</button></>}
     {mode==='import'&&<><button className="text-button stats-back" onClick={()=>{setMode('choose');setImportData(null);setFeedback('')}}>← Terug</button>{!importData?<label className="iscore-upload"><strong>{busy?'Bestand uitlezen…':'Kies een iScore-export'}</strong><span>.xls, .xlsx of .csv</span><input type="file" accept=".xls,.xlsx,.csv" disabled={busy} onChange={e=>readImport(e.target.files?.[0])}/></label>:<div className="iscore-preview"><div className="iscore-summary"><span>{importData.photo?'Concept uit foto':'Bestand gecontroleerd'}</span><strong>{importData.fileName}</strong><small>{importData.photo?`Herkenning: ${importData.confidence||'onbekend'} · `:`${importData.side==='Home'?'Thuisteam':'Uitteam'} · `}{importData.batting.length} slagregels · {importData.pitching.length} pitchingregels</small></div>{importData.warnings?.length>0&&<div className="iscore-warnings"><strong>Extra controleren</strong>{importData.warnings.map((warning,index)=><p key={index}>{warning}</p>)}</div>}<h3>Controleer de spelers en waarden</h3><p className="muted">Pas onjuist herkende gegevens aan. Er wordt pas iets opgeslagen na je bevestiging.</p>{importData.sourcePlayers.map(row=><div className="iscore-player-review" key={iScorePlayerKey(row)}><label className="iscore-player-map"><span><strong>{row.Name}</strong><small>{row['#']?`Rugnummer #${row['#']}`:'Geen rugnummer herkend'}</small></span><select value={mapping[iScorePlayerKey(row)]||''} onChange={e=>setMapping(cur=>({...cur,[iScorePlayerKey(row)]:e.target.value}))}><option value="">Kies speelster…</option>{players.map(p=><option key={p.id} value={p.id}>{p.jersey_number?`#${p.jersey_number} · `:''}{teamDisplayName(p)}</option>)}</select></label><div className="iscore-values">{Object.entries(row).filter(([key])=>!['#','Name'].includes(key)).slice(0,18).map(([key,value])=><label key={key}>{key}<input type="number" min="0" value={value??0} onChange={e=>setImportData(cur=>{const update=list=>list.map(item=>iScorePlayerKey(item)===iScorePlayerKey(row)?{...item,[key]:e.target.value}:item);return {...cur,batting:update(cur.batting),pitching:update(cur.pitching),fielding:update(cur.fielding),sourcePlayers:update(cur.sourcePlayers)}})}/></label>)}</div></div>)}<button className="primary" disabled={busy} onClick={saveImport}>{busy?'Toevoegen…':'Bevestigen en toevoegen'}</button></div>}</>}
     {feedback&&<div className="push-feedback">{feedback}</div>}
   </div></SettingsModal>
@@ -2220,7 +2237,9 @@ function teamPlayerMeta(person) {
 
 function TeamModal({ team, currentProfile, currentMembership, members, busy, onTeamPhoto, onAvatar, onPerson, onClose }) {
   const players = members.filter(row => row.member_role === 'player')
-  const staff = members.filter(row => row.member_role === 'coach' || row.member_role === 'staff')
+  const coachOrder={head_coach:0,assistant_coach:1,pitching_trainer:2,catching_trainer:3}
+  const coaches = members.filter(row => row.member_role === 'coach').sort((a,b)=>(coachOrder[a.team_function]??10)-(coachOrder[b.team_function]??10)||personName(a.person).localeCompare(personName(b.person),'nl'))
+  const staff = members.filter(row => row.member_role === 'staff').sort((a,b)=>personName(a.person).localeCompare(personName(b.person),'nl'))
   const canEditTeamPhoto = currentProfile?.role === 'admin' || currentMembership?.member_role === 'coach'
   return <div className="modal-backdrop" onMouseDown={e => { if (e.target===e.currentTarget) onClose() }}>
     <section className="team-modal" role="dialog" aria-modal="true" aria-label={team.name}>
@@ -2231,15 +2250,16 @@ function TeamModal({ team, currentProfile, currentMembership, members, busy, onT
       </header>
       <div className="team-modal-body">
         <div className="team-modal-title"><p className="eyebrow orange">{capitalize(team.sport)}</p><h2>{team.name}</h2></div>
-        <TeamPeopleSection title="Teamstaf" rows={staff} admin={currentProfile?.role==='admin'} busy={busy} onAvatar={onAvatar} />
-        <TeamPeopleSection title="Spelers" rows={players} admin={currentProfile?.role==='admin'} busy={busy} onAvatar={onAvatar} onPerson={onPerson} canOpenPerson={person => currentProfile?.role==='admin' || currentMembership?.member_role==='coach' || currentProfile?.id===person?.id} />
+        <TeamPeopleSection title="Coaches" rows={coaches} admin={currentProfile?.role==='admin'} busy={busy} onAvatar={onAvatar} />
+        <TeamPeopleSection title="Speelsters" rows={players} admin={currentProfile?.role==='admin'} busy={busy} onAvatar={onAvatar} onPerson={onPerson} canOpenPerson={person => currentProfile?.role==='admin' || currentMembership?.member_role==='coach' || currentProfile?.id===person?.id} />
+        <TeamPeopleSection title="Staff" rows={staff} admin={currentProfile?.role==='admin'} busy={busy} onAvatar={onAvatar} />
       </div>
     </section>
   </div>
 }
 
 function TeamPeopleSection({ title, rows, admin, busy, onAvatar, onPerson, canOpenPerson }) {
-  const displayRows = title === 'Spelers' ? [...rows].sort((a,b) => {
+  const displayRows = title === 'Speelsters' ? [...rows].sort((a,b) => {
     const an = Number.parseInt(a.person?.jersey_number,10)
     const bn = Number.parseInt(b.person?.jersey_number,10)
     const av = Number.isFinite(an) ? an : Number.MAX_SAFE_INTEGER
@@ -2250,7 +2270,7 @@ function TeamPeopleSection({ title, rows, admin, busy, onAvatar, onPerson, canOp
     {displayRows.length ? <div className={`team-people-grid ${displayRows.length % 2 === 1 ? 'odd-count' : ''}`}>{displayRows.map(row => { const openable=onPerson && canOpenPerson?.(row.person); return <article className={`team-person ${openable?'profile-openable':''}`} key={row.id} onClick={()=>openable&&onPerson(row.person)} role={openable?'button':undefined} tabIndex={openable?0:undefined} onKeyDown={e=>{if(openable&&(e.key==='Enter'||e.key===' ')){e.preventDefault();onPerson(row.person)}}}>
       <div className="team-person-avatar-wrap"><ProfileAvatar person={row.person} size="large" />{admin && <label className="avatar-admin-edit" title="Profielfoto aanpassen" onClick={e=>e.stopPropagation()}><Icon name="edit" /><input type="file" accept="image/*" disabled={busy} onChange={e => { const file=e.target.files?.[0]; if(file) onAvatar(row.person,file); e.target.value='' }} /></label>}</div>
       <strong>{row.member_role==='player' ? teamDisplayName(row.person) : personName(row.person)}</strong>
-      <small>{row.member_role==='player' ? teamPlayerMeta(row.person) : translateRole(row.member_role)}</small>
+      <small>{row.member_role==='player' ? teamPlayerMeta(row.person) : staffRoleLabel(row.team_function || (row.member_role==='coach'?'head_coach':'team_manager'))}</small>
       {openable && <span className="profile-open-hint">Bekijk profiel</span>}
     </article>})}</div> : <div className="admin-empty">Nog geen {title.toLowerCase()} gekoppeld.</div>}
   </section>
@@ -3065,7 +3085,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
         <SettingsRow icon="lock" title="Wachtwoord" subtitle="Wachtwoord wijzigen via resetmail" onClick={() => setSettingsView('password')} />
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.1.13" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.1.16" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -3103,7 +3123,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 3.1.13</h3>
+        <h3>Versie 3.1.16</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS agenda</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>
