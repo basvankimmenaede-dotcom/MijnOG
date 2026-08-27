@@ -2260,6 +2260,9 @@ function AdminPanel({ session, onMessage, onChanged }) {
   const [directoryFeedback, setDirectoryFeedback] = useState('')
   const [editingDirectoryMember, setEditingDirectoryMember] = useState(null)
   const [directoryForm, setDirectoryForm] = useState({first_name:'',last_name:'',jersey_number:'',primary_position:'',secondary_positions:'',date_of_birth:'',username:'',email:''})
+  const [passwordPerson, setPasswordPerson] = useState(null)
+  const [passwordForm, setPasswordForm] = useState({password:'',confirm:''})
+  const [passwordFeedback, setPasswordFeedback] = useState('')
 
   useEffect(() => {
     if (open) loadAdminData()
@@ -2382,6 +2385,27 @@ function AdminPanel({ session, onMessage, onChanged }) {
       if(!response.ok)throw new Error(payload.error||'Resetmail versturen mislukt.')
       setDirectoryFeedback(`Resetmail verstuurd naar ${payload.email} ✓`)
     } catch(error) { setDirectoryFeedback(error.message) }
+    setBusy(false)
+  }
+
+  function openPasswordEditor(person){
+    setPasswordPerson(person);setPasswordForm({password:'',confirm:''});setPasswordFeedback('')
+  }
+
+  async function changeMemberPassword(e){
+    e.preventDefault();if(!passwordPerson)return
+    setPasswordFeedback('')
+    if(passwordForm.password.length<8)return setPasswordFeedback('Gebruik minimaal 8 tekens.')
+    if(passwordForm.password!==passwordForm.confirm)return setPasswordFeedback('De wachtwoorden zijn niet gelijk.')
+    setBusy(true)
+    try{
+      const response=await fetch('/api/admin/change-password',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${session.access_token}`},body:JSON.stringify({profile_id:passwordPerson.id,password:passwordForm.password})})
+      const payload=await response.json()
+      if(!response.ok)throw new Error(payload.error||'Wachtwoord wijzigen mislukt.')
+      const changedName=personName(passwordPerson)
+      setPasswordPerson(null);setPasswordForm({password:'',confirm:''})
+      setDirectoryFeedback(`Wachtwoord van ${changedName} gewijzigd ✓`)
+    }catch(error){setPasswordFeedback(error.message)}
     setBusy(false)
   }
 
@@ -2787,7 +2811,7 @@ function AdminPanel({ session, onMessage, onChanged }) {
                       {visibleDirectoryMembers.map(person=>{const age=memberAge(person.date_of_birth);const positions=[person.primary_position,...(person.secondary_positions||[])].filter(Boolean).join(', ');return <article className="directory-member-card" key={person.id}>
                         <div className="directory-member-head"><span className="member-avatar">{initials(person)}</span><div><strong>{personName(person)}</strong><small>{age!=null?`${age} jaar`:'Leeftijd niet ingevuld'}{person.jersey_number?` · #${person.jersey_number}`:''}</small></div></div>
                         <dl className="directory-member-data"><div><dt>Posities</dt><dd>{positions||'Niet ingevuld'}</dd></div><div><dt>Gebruikersnaam</dt><dd>{person.username?`@${person.username}`:'Niet ingesteld'}</dd></div><div className="directory-email"><dt>E-mailadres</dt><dd>{person.email||'Geen gekoppeld account'}</dd></div></dl>
-                        <div className="directory-member-actions"><button className="mini-action" type="button" onClick={()=>openDirectoryEditor(person)}>Bewerken</button><button className="mini-action reset" type="button" disabled={busy||!person.email} onClick={()=>sendMemberReset(person)}>{person.email?'Resetmail sturen':'Geen e-mail'}</button></div>
+                        <div className="directory-member-actions"><button className="mini-action" type="button" onClick={()=>openDirectoryEditor(person)}>Bewerken</button><button className="mini-action" type="button" disabled={busy||person.is_placeholder||!person.email} onClick={()=>openPasswordEditor(person)}>{person.email&&!person.is_placeholder?'Wachtwoord wijzigen':'Geen account'}</button><button className="mini-action reset" type="button" disabled={busy||!person.email} onClick={()=>sendMemberReset(person)}>{person.email?'Resetmail sturen':'Geen e-mail'}</button></div>
                       </article>})}
                       {!visibleDirectoryMembers.length&&<div className="admin-empty">Geen leden gevonden.</div>}
                     </div>}
@@ -2867,6 +2891,13 @@ function AdminPanel({ session, onMessage, onChanged }) {
         <label>Gebruikersnaam<input value={directoryForm.username} onChange={e=>setDirectoryForm({...directoryForm,username:e.target.value.toLowerCase().replace(/\s+/g,'')})} minLength="3" maxLength="30" pattern="[a-z0-9._-]+"/></label>
         <label>E-mailadres<input type="email" value={directoryForm.email} onChange={e=>setDirectoryForm({...directoryForm,email:e.target.value})} disabled={editingDirectoryMember.is_placeholder} placeholder="naam@email.nl"/><small className="field-help">{editingDirectoryMember.is_placeholder?'Deze persoon heeft nog geen gekoppeld account. Gebruik eerst Account koppelen.':'Wijzigen past ook het inlog-e-mailadres van dit lid aan.'}</small></label>
         {directoryFeedback&&<div className="push-feedback">{directoryFeedback}</div>}<button className="primary" disabled={busy}>{busy?'Opslaan…':'Lidgegevens opslaan'}</button>
+      </form></SettingsModal>}
+      {passwordPerson&&<SettingsModal title="Wachtwoord wijzigen" onClose={()=>{setPasswordPerson(null);setPasswordForm({password:'',confirm:''});setPasswordFeedback('')}}><form className="form-stack password-admin-form" onSubmit={changeMemberPassword}>
+        <p className="settings-modal-intro">Stel een nieuw wachtwoord in voor <strong>{personName(passwordPerson)}</strong>. Het huidige wachtwoord is privé en kan ook door een beheerder niet worden bekeken.</p>
+        <label>Nieuw wachtwoord<input type="password" value={passwordForm.password} onChange={e=>setPasswordForm({...passwordForm,password:e.target.value})} autoComplete="new-password" minLength="8" maxLength="72" required/><small className="field-help">Minimaal 8 tekens.</small></label>
+        <label>Herhaal nieuw wachtwoord<input type="password" value={passwordForm.confirm} onChange={e=>setPasswordForm({...passwordForm,confirm:e.target.value})} autoComplete="new-password" minLength="8" maxLength="72" required/></label>
+        {passwordFeedback&&<div className="push-feedback" role="alert">{passwordFeedback}</div>}
+        <button className="primary" disabled={busy}>{busy?'Wijzigen…':'Nieuw wachtwoord opslaan'}</button>
       </form></SettingsModal>}
     </>
   )
@@ -2991,7 +3022,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
         <SettingsRow icon="lock" title="Wachtwoord" subtitle="Wachtwoord wijzigen via resetmail" onClick={() => setSettingsView('password')} />
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.1.7" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.1.8" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -3029,7 +3060,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 3.1.7</h3>
+        <h3>Versie 3.1.8</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS agenda</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>
