@@ -952,12 +952,23 @@ function GameHighlightModal({event,team,highlight,onClose,onSaved}){
   }
   return <SettingsModal title="Wedstrijdhighlight" onClose={onClose}><div className="form-stack"><label>Uitslag<input value={form.score_text} onChange={e=>setForm({...form,score_text:e.target.value})} placeholder="Bijv. 8 - 4"/></label><label>Titel<input value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="Sterke comeback in de 6e inning"/></label><label>Highlight<textarea rows="5" value={form.body} onChange={e=>setForm({...form,body:e.target.value})} placeholder="Schrijf een korte samenvatting van de wedstrijd…"/></label>{feedback&&<div className="push-feedback">{feedback}</div>}<button className="primary" disabled={busy} onClick={save}>{busy?'Opslaan…':'Highlight opslaan'}</button></div></SettingsModal>
 }
+function normalizeIScoreText(value){return String(value??'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'')}
+function iScorePlayerKey(row){return `${String(row?.['#']??'').trim()}|${normalizeIScoreText(row?.Name)}`}
+function iScoreInningsOuts(value){const [whole='0',part='0']=String(value??0).replace(',','.').split('.');return (Number(whole)||0)*3+Math.min(2,Number(part)||0)}
+function iScoreRows(XLSX,workbook,sheetName){
+  const sheet=workbook.Sheets[sheetName];if(!sheet)return []
+  const grid=XLSX.utils.sheet_to_json(sheet,{header:1,defval:null,raw:true})
+  const headerIndex=grid.findIndex(row=>row.some(cell=>String(cell??'').trim()==='Name')&&row.some(cell=>String(cell??'').trim()==='#'))
+  if(headerIndex<0)return []
+  const headers=grid[headerIndex].map(cell=>String(cell??'').trim())
+  return grid.slice(headerIndex+1).map(row=>Object.fromEntries(headers.map((key,index)=>[key,row[index]]))).filter(row=>row.Name&&String(row.Name).trim().toUpperCase()!=='TOTALS')
+}
 function GameStatsEntryModal({event,team,profiles=[],memberships=[],onClose,onSaved}){
   const players=memberships.filter(m=>Number(m.team_id)===Number(team?.id)&&m.member_role==='player').map(m=>profiles.find(p=>p.id===m.profile_id)).filter(Boolean).sort((a,b)=>(Number(a.jersey_number)||999)-(Number(b.jersey_number)||999))
   const [rows,setRows]=useState(()=>Object.fromEntries(players.map(p=>[p.id,{ab:'',h:'',rbi:'',bb:'',hbp:'',sf:'',tb:'',sb:''}])))
-  const [busy,setBusy]=useState(false),[feedback,setFeedback]=useState('')
+  const [mode,setMode]=useState('choose'),[busy,setBusy]=useState(false),[feedback,setFeedback]=useState(''),[importData,setImportData]=useState(null),[mapping,setMapping]=useState({})
   function change(id,k,v){setRows(cur=>({...cur,[id]:{...cur[id],[k]:v}}))}
-  async function save(){
+  async function saveManual(){
     setBusy(true);setFeedback('')
     const game_key=eventTransportKey(event), game_date=toDateInput(event.start)
     const payloads=players.filter(p=>Object.values(rows[p.id]||{}).some(v=>v!=='')).map(p=>{const r=rows[p.id];const x={profile_id:p.id,team_id:Number(team.id),game_key,game_date,opponent:event.title,source:'manual'};['ab','h','rbi','bb','hbp','sf','tb','sb'].forEach(k=>x[k]=Number(r[k]||0));return x})
@@ -965,7 +976,39 @@ function GameStatsEntryModal({event,team,profiles=[],memberships=[],onClose,onSa
     const {error}=await supabase.from('player_game_stats').upsert(payloads,{onConflict:'profile_id,game_key'})
     setBusy(false);if(error)return setFeedback(error.message);await onSaved()
   }
-  return <SettingsModal title="Wedstrijdstats invoeren" onClose={onClose}><div className="game-stats-entry"><p className="muted">Vul alleen speelsters in die hebben meegedaan. AVG en OPS worden automatisch berekend.</p>{players.map(p=><section className="game-stat-player" key={p.id}><strong>{teamDisplayName(p)}{p.jersey_number?` · #${p.jersey_number}`:''}</strong><div className="stat-entry-grid">{['ab','h','rbi','bb','hbp','sf','tb','sb'].map(k=><label key={k}>{k.toUpperCase()}<input type="number" min="0" value={rows[p.id]?.[k]||''} onChange={e=>change(p.id,k,e.target.value)}/></label>)}</div></section>)}{feedback&&<div className="push-feedback">{feedback}</div>}<button className="primary" disabled={busy} onClick={save}>{busy?'Opslaan…':'Alle stats opslaan'}</button></div></SettingsModal>
+  async function readImport(file){
+    if(!file)return
+    setBusy(true);setFeedback('')
+    try{
+      const module=await import('xlsx'),XLSX=module.default||module,workbook=XLSX.read(await file.arrayBuffer(),{type:'array'}),lower=file.name.toLowerCase(),isCsv=lower.endsWith('.csv')
+      const fileSide=isCsv?(lower.includes('visitor')?'Visitor':'Home'):null,fileKind=isCsv?(lower.includes('pitching')?'Pitching':lower.includes('fielding')?'Fielding':'Batting'):null
+      const sections={Visitor:{batting:[],pitching:[],fielding:[]},Home:{batting:[],pitching:[],fielding:[]}}
+      if(isCsv)sections[fileSide][fileKind.toLowerCase()]=iScoreRows(XLSX,workbook,workbook.SheetNames[0]);else for(const side of ['Visitor','Home'])for(const kind of ['Batting','Pitching','Fielding'])sections[side][kind.toLowerCase()]=iScoreRows(XLSX,workbook,`${side}${kind}`)
+      let title='';for(const name of workbook.SheetNames){const grid=XLSX.utils.sheet_to_json(workbook.Sheets[name],{header:1,defval:''});title=grid.flat().find(v=>String(v).startsWith('Game Stats -'))||title;if(title)break}
+      let selectedSide=fileSide||'Visitor'
+      if(!fileSide&&title){const parts=String(title).split(' - ').slice(1).join(' - ').split(/\s+at\s+/i),aliases=[team?.name,team?.foys_match_text,'Onze Gezellen'].filter(Boolean).map(normalizeIScoreText);if(parts[1]&&aliases.some(a=>normalizeIScoreText(parts[1]).includes(a)||a.includes(normalizeIScoreText(parts[1]))))selectedSide='Home'}
+      const selected=sections[selectedSide],sourcePlayers=[...selected.batting,...selected.pitching,...selected.fielding].filter((row,index,list)=>list.findIndex(x=>iScorePlayerKey(x)===iScorePlayerKey(row))===index)
+      if(!sourcePlayers.length)throw new Error('Geen speelsters gevonden. Controleer of dit een iScore-export is.')
+      const auto={};sourcePlayers.forEach(row=>{const jersey=String(row['#']??'').trim(),name=normalizeIScoreText(row.Name),jerseyMatches=players.filter(p=>String(p.jersey_number??'').trim()===jersey),nameMatches=players.filter(p=>normalizeIScoreText(`${p.first_name||''}${p.last_name||''}`)===name),match=jersey&&jerseyMatches.length===1?jerseyMatches[0]:nameMatches.length===1?nameMatches[0]:null;if(match)auto[iScorePlayerKey(row)]=match.id})
+      setImportData({fileName:file.name,title,side:selectedSide,...selected,sourcePlayers});setMapping(auto)
+    }catch(error){setFeedback(error.message||'Het bestand kon niet worden gelezen.')}
+    setBusy(false)
+  }
+  async function saveImport(){
+    const missing=importData.sourcePlayers.filter(row=>!mapping[iScorePlayerKey(row)]);if(missing.length)return setFeedback(`Koppel eerst alle speelsters (${missing.length} resterend).`)
+    setBusy(true);setFeedback('');const game_key=eventTransportKey(event),game_date=toDateInput(event.start),base={team_id:Number(team.id),game_key,game_date,opponent:event.title,source:'iscore'},n=(row,key)=>Number(row?.[key]||0)
+    const batting=importData.batting.map(row=>({...base,profile_id:mapping[iScorePlayerKey(row)],pa:n(row,'PA'),ab:n(row,'AB'),r:n(row,'R'),h:n(row,'H'),singles:n(row,'1B'),doubles:n(row,'2B'),triples:n(row,'3B'),hr:n(row,'HR'),rbi:n(row,'RBI'),bb:n(row,'BB'),so:n(row,'SO'),hbp:n(row,'HBP'),sb:n(row,'SB'),cs:n(row,'CS'),sf:n(row,'SF'),sac:n(row,'SAC'),tb:n(row,'TB')||n(row,'1B')+2*n(row,'2B')+3*n(row,'3B')+4*n(row,'HR')}))
+    const pitching=importData.pitching.map(row=>({...base,profile_id:mapping[iScorePlayerKey(row)],innings_outs:iScoreInningsOuts(row.IP),batters_faced:n(row,'BF'),pitches:n(row,'PIT'),strikes:n(row,'Str'),balls:n(row,'Ball'),first_pitch_strikes:n(row,'FPS'),h:n(row,'H'),r:n(row,'R'),er:n(row,'ER'),bb:n(row,'BB'),hbp:n(row,'HB'),k:n(row,'K'),wp:n(row,'WP'),hr:n(row,'HR')}))
+    let error=null;if(batting.length)({error}=await supabase.from('player_game_stats').upsert(batting,{onConflict:'profile_id,game_key'}));if(!error&&pitching.length)({error}=await supabase.from('player_pitching_stats').upsert(pitching,{onConflict:'profile_id,game_key'}))
+    if(!error){const {data:{user}}=await supabase.auth.getUser();({error}=await supabase.from('iscore_game_imports').upsert({game_key,team_id:Number(team.id),file_name:importData.fileName,game_title:importData.title||event.title,team_side:importData.side.toLowerCase(),batting:importData.batting,pitching:importData.pitching,fielding:importData.fielding,imported_by:user?.id},{onConflict:'game_key,team_id'}))}
+    setBusy(false);if(error)return setFeedback(error.message);await onSaved()
+  }
+  return <SettingsModal title="Wedstrijdstats invoeren" onClose={onClose}><div className="game-stats-entry">
+    {mode==='choose'&&<div className="stats-entry-choice"><p className="muted">Kies hoe je de wedstrijdgegevens wilt toevoegen.</p><button onClick={()=>setMode('import')}><span>⇧</span><span><strong>iScore-bestand importeren</strong><small>Excel (.xls/.xlsx) of losse CSV-export</small></span><b>›</b></button><button onClick={()=>setMode('manual')}><span>✎</span><span><strong>Handmatig invoeren</strong><small>Voer de belangrijkste slagstatistieken per speelster in</small></span><b>›</b></button></div>}
+    {mode==='manual'&&<><button className="text-button stats-back" onClick={()=>setMode('choose')}>← Terug</button><p className="muted">Vul alleen speelsters in die hebben meegedaan. AVG en OPS worden automatisch berekend.</p>{players.map(p=><section className="game-stat-player" key={p.id}><strong>{teamDisplayName(p)}{p.jersey_number?` · #${p.jersey_number}`:''}</strong><div className="stat-entry-grid">{['ab','h','rbi','bb','hbp','sf','tb','sb'].map(k=><label key={k}>{k.toUpperCase()}<input type="number" min="0" value={rows[p.id]?.[k]||''} onChange={e=>change(p.id,k,e.target.value)}/></label>)}</div></section>)}<button className="primary" disabled={busy} onClick={saveManual}>{busy?'Opslaan…':'Alle stats opslaan'}</button></>}
+    {mode==='import'&&<><button className="text-button stats-back" onClick={()=>{setMode('choose');setImportData(null);setFeedback('')}}>← Terug</button>{!importData?<label className="iscore-upload"><strong>{busy?'Bestand uitlezen…':'Kies een iScore-export'}</strong><span>.xls, .xlsx of .csv</span><input type="file" accept=".xls,.xlsx,.csv" disabled={busy} onChange={e=>readImport(e.target.files?.[0])}/></label>:<div className="iscore-preview"><div className="iscore-summary"><span>{importData.photo?'Concept uit foto':'Bestand gecontroleerd'}</span><strong>{importData.fileName}</strong><small>{importData.photo?`Herkenning: ${importData.confidence||'onbekend'} · `:`${importData.side==='Home'?'Thuisteam':'Uitteam'} · `}{importData.batting.length} slagregels · {importData.pitching.length} pitchingregels</small></div>{importData.warnings?.length>0&&<div className="iscore-warnings"><strong>Extra controleren</strong>{importData.warnings.map((warning,index)=><p key={index}>{warning}</p>)}</div>}<h3>Controleer de spelers en waarden</h3><p className="muted">Pas onjuist herkende gegevens aan. Er wordt pas iets opgeslagen na je bevestiging.</p>{importData.sourcePlayers.map(row=><div className="iscore-player-review" key={iScorePlayerKey(row)}><label className="iscore-player-map"><span><strong>{row.Name}</strong><small>{row['#']?`Rugnummer #${row['#']}`:'Geen rugnummer herkend'}</small></span><select value={mapping[iScorePlayerKey(row)]||''} onChange={e=>setMapping(cur=>({...cur,[iScorePlayerKey(row)]:e.target.value}))}><option value="">Kies speelster…</option>{players.map(p=><option key={p.id} value={p.id}>{p.jersey_number?`#${p.jersey_number} · `:''}{teamDisplayName(p)}</option>)}</select></label><div className="iscore-values">{Object.entries(row).filter(([key])=>!['#','Name'].includes(key)).slice(0,18).map(([key,value])=><label key={key}>{key}<input type="number" min="0" value={value??0} onChange={e=>setImportData(cur=>{const update=list=>list.map(item=>iScorePlayerKey(item)===iScorePlayerKey(row)?{...item,[key]:e.target.value}:item);return {...cur,batting:update(cur.batting),pitching:update(cur.pitching),fielding:update(cur.fielding),sourcePlayers:update(cur.sourcePlayers)}})}/></label>)}</div></div>)}<button className="primary" disabled={busy} onClick={saveImport}>{busy?'Toevoegen…':'Bevestigen en toevoegen'}</button></div>}</>}
+    {feedback&&<div className="push-feedback">{feedback}</div>}
+  </div></SettingsModal>
 }
 
 function EventAudience({ event, compact=false }) {
@@ -3022,7 +3065,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
         <SettingsRow icon="lock" title="Wachtwoord" subtitle="Wachtwoord wijzigen via resetmail" onClick={() => setSettingsView('password')} />
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.1.12" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.1.13" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -3060,7 +3103,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 3.1.12</h3>
+        <h3>Versie 3.1.13</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS agenda</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>
