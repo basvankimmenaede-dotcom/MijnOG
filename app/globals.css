@@ -2741,3 +2741,74 @@ button.swing-primary { width: 100%; margin-top: 12px; border: 0; background: var
 .jersey-override-row>span{display:flex;flex-direction:column;gap:2px;min-width:0}.jersey-override-row>span strong{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.jersey-override-row>span small{font-size:10px;color:#777}
 .jersey-override-row>div{display:flex;align-items:center;gap:5px}.jersey-override-row>div>span{font-weight:800;color:#777}.jersey-override-row input{width:100%;min-width:0;height:40px;border:1px solid #d8d8d8;border-radius:9px;padding:0 9px;font-size:16px;font-weight:800;text-align:center;background:#fff}
 @media(max-width:420px){.jersey-override-row{grid-template-columns:minmax(0,1fr) 82px;padding:8px}.jersey-override-panel{padding:10px}}
+
+/* v3.1.10 - professionele stats- en vervoerlayout */
+.stats-growth-page{gap:18px}
+.stats-growth-hero{grid-template-columns:minmax(0,1fr) 240px;gap:16px}
+.stats-growth-person,.stats-attendance-summary{min-height:132px;padding:20px;border-radius:18px}
+.stats-growth-person{gap:18px}
+.stats-growth-person h2{font-size:24px;line-height:1.05;margin:0 0 6px}
+.stats-growth-person p{font-size:14px;line-height:1.4}
+.stats-attendance-summary>span{font-size:13px;color:#262422}
+.stats-attendance-summary>strong{font-size:32px;margin:8px 0 5px}
+.stats-attendance-summary>small{font-size:12px}
+.stats-tabs-static{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0}
+.stats-tabs-static button{width:100%;text-align:center;padding:13px 8px;font-size:14px}
+.stats-section{padding:20px;border-radius:18px}
+.stats-section-heading{margin-bottom:16px;align-items:center}
+.stats-section-heading h3{font-size:19px}
+.stats-section-heading p{font-size:12px}
+.stats-empty-state{min-height:92px;display:grid;place-items:center;border:1px dashed #ddd6cf;border-radius:14px;background:#faf9f7;color:var(--muted,#77736f);font-size:13px;font-weight:700}
+.stats-game-grid{gap:12px}
+.stats-game-card{grid-template-rows:22px 40px 25px 44px 24px;padding:16px;background:#fff;border-color:#e7e2dd;border-radius:14px}
+.stats-game-card>span{font-size:12px}
+.stats-game-card>strong{font-size:27px}
+.stats-game-card>small,.stats-game-card>em{font-size:10px}
+.stats-game-card>em{color:#5e6962;font-weight:700}
+.stats-sparkline-empty{height:44px;margin:0;color:#c5bdb6;font-size:18px}
+.stats-development-card{min-height:150px;padding:18px;background:#fff;border-color:#e7e2dd;border-radius:14px}
+.stats-development-card>span{font-size:13px}
+.stats-development-card>strong{font-size:27px;margin:10px 0 6px}
+.stats-focus-card,.stats-growth-message{display:none}
+
+.transport-modal{width:min(680px,100%);border-radius:18px}
+.transport-modal .detail-modal-header{padding:20px 22px}
+.transport-modal .detail-modal-header h2{font-size:25px;line-height:1.1}
+.transport-modal-body{padding:0 22px 24px}
+.location-travel-card{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;padding:16px 18px;border-radius:12px;background:#faf9f7}
+.location-travel-card>a{min-width:82px;text-align:center}
+.transport-alert{gap:4px;padding:14px 16px;margin:14px 0;border-radius:12px}
+.transport-alert strong{font-family:inherit;font-size:16px;letter-spacing:0;text-transform:none}
+.transport-alert span{font-size:12px;color:inherit;opacity:.9}
+.transport-choice{gap:10px;margin:18px 0}
+.transport-choice h3{font-family:inherit;font-size:14px;margin:0 0 2px}
+.transport-choice button{display:flex;align-items:center;justify-content:center;gap:7px;min-height:50px;padding:10px 12px;font-size:13px}
+.transport-choice .icon{margin:0}
+.driver-form{grid-template-columns:180px minmax(0,1fr);align-items:end;gap:14px;padding:18px;border:1px solid #ebe7e2;border-radius:12px;background:#faf9f7}
+.driver-form label{gap:7px;font-size:12px}
+.driver-form .primary{grid-column:1/-1;min-height:48px}
+.seat-stepper{grid-template-columns:44px 54px 44px;border-radius:10px}
+.transport-people{margin-top:22px;gap:14px}
+.transport-people>div{display:grid;grid-template-columns:140px minmax(0,1fr);gap:8px 14px;padding-top:14px}
+.transport-people h3{font-size:13px;margin:0;grid-row:1/span 20}
+.transport-people p{font-size:12px;margin:0}
+
+@media(max-width:760px){
+  .stats-growth-hero{grid-template-columns:1fr}
+  .stats-growth-person,.stats-attendance-summary{min-height:0}
+  .stats-game-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .stats-game-card:last-child{grid-column:1/-1}
+}
+@media(max-width:640px){
+  .stats-growth-person{padding:16px}
+  .stats-growth-person h2{font-size:21px}
+  .stats-section{padding:16px}
+  .stats-tabs-static button{font-size:12px;padding-inline:4px}
+  .location-travel-card{grid-template-columns:1fr}
+  .location-travel-card>a{width:100%}
+  .transport-choice{grid-template-columns:1fr}
+  .driver-form{grid-template-columns:1fr}
+  .driver-form .primary{grid-column:1}
+  .transport-people>div{grid-template-columns:1fr}
+  .transport-people h3{grid-row:auto}
+}

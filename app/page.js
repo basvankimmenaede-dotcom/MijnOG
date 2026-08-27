@@ -1796,7 +1796,7 @@ function NominatePlayersModal({ session, request, team, profiles, memberships, o
 
 function StatsSparkline({ values = [], lowerIsBetter = false }) {
   const clean=values.map(Number).filter(Number.isFinite)
-  if(clean.length<2) return <div className="stats-sparkline-empty">Nog te weinig data voor een trend</div>
+  if(clean.length<2) return <div className="stats-sparkline-empty" aria-label="Nog geen trend">—</div>
   const w=180,h=46,p=4,min=Math.min(...clean),max=Math.max(...clean),range=max-min||1
   const pts=clean.map((v,idx)=>{
     const x=p+(idx/(clean.length-1))*(w-p*2)
@@ -1831,11 +1831,7 @@ function Stats({ profile, teams = [], attendance = [], gameAttendance = [], trai
   const exitLatest=exitSeries.at(-1), home1Latest=home1Series.at(-1)
   const exitBest=exitSeries.length?Math.max(...exitSeries.map(r=>Number(r.value))):null
   const home1Best=home1Series.length?Math.min(...home1Series.map(r=>Number(r.value))):null
-  const trendText=(current,recent,label)=>{
-    if(current==null||recent==null) return 'Nog te weinig data'
-    if(label==='AVG'||label==='OPS') return `Laatste 5: ${recent==='—'||recent==null?'—':recent}`
-    return `Laatste 5: ${recent}`
-  }
+  const trendText=(recent,label)=>(label==='AVG'||label==='OPS')?`Laatste 5 · ${recent}`:`Laatste 5 · ${recent}`
   const gameCards=[
     {label:'AVG',value:fmtRate(season.avg),context:`${season.ab||0} AB`,recent:fmtRate(last5.avg),series:rolling.map(r=>r.avg).filter(v=>v!=null)},
     {label:'OPS',value:fmtRate(season.ops),context:`${(season.ab||0)+(season.bb||0)+(season.hbp||0)+(season.sf||0)} PA`,recent:fmtRate(last5.ops),series:rolling.map(r=>r.ops).filter(v=>v!=null)},
@@ -1847,44 +1843,42 @@ function Stats({ profile, teams = [], attendance = [], gameAttendance = [], trai
   return <section className="stats-page stats-growth-page">
     <ScreenHeader title="Mijn stats" />
     <div className="stats-growth-hero">
-      <div className="stats-growth-person"><ProfileAvatar person={profile} size="profile"/><div><h2>{personName(profile)}</h2><p>{team?.name || 'Mijn OG'}{profile?.primary_position?` · ${profile.primary_position}`:''}{profile?.jersey_number?` · #${profile.jersey_number}`:''}</p><span>Focus op je eigen ontwikkeling</span></div></div>
-      <div className="stats-attendance-summary"><span>Aanwezigheid</span><strong>{att.percentage==null?'—':`${att.percentage}%`}</strong><small>{att.total?`${att.attended} / ${att.total} sessies`:'Nog geen registraties'}</small><div className="stats-attendance-bar"><i style={{width:`${att.percentage||0}%`}}/></div></div>
+      <div className="stats-growth-person"><ProfileAvatar person={profile} size="profile"/><div><h2>{personName(profile)}</h2><p>{team?.name || 'Mijn OG'}{profile?.primary_position?` · ${profile.primary_position}`:''}{profile?.jersey_number?` · #${profile.jersey_number}`:''}</p></div></div>
+      <div className="stats-attendance-summary"><span>Aanwezigheid</span><strong>{att.percentage==null?'—':`${att.percentage}%`}</strong><small>{att.total?`${att.attended} van ${att.total} activiteiten`:'Nog geen gegevens'}</small><div className="stats-attendance-bar"><i style={{width:`${att.percentage||0}%`}}/></div></div>
     </div>
 
     <div className="stats-tabs-static"><button className={statsView==='overview'?'active':''} onClick={()=>setStatsView('overview')}>Overzicht</button><button className={statsView==='games'?'active':''} onClick={()=>setStatsView('games')}>Wedstrijden</button><button className={statsView==='trends'?'active':''} onClick={()=>setStatsView('trends')}>Trends</button></div>
 
     {statsView==='overview' && <>
       <section className="stats-section">
-        <div className="stats-section-heading"><div><h3>Wedstrijdprestaties</h3><p>{season.ab?`Gebaseerd op ${season.ab} AB`:'Nog geen wedstrijdstats'}</p></div></div>
-        <div className="stats-game-grid">{gameCards.map(card=><article className="stats-game-card" key={card.label}><span>{card.label}</span><strong>{card.value}</strong><small>{card.context}</small><StatsSparkline values={card.series}/><em>{trendText(card.value,card.recent,card.label)}</em></article>)}</div>
-        <div className="stats-growth-message">Kleine stappen tellen. Vergelijk jezelf vooral met je eigen eerdere prestaties.</div>
+        <div className="stats-section-heading"><div><h3>Wedstrijdstatistieken</h3>{ownGames.length>0&&<p>{ownGames.length} geregistreerde wedstrijd{ownGames.length===1?'':'en'}</p>}</div></div>
+        {ownGames.length?<div className="stats-game-grid">{gameCards.map(card=><article className="stats-game-card" key={card.label}><span>{card.label}</span><strong>{card.value}</strong><small>{card.context}</small><StatsSparkline values={card.series}/><em>{trendText(card.recent,card.label)}</em></article>)}</div>:<div className="stats-empty-state">Nog geen wedstrijdgegevens</div>}
       </section>
       <section className="stats-section">
-        <div className="stats-section-heading"><div><h3>Ontwikkeling</h3><p>Metingen door de tijd</p></div></div>
-        <div className="stats-development-grid">
+        <div className="stats-section-heading"><div><h3>Metingen</h3>{ownMeasurements.length>0&&<p>Ontwikkeling over tijd</p>}</div></div>
+        {ownMeasurements.length?<div className="stats-development-grid">
           <article className="stats-development-card"><span>Exit velocity</span><strong>{exitLatest?`${Number(exitLatest.value).toFixed(0)} km/u`:'—'}</strong><small>{exitBest!=null?`Beste: ${exitBest.toFixed(0)} km/u`:'Nog geen metingen'}</small><StatsSparkline values={exitSeries.map(r=>r.value)}/></article>
           <article className="stats-development-card"><span>Home → 1</span><strong>{home1Latest?`${Number(home1Latest.value).toFixed(2).replace('.',',')} sec`:'—'}</strong><small>{home1Best!=null?`Beste: ${home1Best.toFixed(2).replace('.',',')} sec`:'Nog geen metingen'}</small><StatsSparkline values={home1Series.map(r=>r.value)}/></article>
-        </div>
+        </div>:<div className="stats-empty-state">Nog geen metingen</div>}
       </section>
     </>}
 
     {statsView==='games' && <section className="stats-section">
       <div className="stats-section-heading"><div><h3>Mijn wedstrijden</h3><p>Alle geregistreerde wedstrijdstats</p></div></div>
-      {ownGames.length?<div className="stats-game-history">{[...ownGames].reverse().map(row=><article key={row.id||row.game_key}><div className="stats-game-history-head"><span>{new Date(row.game_date).toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'})}</span><strong>{row.opponent||'Wedstrijd'}</strong></div><div className="stats-game-history-values"><span><b>{Number(row.ab||0)}</b> AB</span><span><b>{Number(row.h||0)}</b> H</span><span><b>{Number(row.rbi||0)}</b> RBI</span><span><b>{Number(row.sb||0)}</b> SB</span><span><b>{statRate(Number(row.ab)?Number(row.h||0)/Number(row.ab):null)}</b> AVG</span></div></article>)}</div>:<p className="muted">Nog geen wedstrijdstats ingevoerd.</p>}
+      {ownGames.length?<div className="stats-game-history">{[...ownGames].reverse().map(row=><article key={row.id||row.game_key}><div className="stats-game-history-head"><span>{new Date(row.game_date).toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'})}</span><strong>{row.opponent||'Wedstrijd'}</strong></div><div className="stats-game-history-values"><span><b>{Number(row.ab||0)}</b> AB</span><span><b>{Number(row.h||0)}</b> H</span><span><b>{Number(row.rbi||0)}</b> RBI</span><span><b>{Number(row.sb||0)}</b> SB</span><span><b>{statRate(Number(row.ab)?Number(row.h||0)/Number(row.ab):null)}</b> AVG</span></div></article>)}</div>:<div className="stats-empty-state">Nog geen wedstrijdgegevens</div>}
     </section>}
 
     {statsView==='trends' && <>
       <section className="stats-section">
         <div className="stats-section-heading"><div><h3>Slagontwikkeling</h3><p>Seizoenslijn op basis van je wedstrijden</p></div></div>
-        <div className="stats-trend-grid"><article><span>AVG</span><strong>{fmtRate(season.avg)}</strong><StatsSparkline values={rolling.map(r=>r.avg).filter(v=>v!=null)}/><small>Laatste 5: {fmtRate(last5.avg)}</small></article><article><span>OPS</span><strong>{fmtRate(season.ops)}</strong><StatsSparkline values={rolling.map(r=>r.ops).filter(v=>v!=null)}/><small>Laatste 5: {fmtRate(last5.ops)}</small></article></div>
+        {ownGames.length?<div className="stats-trend-grid"><article><span>AVG</span><strong>{fmtRate(season.avg)}</strong><StatsSparkline values={rolling.map(r=>r.avg).filter(v=>v!=null)}/><small>Laatste 5 · {fmtRate(last5.avg)}</small></article><article><span>OPS</span><strong>{fmtRate(season.ops)}</strong><StatsSparkline values={rolling.map(r=>r.ops).filter(v=>v!=null)}/><small>Laatste 5 · {fmtRate(last5.ops)}</small></article></div>:<div className="stats-empty-state">Nog geen wedstrijdgegevens</div>}
       </section>
       <section className="stats-section">
         <div className="stats-section-heading"><div><h3>Fysieke ontwikkeling</h3><p>Vergelijk je metingen met jezelf</p></div></div>
-        <div className="stats-development-grid"><article className="stats-development-card"><span>Exit velocity</span><strong>{exitLatest?`${Number(exitLatest.value).toFixed(0)} km/u`:'—'}</strong><StatsSparkline values={exitSeries.map(r=>r.value)}/>{exitSeries.length>1&&<em>Verschil sinds eerste meting: {Number(exitLatest.value)-Number(exitSeries[0].value)>=0?'+':''}{(Number(exitLatest.value)-Number(exitSeries[0].value)).toFixed(0)} km/u</em>}</article><article className="stats-development-card"><span>Home → 1</span><strong>{home1Latest?`${Number(home1Latest.value).toFixed(2).replace('.',',')} sec`:'—'}</strong><StatsSparkline values={home1Series.map(r=>r.value)}/>{home1Series.length>1&&<em>Verschil sinds eerste meting: {(Number(home1Latest.value)-Number(home1Series[0].value)).toFixed(2).replace('.',',')} sec</em>}</article></div>
+        {ownMeasurements.length?<div className="stats-development-grid"><article className="stats-development-card"><span>Exit velocity</span><strong>{exitLatest?`${Number(exitLatest.value).toFixed(0)} km/u`:'—'}</strong><StatsSparkline values={exitSeries.map(r=>r.value)}/>{exitSeries.length>1&&<em>Verschil sinds eerste meting: {Number(exitLatest.value)-Number(exitSeries[0].value)>=0?'+':''}{(Number(exitLatest.value)-Number(exitSeries[0].value)).toFixed(0)} km/u</em>}</article><article className="stats-development-card"><span>Home → 1</span><strong>{home1Latest?`${Number(home1Latest.value).toFixed(2).replace('.',',')} sec`:'—'}</strong><StatsSparkline values={home1Series.map(r=>r.value)}/>{home1Series.length>1&&<em>Verschil sinds eerste meting: {(Number(home1Latest.value)-Number(home1Series[0].value)).toFixed(2).replace('.',',')} sec</em>}</article></div>:<div className="stats-empty-state">Nog geen metingen</div>}
       </section>
     </>}
 
-    <div className="stats-focus-card"><strong>Focus op jouw groei</strong><p>Geen rankings en geen rode beoordelingen. Elke training en wedstrijd levert informatie op waarmee je jezelf kunt verbeteren.</p></div>
   </section>
 }
 function attendanceStatsForPerson(personId, team, attendance = [], gameAttendance = [], trainingEvents = [], calendarEvents = []) {
@@ -3028,7 +3022,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
         <SettingsRow icon="lock" title="Wachtwoord" subtitle="Wachtwoord wijzigen via resetmail" onClick={() => setSettingsView('password')} />
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.1.9" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.1.10" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -3066,7 +3060,7 @@ function More({ session, profile, teams, calendar, attendance = [], gameAttendan
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 3.1.9</h3>
+        <h3>Versie 3.1.10</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS agenda</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>
@@ -3308,7 +3302,7 @@ function googleMapsRouteUrl(location, fallbackDestination='') {
 
 function LocationTravelCard({ location, fallbackDestination }) {
   if (!location && !fallbackDestination) return null
-  return <div className="location-travel-card"><div><Icon name="pin"/><span><strong>{location?.name || 'Locatie'}</strong><small>{location?.address || fallbackDestination}</small>{location?.travel_minutes != null && <small>± {formatTravelMinutes(location.travel_minutes)} vanaf Onze Gezellen</small>}</span></div><a className="mini-action" href={googleMapsRouteUrl(location, fallbackDestination)} target="_blank" rel="noreferrer">Open in Google Maps</a></div>
+  return <div className="location-travel-card"><div><Icon name="pin"/><span><strong>{location?.name || 'Locatie'}</strong><small>{location?.address || fallbackDestination}</small>{location?.travel_minutes != null && <small>± {formatTravelMinutes(location.travel_minutes)} vanaf Onze Gezellen</small>}</span></div><a className="mini-action" href={googleMapsRouteUrl(location, fallbackDestination)} target="_blank" rel="noreferrer">Route</a></div>
 }
 
 function inferTransportTeam(event, teams = []) {
@@ -3381,7 +3375,8 @@ function TransportModal({ event, profile, teams, profiles, memberships, transpor
     if (!error) { setMode(nextMode); await onChanged?.() }
   }
 
-  return <div className="transport-modal-layer" onMouseDown={e => { if(e.target===e.currentTarget) onClose() }}><section className="transport-modal" role="dialog" aria-modal="true"><header className="detail-modal-header"><div><p className="eyebrow orange">VERVOER</p><h2>{event.title}</h2></div><button className="sheet-icon-button" onClick={onClose}><Icon name="close"/></button></header><div className="transport-modal-body">{event.location && <LocationTravelCard location={null} fallbackDestination={event.location}/>} {setupError ? <div className="transport-alert shortage"><strong>{setupError}</strong></div> : !config ? <div className="admin-empty spacious">Vervoersoverzicht laden…</div> : <><div className={`transport-alert ${summary.shortage > 0 ? 'shortage' : 'ok'}`}>{summary.shortage > 0 ? <><strong>NOG {summary.shortage} PLEKKEN NODIG</strong><span>{summary.passengers} personen willen meerijden · {summary.seats} plekken beschikbaar</span></> : <><strong>{summary.passengers || summary.seats ? 'VERVOER GEREGELD' : 'VERVOER NOG OPEN'}</strong><span>{summary.passengers} meerijders · {summary.seats} plekken beschikbaar{summary.surplus > 0 ? ` · ${summary.surplus} plekken over` : ''}</span></>}</div><div className="transport-choice"><h3>Wat doe jij?</h3><button className={mode==='driver'?'active':''} onClick={() => setMode('driver')}><Icon name="car"/> Ik rijd</button><button className={mode==='passenger'?'active':''} onClick={() => saveResponse('passenger')}>Ik rijd mee</button><button className={mode==='self'?'active':''} onClick={() => saveResponse('self')}>Eigen vervoer</button></div>{mode==='driver' && <div className="driver-form"><label>Beschikbare passagiersplekken<div className="seat-stepper"><button type="button" onClick={() => setSeats(Math.max(0,Number(seats)-1))}>−</button><strong>{seats}</strong><button type="button" onClick={() => setSeats(Math.min(20,Number(seats)+1))}>+</button></div></label><label>Opmerking (optioneel)<input value={note} onChange={e => setNote(e.target.value)} placeholder="Bijv. vertrek vanaf clubhuis" /></label><button className="primary" onClick={() => saveResponse('driver')} disabled={busy}>{busy?'Opslaan…':'Ik rijd opslaan'}</button></div>}<TransportPeopleOverview responses={eventResponses} profiles={profiles} noResponseIds={noResponseIds} showNoResponse={true}/></>}</div></section></div>
+  const hasTransportData=summary.passengers>0||summary.seats>0
+  return <div className="transport-modal-layer" onMouseDown={e => { if(e.target===e.currentTarget) onClose() }}><section className="transport-modal" role="dialog" aria-modal="true"><header className="detail-modal-header"><div><p className="eyebrow orange">VERVOER</p><h2>{event.title}</h2></div><button className="sheet-icon-button" onClick={onClose}><Icon name="close"/></button></header><div className="transport-modal-body">{event.location && <LocationTravelCard location={null} fallbackDestination={event.location}/>} {setupError ? <div className="transport-alert shortage"><strong>{setupError}</strong></div> : !config ? <div className="admin-empty spacious">Vervoer laden…</div> : <><div className={`transport-alert ${summary.shortage > 0 ? 'shortage' : 'ok'}`}><strong>{summary.shortage>0?`${summary.shortage} ${summary.shortage===1?'plaats':'plaatsen'} tekort`:hasTransportData?'Vervoer geregeld':'Nog geen aanmeldingen'}</strong><span>{summary.passengers} meerijder{summary.passengers===1?'':'s'} · {summary.seats} beschikbare {summary.seats===1?'plaats':'plaatsen'}{summary.surplus>0?` · ${summary.surplus} vrij`:''}</span></div><div className="transport-choice"><h3>Vervoerskeuze</h3><button className={mode==='driver'?'active':''} onClick={() => setMode('driver')}><Icon name="car"/> Bestuurder</button><button className={mode==='passenger'?'active':''} onClick={() => saveResponse('passenger')}>Meerijden</button><button className={mode==='self'?'active':''} onClick={() => saveResponse('self')}>Zelf rijden</button></div>{mode==='driver' && <div className="driver-form"><label>Aantal plaatsen<div className="seat-stepper"><button type="button" onClick={() => setSeats(Math.max(0,Number(seats)-1))} aria-label="Plaats minder">−</button><strong>{seats}</strong><button type="button" onClick={() => setSeats(Math.min(20,Number(seats)+1))} aria-label="Plaats meer">+</button></div></label><label>Toelichting<input value={note} onChange={e => setNote(e.target.value)} placeholder="Bijvoorbeeld vertreklocatie" /></label><button className="primary" onClick={() => saveResponse('driver')} disabled={busy}>{busy?'Opslaan…':'Opslaan'}</button></div>}<TransportPeopleOverview responses={eventResponses} profiles={profiles} noResponseIds={noResponseIds} showNoResponse={true}/></>}</div></section></div>
 }
 
 function TransportPeopleOverview({ responses, profiles, noResponseIds, showNoResponse }) {
