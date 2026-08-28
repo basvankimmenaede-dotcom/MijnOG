@@ -1873,7 +1873,7 @@ function CoachStatsModal({team,players=[],attendance=[],gameAttendance=[],traini
     <div className="attendance-total-table"><div className="attendance-total-head"><span>Speelster</span><span>Aanw.</span><span>Afgemeld</span><span>Te laat</span><span>%</span></div>{attendanceRows.map(row=><div className="attendance-total-row" key={row.person.id}><span><ProfileAvatar person={row.person} size="small"/><strong>{teamDisplayName(row.person)}</strong></span><span>{row.present}</span><span>{row.absent}</span><span>{row.late}</span><strong>{row.percentage==null?'—':`${row.percentage}%`}</strong></div>)}</div>
     <button type="button" className="secondary orange-outline attendance-detail-button" onClick={()=>setAttendanceDetailOpen(true)}>Bekijk aanwezigheid per activiteit <Icon name="chevron"/></button>
     <div className="coach-stats-player-head"><strong>Persoonlijke stats</strong><small>Tik op een speelster</small></div>
-    <div className="coach-stats-players">{rows.map(({person,stats})=><button key={person.id} onClick={()=>onPlayer(person)}><span className="coach-stats-person"><ProfileAvatar person={person} size="small"/><span><strong>{teamDisplayName(person)}</strong><small>{person.jersey_number?`#${person.jersey_number} · `:''}${String(person.primary_position||'Geen positie').replace(/^\$/,'')}</small></span></span><span className="coach-stats-mini"><strong>{statRate(stats.avg)}</strong><small>AVG</small></span><span className="coach-stats-mini"><strong>{statPercent(stats.obp)}</strong><small>OB%</small></span><span className="coach-stats-mini"><strong>{stats.attendance.percentage==null?'—':`${stats.attendance.percentage}%`}</strong><small>Aanw.</small></span><Icon name="chevron"/></button>)}</div>
+    <div className="coach-stats-players">{rows.map(({person,stats})=><button key={person.id} onClick={()=>onPlayer(person)}><span className="coach-stats-person"><ProfileAvatar person={person} size="small"/><span><strong>{teamDisplayName(person)}</strong><small>{person.jersey_number?`#${person.jersey_number} · `:''}${cleanPosition(person.primary_position) || 'Geen positie'}</small></span></span><span className="coach-stats-mini"><strong>{statRate(stats.avg)}</strong><small>AVG</small></span><span className="coach-stats-mini"><strong>{statPercent(stats.obp)}</strong><small>OB%</small></span><span className="coach-stats-mini"><strong>{stats.attendance.percentage==null?'—':`${stats.attendance.percentage}%`}</strong><small>Aanw.</small></span><Icon name="chevron"/></button>)}</div>
   </div>{attendanceDetailOpen&&<SettingsModal title="Aanwezigheid per activiteit" onClose={()=>setAttendanceDetailOpen(false)}><div className="attendance-detail-modal"><p className="settings-modal-intro">T = training · W = wedstrijd. Veeg horizontaal om eerdere activiteiten te bekijken.</p><div className="attendance-matrix-wrap"><table className="attendance-matrix"><thead><tr><th>Speelster</th>{sessions.map(event=><th key={event.uid||`${event.type}-${event.id}`} title={`${event.title} · ${formatLongDate(event.start)}`}><span>{formatShortDate(event.start)}</span><small>{event.type==='game'?'W':'T'}</small></th>)}</tr></thead><tbody>{attendanceRows.map(row=><tr key={row.person.id}><th>{teamDisplayName(row.person)}</th>{row.statuses.map((status,index)=>{const [mark,label]=statusMark(status);return <td key={`${row.person.id}-${index}`} className={`attendance-cell ${status}`} title={label}>{mark}</td>})}</tr>)}</tbody></table>{!sessions.length&&<p className="muted">Nog geen afgelopen trainingen of wedstrijden.</p>}</div></div></SettingsModal>}</SettingsModal>
 }
 function CoachStatEntryModal({mode,team,players=[],onClose,onSaved}){
@@ -2148,7 +2148,7 @@ function Stats({ profile, teams = [], competitions = [], attendance = [], gameAt
   return <section className="stats-page stats-growth-page">
     <ScreenHeader title="Mijn stats" />
     <div className="stats-growth-hero">
-      <div className="stats-growth-person"><ProfileAvatar person={profile} size="profile"/><div><h2>{personName(profile)}</h2><p>{team?.name || 'Mijn OG'}{profile?.primary_position?` · ${profile.primary_position}`:''}{profile?.jersey_number?` · #${profile.jersey_number}`:''}</p></div></div>
+      <div className="stats-growth-person"><ProfileAvatar person={profile} size="profile"/><div><h2>{personName(profile)}</h2><p>{team?.name || 'Mijn OG'}{profile?.primary_position?` · ${cleanPosition(profile.primary_position)}`:''}{profile?.jersey_number?` · #${profile.jersey_number}`:''}</p></div></div>
       <div className="stats-attendance-summary"><span>Aanwezigheid {year}</span><strong>{att.percentage==null?'—':`${att.percentage}%`}</strong><small>{att.total?`${att.attended} van ${att.total} activiteiten`:'Nog geen gegevens'}</small><div className="stats-attendance-bar"><i style={{width:`${att.percentage||0}%`}}/></div></div>
     </div>
     <div className="stats-context-filters">
@@ -2225,6 +2225,8 @@ function PlayerProfileModal({ person, team, teams = [], competitions = [], viewe
   const [profileCompetition,setProfileCompetition]=useState('total')
   const [profileGameHistoryOpen,setProfileGameHistoryOpen]=useState(false)
   const [attendanceHistoryOpen,setAttendanceHistoryOpen]=useState(false)
+  const [statDetailOpen,setStatDetailOpen]=useState(null)
+  const [coachingOpen,setCoachingOpen]=useState(null)
   const profileYear=Number(profileSeason)
   const playerSeasonGames=allPlayerGames.filter(row=>statSeasonYear(row)===profileYear)
   const profileTeamOptions=playerTeamOptions(playerSeasonGames,teams)
@@ -2248,10 +2250,10 @@ function PlayerProfileModal({ person, team, teams = [], competitions = [], viewe
     <div className="player-profile-modal">
       <div className="player-profile-hero player-profile-hero-v2">
         <div className="player-profile-avatar-wrap"><ProfileAvatar person={person} size="profile"/>{person?.jersey_number&&<span className="player-profile-number">#{person.jersey_number}</span>}</div>
-        <div className="player-profile-identity"><p className="eyebrow orange">{team?.name || 'MIJN OG'}</p><h2>{personName(person)}</h2><p className="player-profile-position">{person?.primary_position || 'Positie niet ingevuld'}{secondary.length ? ` · ${secondary.join(' / ')}` : ''}</p><p className="player-profile-subline">{person?.jersey_number ? `Rugnummer ${person.jersey_number}` : 'Geen rugnummer'}{person?.is_placeholder ? ' · Nog geen Mijn OG-account' : ''}</p></div>
+        <div className="player-profile-identity"><p className="eyebrow orange">{team?.name || 'MIJN OG'}</p><h2>{personName(person)}</h2><p className="player-profile-position">{cleanPosition(person?.primary_position) || 'Positie niet ingevuld'}{secondary.length ? ` · ${cleanPositions(secondary).join(' / ')}` : ''}</p><p className="player-profile-subline">{person?.jersey_number ? `Rugnummer ${person.jersey_number}` : 'Geen rugnummer'}{person?.is_placeholder ? ' · Nog geen Mijn OG-account' : ''}</p></div>
       </div>
       <div className="player-profile-data">
-        <div><span>Primaire positie</span><strong>{person?.primary_position || 'Niet ingevuld'}</strong></div>
+        <div><span>Primaire positie</span><strong>{cleanPosition(person?.primary_position) || 'Niet ingevuld'}</strong></div>
         <div><span>Secundair</span><strong>{secondary.length ? secondary.join(', ') : 'Niet ingevuld'}</strong></div>
         <div><span>Gooit</span><strong>{throwsLabel}</strong></div>
         <div><span>Slaat</span><strong>{batsLabel}</strong></div>
@@ -2262,7 +2264,7 @@ function PlayerProfileModal({ person, team, teams = [], competitions = [], viewe
         {canSeePlayerStats&&<div className="player-stats-context-filters"><label>Seizoen<select value={profileSeason} onChange={e=>{setProfileSeason(e.target.value);setProfileTeam('total');setProfileCompetition('total')}}>{playerYears.length?playerYears.map(y=><option key={y} value={y}>{y}</option>):<option value={profileYear}>{profileYear}</option>}</select></label><label>Team<select value={profileTeam} onChange={e=>{setProfileTeam(e.target.value);setProfileCompetition('total')}}><option value="total">Alle teams</option>{profileTeamOptions.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select></label><label>Competitie<select value={profileCompetition} onChange={e=>setProfileCompetition(e.target.value)}><option value="total">Totaal</option>{profileCompetitionOptions.map(c=><option key={c.key} value={c.key}>{c.name}</option>)}</select></label></div>}
         {canSeePlayerStats&&<button type="button" className="player-measurement-card player-game-stats-card player-game-stats-open" onClick={()=>setProfileGameHistoryOpen(true)}>
           <div className="player-measurement-card-head"><span className="player-measurement-card-icon"><Icon name="stats"/></span><div><strong>Wedstrijdstats</strong><small>{profileYear} · {profileTeam==='total'?'Alle teams / invalbeurten':profileTeamOptions.find(t=>t.id===profileTeam)?.name||'Team'} · {profileCompetition==='total'?'Totaal':profileCompetitionOptions.find(c=>c.key===profileCompetition)?.name||'Competitie'}</small></div><Icon name="chevron"/></div>
-          <div className="player-profile-stats-grid">{[['AVG',statRate(performance.avg)],['OB%',statPercent(performance.obp)],['AB',performance.ab||0],['Hits',performance.h||0],['BB',performance.bb||0],['RBI',performance.rbi==null?'—':performance.rbi],['SB',performance.sb==null?'—':performance.sb]].map(([label,value])=><div key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>
+          <div className="player-profile-stats-grid player-profile-stat-buttons">{[['AVG',statRate(performance.avg)],['OB%',statPercent(performance.obp)],['AB',performance.ab||0],['Hits',performance.h||0],['BB',performance.bb||0],['RBI',performance.rbi==null?'—':performance.rbi],['SB',performance.sb==null?'—':performance.sb]].map(([label,value])=><button type="button" key={label} onClick={e=>{e.stopPropagation();setStatDetailOpen(label)}}><span>{label}</span><strong>{value}</strong><small>Bekijk</small></button>)}</div>
         </button>}
         {canSeePlayerStats&&(isPitcher||pitching.hasData)&&<article className="player-measurement-card player-game-stats-card">
           <div className="player-measurement-card-head"><span className="player-measurement-card-icon"><Icon name="target"/></span><div><strong>Pitchingstats</strong><small>{profileYear} · {profileCompetition==='total'?'Totaal':profileCompetitionOptions.find(c=>c.key===profileCompetition)?.name||'Competitie'}</small></div></div>
@@ -2282,6 +2284,7 @@ function PlayerProfileModal({ person, team, teams = [], competitions = [], viewe
         })}
         {!cards.length&&<div className="player-cards-empty"><Icon name="stats"/><strong>Nog geen aanvullende metingen</strong><p>Nieuwe metingen worden door de coach vanuit Team stats toegevoegd.</p></div>}
       </section>
+      {canSeePlayerStats&&<section className="player-coaching-launchers"><div className="player-cards-heading"><div><p className="eyebrow orange">COACHING & ONTWIKKELING</p><h3>Mijn ontwikkeling</h3></div></div><div className="player-coaching-button-grid"><button type="button" onClick={()=>setCoachingOpen('strengths')}><Icon name="star"/><span><strong>Sterke punten</strong><small>Wat gaat goed</small></span><Icon name="chevron"/></button><button type="button" onClick={()=>setCoachingOpen('development')}><Icon name="target"/><span><strong>Ontwikkelpunten</strong><small>Maximaal 3 actief</small></span><Icon name="chevron"/></button><button type="button" onClick={()=>setCoachingOpen('mental')}><Icon name="heart"/><span><strong>Mental coaching</strong><small>Focus & mentale doelen</small></span><Icon name="chevron"/></button><button type="button" onClick={()=>setCoachingOpen('progress')}><Icon name="stats"/><span><strong>Mijn ontwikkeling</strong><small>Behaalde doelen</small></span><Icon name="chevron"/></button></div></section>}
       {canSeeAttendance && <section className="player-attendance-card player-attendance-open" role="button" tabIndex="0" onClick={()=>setAttendanceHistoryOpen(true)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' ')setAttendanceHistoryOpen(true)}}>
         <div className="player-attendance-heading"><div><p className="eyebrow orange">AANWEZIGHEID · {profileYear}</p><h3>{stats.percentage == null ? 'Nog geen percentage' : `${stats.percentage}%`}</h3></div><span className="player-attendance-open-meta">{stats.total} geregistreerde sessie{stats.total===1?'':'s'} <Icon name="chevron"/></span></div>
         {stats.total ? <><div className="attendance-progress"><span style={{width:`${stats.percentage}%`}} /></div><div className="player-attendance-grid">
@@ -2293,6 +2296,8 @@ function PlayerProfileModal({ person, team, teams = [], competitions = [], viewe
         </div><small className="player-attendance-note">Percentage = Aanwezig + Te laat ten opzichte van alle definitief geregistreerde sessies.</small></> : <p className="muted">Er zijn nog geen definitief geregistreerde trainingen of wedstrijden.</p>}
       </section>}
     </div>
+    {statDetailOpen&&<PlayerStatDetailModal metric={statDetailOpen} person={person} rows={playerFilteredGames} onClose={()=>setStatDetailOpen(null)}/>}
+    {coachingOpen&&<PlayerCoachingModal mode={coachingOpen} person={person} team={team} viewerProfile={viewerProfile} viewerMembership={viewerMembership} onClose={()=>setCoachingOpen(null)}/>}
     {profileGameHistoryOpen&&<PlayerGameHistoryModal person={person} rows={playerFilteredGames} competitions={competitions} teams={teams} context={`${profileYear} · ${profileTeam==='total'?'Alle teams':profileTeamOptions.find(t=>t.id===profileTeam)?.name||'Team'} · ${profileCompetition==='total'?'Alle competities':profileCompetitionOptions.find(c=>c.key===profileCompetition)?.name||'Competitie'}`} onClose={()=>setProfileGameHistoryOpen(false)}/>}
     {attendanceHistoryOpen&&<PlayerMissedAttendanceModal person={person} team={selectedProfileTeam} attendance={attendance} gameAttendance={gameAttendance} trainingEvents={trainingEvents} calendarEvents={calendarEvents} seasonYear={profileYear} onClose={()=>setAttendanceHistoryOpen(false)}/>}
     {cardEditor&&<PlayerCardEditorModal person={person} team={team} card={cardEditor.id?cardEditor:null} metrics={cardEditor.id?playerCardMetrics.filter(metric=>metric.card_id===cardEditor.id):[]} viewerProfile={viewerProfile} onClose={()=>setCardEditor(null)} onSaved={async()=>{setCardEditor(null);await onChanged?.()}} />}
@@ -2513,7 +2518,7 @@ function teamDisplayName(person) {
 
 function teamPlayerMeta(person) {
   const number=person?.jersey_number ? `#${person.jersey_number}` : 'Geen rugnummer'
-  const position=person?.primary_position || 'Geen positie'
+  const position=cleanPosition(person?.primary_position) || 'Geen positie'
   return `${number} · ${position}`
 }
 
@@ -3408,7 +3413,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="people" title="Taken & functies" subtitle="Bekijk club- en teamuitnodigingen" status={taskInvitations.some(row=>row.status==='invited')?'Nieuw':null} onClick={() => setSettingsView('tasks')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.2.0" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.2.2" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -3422,7 +3427,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
         <p className="settings-modal-intro">Pas hier je naam aan. Je e-mailadres blijft gekoppeld aan je account.</p>
         <label>Voornaam<input value={firstName} onChange={e => setFirstName(e.target.value)} autoComplete="given-name" /></label>
         <label>Achternaam<input value={lastName} onChange={e => setLastName(e.target.value)} autoComplete="family-name" /></label>
-        <div className="profile-sport-readonly"><div><span>Rugnummer</span><strong>{profile?.jersey_number||'Niet ingesteld'}</strong></div><div><span>Primaire positie</span><strong>{profile?.primary_position||'Niet ingesteld'}</strong></div><div><span>Andere posities</span><strong>{(profile?.secondary_positions||[]).join(', ')||'Niet ingesteld'}</strong></div><div><span>Gooit</span><strong>{profile?.throws_hand==='L'?'Links':profile?.throws_hand==='R'?'Rechts':'Niet ingesteld'}</strong></div><div><span>Slaat</span><strong>{profile?.bats_side==='S'?'Switch':profile?.bats_side==='L'?'Links':profile?.bats_side==='R'?'Rechts':'Niet ingesteld'}</strong></div></div>
+        <div className="profile-sport-readonly"><div><span>Rugnummer</span><strong>{profile?.jersey_number||'Niet ingesteld'}</strong></div><div><span>Primaire positie</span><strong>{cleanPosition(profile?.primary_position)||'Niet ingesteld'}</strong></div><div><span>Andere posities</span><strong>{cleanPositions(profile?.secondary_positions||[]).join(', ')||'Niet ingesteld'}</strong></div><div><span>Gooit</span><strong>{profile?.throws_hand==='L'?'Links':profile?.throws_hand==='R'?'Rechts':'Niet ingesteld'}</strong></div><div><span>Slaat</span><strong>{profile?.bats_side==='S'?'Switch':profile?.bats_side==='L'?'Links':profile?.bats_side==='R'?'Rechts':'Niet ingesteld'}</strong></div></div>
         <p className="profile-sport-note">Rugnummer, posities, gooien en slaan worden door je coach beheerd.</p>
         <label>E-mailadres<input value={session.user.email || ''} disabled /></label>
         <button className="primary" onClick={saveProfile} disabled={profileBusy}>{profileBusy ? 'Opslaan…' : 'Opslaan'}</button>
@@ -3449,7 +3454,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 3.2.0</h3>
+        <h3>Versie 3.2.2</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS synchronisatie</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>
@@ -3917,9 +3922,17 @@ async function cropImageFile(file,{shape,zoom,offset,maxBytes}) {
   return blob
 }
 
+function cleanPosition(value) {
+  return String(value || '').replace(/^\$+/, '').trim()
+}
+
+function cleanPositions(values = []) {
+  return values.map(cleanPosition).filter(Boolean)
+}
+
 function playerSportLine(person) {
   if (!person) return 'Spelersgegevens nog niet ingesteld'
-  const positions=[person.primary_position,...(person.secondary_positions||[])].filter(Boolean).join(' / ')
+  const positions=cleanPositions([person.primary_position,...(person.secondary_positions||[])]).join(' / ')
   const bits=[]
   if(positions) bits.push(positions)
   if(person.throws_hand) bits.push(`gooit ${person.throws_hand==='L'?'L':'R'}`)
@@ -4063,3 +4076,31 @@ function formatClock(value) { return value ? new Date(value).toLocaleTimeString(
 function toDateInput(value) { if (!value) return ''; const d=new Date(value); const y=d.getFullYear(); const m=String(d.getMonth()+1).padStart(2,'0'); const day=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${day}` }
 function toTimeInput(value) { if (!value) return ''; const d=new Date(value); return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` }
 function combineDateTime(date,time) { return new Date(`${date}T${time}:00`).toISOString() }
+
+function PlayerStatDetailModal({metric,person,rows=[],onClose}){
+  const rates=battingRates(rows)
+  const explanations={AVG:'Slaggemiddelde: hits gedeeld door officiële slagbeurten (AB).', 'OB%':'On-base percentage: hoe vaak je veilig op de honken komt via hit of walk; bij volledige data tellen ook HBP en SF mee.',AB:'Officiële slagbeurten.',Hits:'Aantal honkslagen.',BB:'Aantal vrije lopen (walks).',RBI:'Runs Batted In: binnengeslagen punten.',SB:'Gestolen honken.'}
+  const values={AVG:statRate(rates.avg),'OB%':statPercent(rates.obp),AB:rates.ab||0,Hits:rates.h||0,BB:rates.bb||0,RBI:rates.rbi==null?'—':rates.rbi,SB:rates.sb==null?'—':rates.sb}
+  return <SettingsModal title={`${metric} · ${person?.first_name||'Speelster'}`} onClose={onClose}><div className="player-stat-detail"><div className="player-stat-detail-value"><span>{metric}</span><strong>{values[metric]}</strong><small>{explanations[metric]}</small></div><div className="player-stat-detail-games"><strong>Per wedstrijd</strong>{rows.length?rows.slice().reverse().map((r,i)=><article key={r.id||i}><span><b>{r.opponent||r.game_title||'Wedstrijd'}</b><small>{formatShortDate(r.game_date)}</small></span><strong>{metric==='AVG'?(Number(r.at_bats||0)?statRate(Number(r.hits||0)/Number(r.at_bats)): '—'):metric==='OB%'?statPercent(battingObpForRows([r])):metric==='AB'?(r.at_bats||0):metric==='Hits'?(r.hits||0):metric==='BB'?(r.walks||0):metric==='RBI'?(r.rbi??'—'):(r.stolen_bases??'—')}</strong></article>):<p className="muted">Nog geen wedstrijddata.</p>}</div></div></SettingsModal>
+}
+
+function PlayerCoachingModal({mode,person,team,viewerProfile,viewerMembership,onClose}){
+  const [items,setItems]=useState([]),[focus,setFocus]=useState([]),[notes,setNotes]=useState([]),[text,setText]=useState(''),[detail,setDetail]=useState(''),[busy,setBusy]=useState(false),[feedback,setFeedback]=useState('')
+  const isCoach=viewerProfile?.role==='admin'||viewerMembership?.member_role==='coach'
+  const isMental=viewerProfile?.role==='admin'||viewerMembership?.team_function==='mental_coach'
+  const canManage=mode==='mental'?isMental:isCoach
+  const title={strengths:'Sterke punten',development:'Ontwikkelpunten',mental:'Mental coaching',progress:'Mijn ontwikkeling'}[mode]
+  async function load(){
+    const [a,b,c]=await Promise.all([supabase.from('player_coaching_items').select('*').eq('profile_id',person.id).order('created_at',{ascending:false}),supabase.from('player_mental_focus').select('*').eq('profile_id',person.id).order('created_at',{ascending:false}),supabase.from('player_coach_notes').select('*').eq('profile_id',person.id).order('created_at',{ascending:false})])
+    if(!a.error)setItems(a.data||[]);if(!b.error)setFocus(b.data||[]);if(!c.error)setNotes(c.data||[])
+  }
+  useEffect(()=>{load()},[person?.id])
+  async function add(){if(!text.trim())return;setBusy(true);setFeedback('');let result
+    if(mode==='mental') result=await supabase.from('player_mental_focus').insert({profile_id:person.id,team_id:team?.id||null,focus_text:text.trim(),detail:detail.trim()||null,created_by:viewerProfile.id})
+    else result=await supabase.from('player_coaching_items').insert({profile_id:person.id,team_id:team?.id||null,item_type:mode==='strengths'?'strength':'development',title:text.trim(),detail:detail.trim()||null,status:'active',created_by:viewerProfile.id})
+    if(result.error)setFeedback(result.error.message);else{setText('');setDetail('');await load()}setBusy(false)
+  }
+  async function complete(row){setBusy(true);const {error}=await supabase.from('player_coaching_items').update({status:'completed',completed_at:new Date().toISOString(),completed_by:viewerProfile.id}).eq('id',row.id);if(error)setFeedback(error.message);else await load();setBusy(false)}
+  const visible=mode==='strengths'?items.filter(x=>x.item_type==='strength'&&x.status==='active'):mode==='development'?items.filter(x=>x.item_type==='development'&&x.status==='active'):mode==='progress'?items.filter(x=>x.status==='completed'):focus
+  return <SettingsModal title={title} onClose={onClose}><div className="player-coaching-modal"><div className="measurement-person"><ProfileAvatar person={person} size="small"/><span><strong>{personName(person)}</strong><small>{team?.name||'Mijn OG'}</small></span></div>{mode==='mental'&&focus[0]&&<div className="mental-focus-highlight"><span>FOCUS VAN DEZE WEEK</span><strong>{focus[0].focus_text}</strong>{focus[0].detail&&<p>{focus[0].detail}</p>}</div>}{canManage&&mode!=='progress'&&<div className="coaching-entry"><label>{mode==='mental'?'Nieuwe focus':'Titel'}<input value={text} onChange={e=>setText(e.target.value)} placeholder={mode==='mental'?'Bijv. Reset na iedere pitch':'Kort en positief'}/></label><label>Toelichting (optioneel)<textarea rows="3" value={detail} onChange={e=>setDetail(e.target.value)} /></label><button className="primary" disabled={busy} onClick={add}>Opslaan</button></div>}{feedback&&<div className="notice error">{feedback}</div>}<div className="coaching-item-list">{visible.length?visible.map(row=><article key={row.id}><span><strong>{row.title||row.focus_text}</strong><small>{row.detail||formatShortDate(row.created_at)}</small></span>{canManage&&mode==='development'&&row.status==='active'&&<button type="button" className="secondary orange-outline" onClick={()=>complete(row)}>Behaald ✓</button>}</article>):<p className="muted">Nog niets toegevoegd.</p>}</div>{isCoach&&mode==='progress'&&<div className="coach-private-note"><strong>Privé coachnotities</strong><small>Alleen zichtbaar voor bevoegde coaches.</small>{notes.length?notes.map(n=><p key={n.id}>{n.note}</p>):<p className="muted">Nog geen privénotities.</p>}</div>}</div></SettingsModal>
+}
