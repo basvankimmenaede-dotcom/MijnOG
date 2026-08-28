@@ -3375,7 +3375,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
       }, { onConflict: 'profile_id,provider' })
       if (error) throw error
 
-      // v3.2.15: opslaan van een FOYS-link start direct de centrale import.
+      // v3.2.16: opslaan van een FOYS-link start direct de centrale import.
       // De gebruiker hoeft dus niet meer apart op 'Wedstrijden nu synchroniseren' te drukken.
       if (!session?.access_token) throw new Error('FOYS-link is opgeslagen, maar de sessie kon de synchronisatie niet starten.')
       const response = await fetch('/api/calendar', {
@@ -3472,7 +3472,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="people" title="Taken & functies" subtitle="Bekijk club- en teamuitnodigingen" status={taskInvitations.some(row=>row.status==='invited')?'Nieuw':null} onClick={() => setSettingsView('tasks')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS databron gekoppeld' : 'FOYS databron toevoegen'} status={calendar ? 'Databron actief' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.2.15" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.2.16" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -3512,7 +3512,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 3.2.15</h3>
+        <h3>Versie 3.2.16</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS databron</span><strong>{calendar ? 'Dit account levert een feed' : 'Geen persoonlijke feed'}</strong></div>

@@ -83,7 +83,7 @@ export async function GET(request) {
         redirect: 'follow',
         headers: {
           Accept: 'text/calendar,application/ics,text/plain;q=0.9,*/*;q=0.8',
-          'User-Agent': 'MijnOG-FOYS-Sync/3.2.15'
+          'User-Agent': 'MijnOG-FOYS-Sync/3.2.16'
         },
         signal: AbortSignal.timeout(15000)
       })
@@ -94,7 +94,7 @@ export async function GET(request) {
       }
       const events = parseICS(text)
       if (!events.length) throw new Error('De FOYS-feed bevatte geen leesbare wedstrijden')
-      return events.map(event => ({ ...event, sourceProfileId: connection.profile_id }))
+      return events.map(event => ({ ...event, sourceProfileId: connection.profile_id, sourceProfileIds: [connection.profile_id], sourceConnectionId: connection.id }))
     }))
 
     const parsedEvents = feedResults
@@ -112,21 +112,39 @@ export async function GET(request) {
       return NextResponse.json({ error: 'Geen van de gekoppelde FOYS-databronnen kon worden gelezen.', feedErrors }, { status: 502 })
     }
 
-    // Dedupe dezelfde wedstrijd die in meerdere persoonlijke FOYS-feeds voorkomt.
+    // FOYS UID is de primaire identiteit van een wedstrijd. Dezelfde UID kan in meerdere
+    // persoonlijke feeds voorkomen en FOYS kan datum/tijd later wijzigen. Daarom mag starttijd
+    // NOOIT onderdeel zijn van de primaire dedupe als er een UID aanwezig is.
     const uniqueEvents = new Map()
     for (const event of parsedEvents) {
-      const key = `${event.uid || normalizeText(event.title)}|${event.start}`
-      if (!uniqueEvents.has(key)) uniqueEvents.set(key, event)
+      const key = event.uid ? `uid:${event.uid}` : `fallback:${normalizeText(event.title)}|${event.start}`
+      const previous = uniqueEvents.get(key)
+      if (!previous) {
+        uniqueEvents.set(key, event)
+        continue
+      }
+      // Houd bij identieke UID de rijkste/laatst aangetroffen versie.
+      uniqueEvents.set(key, mergeFoysEvent(previous, event))
     }
 
     let skipped = 0
     const unmatched = []
     const matched = []
     for (const event of uniqueEvents.values()) {
-      const match = bestTeamMatch(event, teams || [])
+      const profileTeamIds = new Set()
+      for (const profileId of event.sourceProfileIds || [event.sourceProfileId]) {
+        for (const teamId of teamIdsByProfile.get(profileId) || []) profileTeamIds.add(Number(teamId))
+      }
+      const match = bestTeamMatch(event, teams || [], profileTeamIds)
       if (!match.team) {
         skipped += 1
-        unmatched.push({ title: event.title, start: event.start, matches: match.candidates.map(team => team.name) })
+        unmatched.push({
+          title: event.title,
+          start: event.start,
+          uid: event.uid || null,
+          reason: match.reason || 'geen_team_match',
+          matches: match.candidates.map(team => team.name)
+        })
         continue
       }
       matched.push({ event, team: match.team })
@@ -153,6 +171,12 @@ export async function GET(request) {
 
     const existingAtStart = new Map((existingRows || []).map(row => [`${Number(row.team_id)}|${new Date(row.start_at).toISOString()}`, row]))
     const existingByExternalUid = new Map((existingRows || []).filter(row => row.external_source === 'foys' && row.external_uid).map(row => [`foys|${row.external_uid}`, row]))
+    const existingByTeamDate = new Map()
+    for (const row of existingRows || []) {
+      const key = `${Number(row.team_id)}|${dateKey(row.start_at)}`
+      if (!existingByTeamDate.has(key)) existingByTeamDate.set(key, [])
+      existingByTeamDate.get(key).push(row)
+    }
     const nowIso = new Date().toISOString()
     const bulkPayloads = []
     const manualMigrations = []
@@ -164,8 +188,10 @@ export async function GET(request) {
       const score = parseScore(event)
       const uid = event.uid || `${normalizeText(event.title)}|${event.start}`
       const sameStart = existingAtStart.get(`${Number(team.id)}|${new Date(event.start).toISOString()}`)
-      const existingFoys = existingByExternalUid.get(`foys|${uid}`) || (sameStart?.external_source === 'foys' ? sameStart : null)
-      const existing = existingFoys || sameStart || null
+      const existingFoys = existingByExternalUid.get(`foys|${uid}`) || null
+      const sameDayCandidates = existingByTeamDate.get(`${Number(team.id)}|${dateKey(event.start)}`) || []
+      const semanticExisting = findLikelyExistingGame(event, sameDayCandidates)
+      const existing = existingFoys || sameStart || semanticExisting || null
 
       // v3.2.3: FOYS is een synchronisatiebron, geen wisactie. Sommige ICS-feeds leveren
       // bijvoorbeeld geen uitslag, locatie of omschrijving. In dat geval behouden we de
@@ -189,7 +215,7 @@ export async function GET(request) {
         external_url: event.url || existing?.external_url || null,
         updated_at: nowIso
       }
-      if (sameStart?.id && sameStart.external_source !== 'foys') manualMigrations.push({ id: sameStart.id, payload })
+      if (existing?.id && existing.external_source !== 'foys') manualMigrations.push({ id: existing.id, payload })
       else bulkPayloads.push(payload)
     }
 
@@ -261,25 +287,118 @@ async function ensureFoysCompetition(service, year) {
 }
 
 
-function bestTeamMatch(event, teams) {
+function bestTeamMatch(event, teams, profileTeamIds = new Set()) {
   const haystack = normalizeText(`${event.title || ''} ${event.description || ''}`)
+  const activeTeams = (teams || []).filter(team => team?.is_active !== false)
   const scored = []
-  for (const team of teams || []) {
-    const aliases = String(team?.foys_match_text || '')
+
+  for (const team of activeTeams) {
+    const aliases = teamAliases(team)
+    const hits = aliases.filter(alias => alias && haystack.includes(alias))
+    if (!hits.length) continue
+    const bestAlias = hits.sort((a, b) => b.length - a.length)[0]
+    const membershipBonus = profileTeamIds.has(Number(team.id)) ? 1000 : 0
+    scored.push({ team, score: membershipBonus + bestAlias.length, alias: bestAlias })
+  }
+
+  if (scored.length) {
+    scored.sort((a,b) => b.score - a.score || Number(a.team.id) - Number(b.team.id))
+    const bestScore = scored[0].score
+    const best = scored.filter(item => item.score === bestScore)
+    if (best.length === 1) return { team: best[0].team, candidates: best.map(item => item.team), reason: 'alias' }
+    return { team: null, candidates: best.map(item => item.team), reason: 'meerdere_gelijke_team_matches' }
+  }
+
+  // Persoonlijke FOYS-feeds bevatten alleen wedstrijden van de persoon. Als een gebruiker
+  // precies aan een actief OG-team gekoppeld is, is dat een veilige fallback wanneer de
+  // beheerders nog geen FOYS-herkenning hebben ingesteld.
+  const membershipTeams = activeTeams.filter(team => profileTeamIds.has(Number(team.id)))
+  if (membershipTeams.length === 1 && /\bonze gezellen\b/.test(haystack)) {
+    return { team: membershipTeams[0], candidates: membershipTeams, reason: 'enkel_teamlidmaatschap' }
+  }
+
+  return { team: null, candidates: membershipTeams, reason: membershipTeams.length > 1 ? 'meerdere_teamlidmaatschappen_zonder_match' : 'geen_team_match' }
+}
+
+function teamAliases(team) {
+  const aliases = new Set(
+    String(team?.foys_match_text || '')
       .split(/[,;|\r\n]+/)
       .map(normalizeText)
       .filter(Boolean)
-    const hits = aliases.filter(alias => haystack.includes(alias))
-    if (!hits.length) continue
-    const bestAlias = hits.sort((a,b) => b.length - a.length)[0]
-    scored.push({ team, score: bestAlias.length, alias: bestAlias })
+  )
+  const name = normalizeText(team?.name || '')
+  if (name) aliases.add(name)
+
+  const sport = normalizeText(team?.sport || '')
+  const ageMatch = name.match(/(?:^|\s)u\s*(12|15|21)(?:\s|$)/) || name.match(/onder\s*(12|15|21)/)
+  const age = ageMatch?.[1] || null
+  const trailingNumber = name.match(/(?:^|\s)(\d+)$/)?.[1] || null
+  const number = trailingNumber && trailingNumber !== age ? trailingNumber : '1'
+
+  // FOYS gebruikt bij OG o.a. VS-2, VSU21-1 en vergelijkbare KNBSB-teamcodes.
+  if (sport.includes('soft')) {
+    if (age) {
+      aliases.add(normalizeText(`VSU${age}-${number}`))
+      aliases.add(normalizeText(`VS U${age} ${number}`))
+      if (number === '1') aliases.add(normalizeText(`VSU${age}`))
+    } else if (/senior|dames|vs|softbal/.test(name)) {
+      aliases.add(normalizeText(`VS-${number}`))
+      aliases.add(normalizeText(`VS ${number}`))
+    }
   }
-  if (!scored.length) return { team: null, candidates: [] }
-  scored.sort((a,b) => b.score - a.score || Number(a.team.id) - Number(b.team.id))
-  const bestScore = scored[0].score
-  const best = scored.filter(item => item.score === bestScore)
-  if (best.length !== 1) return { team: null, candidates: best.map(item => item.team) }
-  return { team: best[0].team, candidates: best.map(item => item.team) }
+  if (sport.includes('honk') || sport.includes('baseball')) {
+    if (age) {
+      aliases.add(normalizeText(`HU${age}-${number}`))
+      aliases.add(normalizeText(`H U${age} ${number}`))
+    } else {
+      aliases.add(normalizeText(`HS-${number}`))
+      aliases.add(normalizeText(`HS ${number}`))
+    }
+  }
+
+  return [...aliases].filter(alias => alias.length >= 3)
+}
+
+function mergeFoysEvent(previous, next) {
+  return {
+    ...previous,
+    ...next,
+    uid: next.uid || previous.uid,
+    title: next.title || previous.title,
+    start: next.start || previous.start,
+    end: next.end || previous.end,
+    location: next.location || previous.location,
+    description: next.description || previous.description,
+    url: next.url || previous.url,
+    sourceProfileId: previous.sourceProfileId || next.sourceProfileId,
+    sourceProfileIds: [...new Set([...(previous.sourceProfileIds || [previous.sourceProfileId]), ...(next.sourceProfileIds || [next.sourceProfileId])].filter(Boolean))],
+    sourceConnectionId: previous.sourceConnectionId || next.sourceConnectionId
+  }
+}
+
+function dateKey(value) {
+  const date = new Date(value)
+  if (!Number.isFinite(date.getTime())) return ''
+  return date.toISOString().slice(0, 10)
+}
+
+function findLikelyExistingGame(event, rows = []) {
+  const wantedTitle = normalizeText(event.title)
+  const wantedStart = new Date(event.start).getTime()
+  if (!Number.isFinite(wantedStart)) return null
+
+  const candidates = rows.map(row => {
+    const rowStart = new Date(row.start_at).getTime()
+    const minutes = Math.abs(rowStart - wantedStart) / 60000
+    const rowTitle = normalizeText(row.title)
+    const sameTitle = rowTitle && wantedTitle && rowTitle === wantedTitle
+    const similarTitle = rowTitle && wantedTitle && (rowTitle.includes(wantedTitle) || wantedTitle.includes(rowTitle))
+    return { row, minutes, sameTitle, similarTitle }
+  }).filter(item => item.minutes <= 20 && (item.sameTitle || item.similarTitle || item.minutes === 0))
+    .sort((a, b) => Number(b.sameTitle) - Number(a.sameTitle) || a.minutes - b.minutes)
+
+  return candidates[0]?.row || null
 }
 
 function eventMatchesTeam(event, team) {
