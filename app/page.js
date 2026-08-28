@@ -148,27 +148,9 @@ export default function HomePage() {
     setSwingAccess(profileResult.data?.role === 'admin' ? 'admin' : (swingAccessResult.error ? null : swingAccessResult.data?.access_level || null))
     setLoading(false)
 
-    if (!calendarResult.error && calendarResult.data?.is_active && accessToken) {
-      void syncFoysInBackground(accessToken)
-    }
-  }
-
-  async function syncFoysInBackground(accessToken) {
-    const synced = await loadCalendar(accessToken)
-    if (!synced) return
-    const [eventsResult, linksResult, participantsResult] = await Promise.all([
-      supabase.from('events').select('*').order('start_at', { ascending: true }),
-      supabase.from('event_teams').select('event_id,team_id,teams(id,name,sport)'),
-      supabase.from('event_participants').select('event_id,profile_id')
-    ])
-    if (eventsResult.error || linksResult.error || participantsResult.error) return
-    const teamLinks = linksResult.data ?? []
-    const participantLinks = participantsResult.data ?? []
-    const normalizedEvents = (eventsResult.data ?? []).map(row => normalizeTrainingEvent(row, teamLinks, participantLinks))
-    setEventTeamLinks(teamLinks)
-    setEventParticipantLinks(participantLinks)
-    setTrainingEvents(normalizedEvents.filter(event => event.type === 'training'))
-    setCalendarEvents(normalizedEvents.filter(event => event.type === 'game'))
+    // v3.1.30: geen automatische FOYS-sync meer tijdens het openen van de app.
+    // Wedstrijden worden uit onze eigen database gelezen. FOYS synchroniseert alleen
+    // na een expliciete actie onder Meer > Koppelingen, zodat openen nooit wordt vertraagd.
   }
 
   async function refreshAppData() {
@@ -3179,6 +3161,26 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
     else { onMessage('KNBSB-agenda gekoppeld ✓'); setSettingsView(null); onSaved() }
   }
 
+  async function syncCalendarNow() {
+    if (!session?.access_token) return
+    setCalendarBusy(true)
+    onMessage('')
+    try {
+      const response = await fetch('/api/calendar', {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        cache: 'no-store'
+      })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.error || 'FOYS kon niet worden gesynchroniseerd.')
+      onMessage(`FOYS bijgewerkt: ${payload.synced || 0} wedstrijd${Number(payload.synced || 0) === 1 ? '' : 'en'} verwerkt.`)
+      await onSaved()
+    } catch (error) {
+      onMessage(`FOYS synchroniseren mislukt: ${error.message}`)
+    } finally {
+      setCalendarBusy(false)
+    }
+  }
+
   async function removeCalendar() {
     if (!calendar) return
     setCalendarBusy(true)
@@ -3232,7 +3234,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="people" title="Taken & functies" subtitle="Bekijk club- en teamuitnodigingen" status={taskInvitations.some(row=>row.status==='invited')?'Nieuw':null} onClick={() => setSettingsView('tasks')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.1.29" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.1.30" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -3265,14 +3267,15 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
       {settingsView === 'calendar' && <div className="form-stack">
         <p className="settings-modal-intro">Een FOYS-link synchroniseert de herkende KNBSB-wedstrijden naar Mijn OG. Daarna zijn die wedstrijden vanuit onze database voor het hele gekoppelde team zichtbaar.</p>
         <label>FOYS ICS-link<textarea rows="4" value={icsUrl} onChange={e => setIcsUrl(e.target.value)} placeholder="https://api.foys.io/competition/public-api/v1/persons/.../ics" /></label>
-        <button className="primary" onClick={saveCalendar} disabled={calendarBusy}>{calendarBusy ? 'Opslaan…' : calendar ? 'Koppeling bijwerken' : 'Agenda koppelen'}</button>
+        <button className="primary" onClick={saveCalendar} disabled={calendarBusy}>{calendarBusy ? 'Bezig…' : calendar ? 'Koppeling bijwerken' : 'Agenda koppelen'}</button>
+        {calendar && <button className="secondary orange-outline" onClick={syncCalendarNow} disabled={calendarBusy}>Wedstrijden nu synchroniseren</button>}
         {calendar && <button className="disconnect-calendar-button" onClick={removeCalendar} disabled={calendarBusy}><Icon name="trash" /> Koppeling verwijderen</button>}
       </div>}
 
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 3.1.29</h3>
+        <h3>Versie 3.1.30</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS synchronisatie</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>
