@@ -63,30 +63,16 @@ export async function GET(request) {
       teamIdsByProfile.get(row.profile_id).add(Number(row.team_id))
     }
 
-    // Neem per actief team minimaal de meest recent gekoppelde feed van een teamlid mee.
-    // Voeg daarnaast enkele recente feeds toe als vangnet voor invallers/multi-team spelers.
-    const selectedConnections = []
-    const selectedIds = new Set()
-    for (const team of (teams || [])) {
-      const candidate = (rawConnections || []).find(connection =>
-        teamIdsByProfile.get(connection.profile_id)?.has(Number(team.id)) && isAllowedFoysUrl(connection.ics_url)
-      )
-      if (candidate && !selectedIds.has(candidate.id)) {
-        selectedIds.add(candidate.id)
-        selectedConnections.push(candidate)
-      }
-    }
-    for (const connection of (rawConnections || [])) {
-      if (selectedConnections.length >= Math.max((teams || []).length + 5, 12)) break
-      if (!isAllowedFoysUrl(connection.ics_url) || selectedIds.has(connection.id)) continue
-      selectedIds.add(connection.id)
-      selectedConnections.push(connection)
-    }
-
+    // v3.2.13: alle actieve, unieke FOYS-feeds meenemen. Een persoonlijke FOYS-feed
+    // kan een ander wedstrijdpakket bevatten dan de feed van een teamgenoot. De oude
+    // selectie "een feed per team" kon daardoor precies Toms geldige VS-2-feed overslaan.
+    // De sync draait server-side/op de achtergrond en dedupliceert wedstrijden op UID.
     const seenUrls = new Set()
-    const connections = selectedConnections.filter(connection => {
-      if (!connection?.ics_url || !isAllowedFoysUrl(connection.ics_url) || seenUrls.has(connection.ics_url)) return false
-      seenUrls.add(connection.ics_url)
+    const connections = (rawConnections || []).filter(connection => {
+      const normalizedUrl = normalizeFoysUrl(connection?.ics_url)
+      if (!normalizedUrl || seenUrls.has(normalizedUrl)) return false
+      seenUrls.add(normalizedUrl)
+      connection.ics_url = normalizedUrl
       return true
     })
     if (!connections.length) return NextResponse.json({ synced: 0, skipped: 0, feeds: 0, feedsFailed: 0 })
@@ -94,12 +80,21 @@ export async function GET(request) {
     const feedResults = await Promise.allSettled(connections.map(async connection => {
       const response = await fetch(connection.ics_url, {
         cache: 'no-store',
-        headers: { Accept: 'text/calendar,text/plain;q=0.9,*/*;q=0.8' },
-        signal: AbortSignal.timeout(7000)
+        redirect: 'follow',
+        headers: {
+          Accept: 'text/calendar,application/ics,text/plain;q=0.9,*/*;q=0.8',
+          'User-Agent': 'MijnOG-FOYS-Sync/3.2.13'
+        },
+        signal: AbortSignal.timeout(15000)
       })
       if (!response.ok) throw new Error(`FOYS gaf status ${response.status}`)
       const text = await response.text()
-      return parseICS(text).map(event => ({ ...event, sourceProfileId: connection.profile_id }))
+      if (!/BEGIN:VCALENDAR/i.test(text) || !/BEGIN:VEVENT/i.test(text)) {
+        throw new Error('De link gaf geen geldige ICS-kalender terug')
+      }
+      const events = parseICS(text)
+      if (!events.length) throw new Error('De FOYS-feed bevatte geen leesbare wedstrijden')
+      return events.map(event => ({ ...event, sourceProfileId: connection.profile_id }))
     }))
 
     const parsedEvents = feedResults
@@ -107,8 +102,14 @@ export async function GET(request) {
       .flatMap(result => result.value)
       .sort((a, b) => new Date(a.start) - new Date(b.start))
     const feedsFailed = feedResults.filter(result => result.status === 'rejected').length
+    const feedErrors = feedResults.map((result, index) => {
+      if (result.status !== 'rejected') return null
+      let host = 'onbekend'
+      try { host = new URL(connections[index]?.ics_url || '').hostname } catch {}
+      return { connection_id: connections[index]?.id || null, host, error: String(result.reason?.message || result.reason || 'Onbekende fout') }
+    }).filter(Boolean)
     if (!parsedEvents.length && feedsFailed === feedResults.length) {
-      return NextResponse.json({ error: 'Geen van de gekoppelde FOYS-databronnen reageerde op tijd.' }, { status: 502 })
+      return NextResponse.json({ error: 'Geen van de gekoppelde FOYS-databronnen kon worden gelezen.', feedErrors }, { status: 502 })
     }
 
     // Dedupe dezelfde wedstrijd die in meerdere persoonlijke FOYS-feeds voorkomt.
@@ -222,7 +223,8 @@ export async function GET(request) {
       skipped,
       unmatched: unmatched.slice(0, 25),
       feeds: connections.length,
-      feedsFailed
+      feedsFailed,
+      feedErrors
     }, { headers: { 'Cache-Control': 'private, no-store' } })
   } catch (error) {
     return NextResponse.json({ error: `FOYS-agenda kon niet worden gesynchroniseerd: ${error.message}` }, { status: 502 })
@@ -314,13 +316,23 @@ function parseScore(event) {
   return null
 }
 
-function isAllowedFoysUrl(value) {
+function normalizeFoysUrl(value) {
   try {
-    const url = new URL(value)
-    return url.protocol === 'https:' && (url.hostname === 'foys.io' || url.hostname.endsWith('.foys.io'))
+    let raw = String(value || '').trim()
+    if (!raw) return null
+    if (/^webcal:\/\//i.test(raw)) raw = raw.replace(/^webcal:/i, 'https:')
+    const url = new URL(raw)
+    const host = url.hostname.toLowerCase()
+    const allowedHost = host === 'foys.io' || host.endsWith('.foys.io') || host === 'foys.tech' || host.endsWith('.foys.tech')
+    if (url.protocol !== 'https:' || !allowedHost) return null
+    return url.toString()
   } catch {
-    return false
+    return null
   }
+}
+
+function isAllowedFoysUrl(value) {
+  return Boolean(normalizeFoysUrl(value))
 }
 
 function parseICS(raw) {

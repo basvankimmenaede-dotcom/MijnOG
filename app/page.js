@@ -3292,13 +3292,23 @@ function AdminMenuItem({ icon, title, subtitle, onClick }) {
   return <button className="admin-menu-item" onClick={onClick}><span className="admin-menu-icon"><Icon name={icon} /></span><span><strong>{title}</strong><small>{subtitle}</small></span><Icon name="chevron" /></button>
 }
 
-function isAllowedFoysFeedUrl(value) {
+function normalizeFoysFeedUrl(value) {
   try {
-    const url = new URL(String(value || '').trim())
-    return url.protocol === 'https:' && (url.hostname === 'foys.io' || url.hostname.endsWith('.foys.io'))
+    let raw = String(value || '').trim()
+    if (!raw) return null
+    if (/^webcal:\/\//i.test(raw)) raw = raw.replace(/^webcal:/i, 'https:')
+    const url = new URL(raw)
+    const host = url.hostname.toLowerCase()
+    const allowedHost = host === 'foys.io' || host.endsWith('.foys.io') || host === 'foys.tech' || host.endsWith('.foys.tech')
+    if (url.protocol !== 'https:' || !allowedHost) return null
+    return url.toString()
   } catch {
-    return false
+    return null
   }
+}
+
+function isAllowedFoysFeedUrl(value) {
+  return Boolean(normalizeFoysFeedUrl(value))
 }
 
 function More({ session, profile, teams, competitions = [], calendar, attendance = [], gameAttendance = [], trainingEvents = [], calendarEvents = [], memberships = [], gameStats = [], measurements = [], pitchingStats = [], playerCards = [], playerCardMetrics = [], onSaved, onMessage }) {
@@ -3348,8 +3358,8 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
   }
 
   async function saveCalendar() {
-    const url = icsUrl.trim()
-    if (!isAllowedFoysFeedUrl(url)) {
+    const url = normalizeFoysFeedUrl(icsUrl)
+    if (!url) {
       onMessage('Dit lijkt geen geldige FOYS-link.')
       return
     }
@@ -3378,7 +3388,9 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
       })
       const payload = await response.json()
       if (!response.ok) throw new Error(payload.error || 'FOYS kon niet worden gesynchroniseerd.')
-      onMessage(`FOYS databron bijgewerkt: ${payload.synced || 0} wedstrijd${Number(payload.synced || 0) === 1 ? '' : 'en'} verwerkt · ${payload.feeds || 0} feed${Number(payload.feeds || 0) === 1 ? '' : 's'} gecontroleerd${payload.skipped ? ` · ${payload.skipped} niet gekoppeld` : ''}.`)
+      const failed = Number(payload.feedsFailed || 0)
+      const firstFeedError = payload.feedErrors?.[0]?.error
+      onMessage(`FOYS databron bijgewerkt: ${payload.synced || 0} wedstrijd${Number(payload.synced || 0) === 1 ? '' : 'en'} verwerkt · ${payload.feeds || 0} feed${Number(payload.feeds || 0) === 1 ? '' : 's'} gecontroleerd${payload.skipped ? ` · ${payload.skipped} niet gekoppeld` : ''}${failed ? ` · ${failed} feed${failed===1?'':'s'} mislukt${firstFeedError ? ` (${firstFeedError})` : ''}` : ''}.`)
       await onSaved()
     } catch (error) {
       onMessage(`FOYS synchroniseren mislukt: ${error.message}`)
@@ -3440,7 +3452,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="people" title="Taken & functies" subtitle="Bekijk club- en teamuitnodigingen" status={taskInvitations.some(row=>row.status==='invited')?'Nieuw':null} onClick={() => setSettingsView('tasks')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS databron gekoppeld' : 'FOYS databron toevoegen'} status={calendar ? 'Databron actief' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.2.11" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.2.13" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -3480,7 +3492,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 3.2.11</h3>
+        <h3>Versie 3.2.13</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS databron</span><strong>{calendar ? 'Dit account levert een feed' : 'Geen persoonlijke feed'}</strong></div>

@@ -3021,3 +3021,119 @@ button.swing-primary { width: 100%; margin-top: 12px; border: 0; background: var
 
 /* v3.2.7 - rugnummer en positie zijn aparte UI-elementen; positie kan nooit een prefix uit de rugnummeropmaak erven */
 .player-number-position{display:inline-flex;align-items:baseline;gap:0}.player-position-code{font-variant-numeric:normal}.jersey-number{font-variant-numeric:tabular-nums}
+
+/* v3.2.12 - Team toewijzen: stabiele responsive uitlijning */
+.club-admin-modal .team-members-admin .member-list{
+  display:grid;
+  gap:12px;
+}
+.club-admin-modal .team-members-admin .member-row{
+  position:relative!important;
+  display:grid!important;
+  grid-template-columns:56px minmax(0,1fr) minmax(220px,280px) 48px!important;
+  grid-template-rows:auto!important;
+  gap:16px!important;
+  align-items:center!important;
+  padding:16px 18px!important;
+  min-width:0!important;
+  overflow:hidden!important;
+}
+.club-admin-modal .team-members-admin .member-row>.member-avatar{
+  grid-column:1!important;
+  grid-row:1!important;
+  align-self:center!important;
+  justify-self:center!important;
+  margin:0!important;
+}
+.club-admin-modal .team-members-admin .member-row>.member-copy{
+  grid-column:2!important;
+  grid-row:1!important;
+  min-width:0!important;
+  min-height:0!important;
+  padding:0!important;
+  display:grid!important;
+  gap:4px!important;
+  align-content:center!important;
+}
+.club-admin-modal .team-members-admin .member-copy>strong,
+.club-admin-modal .team-members-admin .member-copy>small,
+.club-admin-modal .team-members-admin .member-copy .link-account-inline{
+  max-width:100%!important;
+  overflow-wrap:anywhere!important;
+}
+.club-admin-modal .team-members-admin .member-role-controls{
+  grid-column:3!important;
+  grid-row:1!important;
+  width:100%!important;
+  max-width:280px!important;
+  min-width:0!important;
+  display:grid!important;
+  gap:8px!important;
+  align-self:center!important;
+  margin:0!important;
+}
+.club-admin-modal .team-members-admin .member-role-controls select{
+  width:100%!important;
+  max-width:none!important;
+  min-width:0!important;
+  min-height:46px!important;
+  margin:0!important;
+}
+.club-admin-modal .team-members-admin .member-row>.remove-member{
+  position:static!important;
+  grid-column:4!important;
+  grid-row:1!important;
+  align-self:center!important;
+  justify-self:end!important;
+  width:46px!important;
+  height:46px!important;
+  margin:0!important;
+}
+
+@media(max-width:900px){
+  .club-admin-modal .team-members-admin .member-row{
+    grid-template-columns:48px minmax(0,1fr) 44px!important;
+    grid-template-rows:auto auto!important;
+    gap:10px 12px!important;
+    padding:14px!important;
+    align-items:start!important;
+  }
+  .club-admin-modal .team-members-admin .member-row>.member-avatar{
+    grid-column:1!important;
+    grid-row:1!important;
+    align-self:start!important;
+  }
+  .club-admin-modal .team-members-admin .member-row>.member-copy{
+    grid-column:2!important;
+    grid-row:1!important;
+    padding-right:4px!important;
+  }
+  .club-admin-modal .team-members-admin .member-role-controls{
+    grid-column:1 / -1!important;
+    grid-row:2!important;
+    max-width:none!important;
+    width:100%!important;
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:8px!important;
+    padding-top:2px!important;
+  }
+  .club-admin-modal .team-members-admin .member-role-controls select:only-child{
+    grid-column:1 / -1!important;
+  }
+  .club-admin-modal .team-members-admin .member-row>.remove-member{
+    grid-column:3!important;
+    grid-row:1!important;
+    justify-self:end!important;
+    align-self:start!important;
+  }
+}
+
+@media(max-width:560px){
+  .club-admin-modal .team-members-admin .member-role-controls{
+    grid-template-columns:1fr!important;
+  }
+  .club-admin-modal .team-members-admin .member-role-controls select,
+  .club-admin-modal .team-members-admin .member-role-controls select:only-child{
+    grid-column:1!important;
+  }
+}
