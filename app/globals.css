@@ -1800,7 +1800,7 @@ input:focus, textarea:focus, select:focus {
 .coach-stats-player-head{display:flex;align-items:center;justify-content:space-between;margin-top:4px}
 .coach-stats-player-head small{color:var(--muted,#77736f)}
 .coach-stats-players{display:flex;flex-direction:column;gap:8px}
-.coach-stats-players>button{display:grid;grid-template-columns:minmax(0,1fr) 54px 58px 18px;align-items:center;gap:8px;width:100%;padding:10px;border:1px solid var(--line,#e8e2dc);border-radius:15px;background:#fff;text-align:left}
+.coach-stats-players>button{display:grid;grid-template-columns:minmax(0,1fr) 50px 50px 58px 18px;align-items:center;gap:7px;width:100%;padding:10px;border:1px solid var(--line,#e8e2dc);border-radius:15px;background:#fff;text-align:left}
 .coach-stats-person{display:flex;align-items:center;gap:9px;min-width:0}
 .coach-stats-person>span{display:flex;flex-direction:column;min-width:0}
 .coach-stats-person small{color:var(--muted,#77736f)}
@@ -2953,3 +2953,11 @@ button.swing-primary { width: 100%; margin-top: 12px; border: 0; background: var
 .player-missed-attendance .player-game-history-list{display:grid;gap:10px}
 .player-missed-attendance .player-game-history-list article{padding:14px;border:1px solid var(--border,#e7e1da);border-radius:16px;background:#fff}
 .player-attendance-reason{margin:10px 0 0;color:#666;font-size:14px}
+
+/* v3.1.26 - OB% en opgeschoonde posities/teamstats */
+
+@media(max-width:480px){.coach-stats-players>button{grid-template-columns:minmax(0,1fr) 44px 44px 52px 16px;gap:5px}.coach-stats-person strong{font-size:14px}.coach-stats-person small{font-size:11px}.coach-stats-mini strong{font-size:14px}}
+
+/* v3.1.27 - FOYS database sync */
+
+/* v3.1.28 - VS-2 historical results + FOYS dedupe */
