@@ -26,62 +26,108 @@ export async function GET(request) {
   const { data: userData, error: userError } = await userClient.auth.getUser(token)
   if (userError || !userData?.user) return NextResponse.json({ error: 'Sessie is verlopen. Log opnieuw in.' }, { status: 401 })
 
-  const { data: connection, error: connectionError } = await userClient
-    .from('calendar_connections')
-    .select('id,profile_id,ics_url,is_active')
-    .eq('profile_id', userData.user.id)
-    .eq('provider', 'foys')
-    .maybeSingle()
-
-  if (connectionError) return NextResponse.json({ error: 'Agendakoppeling kon niet worden gelezen.' }, { status: 500 })
-  if (!connection?.is_active || !connection?.ics_url) return NextResponse.json({ synced: 0, skipped: 0 })
-  if (!isAllowedFoysUrl(connection.ics_url)) return NextResponse.json({ error: 'De opgeslagen FOYS-link is ongeldig.' }, { status: 400 })
-
   try {
-    const response = await fetch(connection.ics_url, {
-      cache: 'no-store',
-      headers: { Accept: 'text/calendar,text/plain;q=0.9,*/*;q=0.8' },
-      signal: AbortSignal.timeout(10000)
-    })
-    if (!response.ok) throw new Error(`FOYS gaf status ${response.status}`)
+    // v3.1.31: een ingelogde gebruiker triggert een LICHTE centrale sync.
+    // We lezen de actieve FOYS-koppelingen centraal, zodat wedstrijden niet afhangen
+    // van de persoon die op dat moment is ingelogd.
+    const { data: rawConnections, error: connectionError } = await service
+      .from('calendar_connections')
+      .select('id,profile_id,ics_url,is_active,updated_at')
+      .eq('provider', 'foys')
+      .eq('is_active', true)
+      .not('ics_url', 'is', null)
+      .order('updated_at', { ascending: false })
+      .limit(20)
+    if (connectionError) throw connectionError
 
-    const text = await response.text()
-    const parsedEvents = parseICS(text).sort((a, b) => new Date(a.start) - new Date(b.start))
+    const seenUrls = new Set()
+    const connections = (rawConnections || []).filter(connection => {
+      if (!connection?.ics_url || !isAllowedFoysUrl(connection.ics_url) || seenUrls.has(connection.ics_url)) return false
+      seenUrls.add(connection.ics_url)
+      return true
+    })
+    if (!connections.length) return NextResponse.json({ synced: 0, skipped: 0, feeds: 0, feedsFailed: 0 })
+
+    const feedResults = await Promise.allSettled(connections.map(async connection => {
+      const response = await fetch(connection.ics_url, {
+        cache: 'no-store',
+        headers: { Accept: 'text/calendar,text/plain;q=0.9,*/*;q=0.8' },
+        signal: AbortSignal.timeout(6000)
+      })
+      if (!response.ok) throw new Error(`FOYS gaf status ${response.status}`)
+      const text = await response.text()
+      return parseICS(text).map(event => ({ ...event, sourceProfileId: connection.profile_id }))
+    }))
+
+    const parsedEvents = feedResults
+      .filter(result => result.status === 'fulfilled')
+      .flatMap(result => result.value)
+      .sort((a, b) => new Date(a.start) - new Date(b.start))
+    const feedsFailed = feedResults.filter(result => result.status === 'rejected').length
+    if (!parsedEvents.length && feedsFailed === feedResults.length) {
+      return NextResponse.json({ error: 'Geen van de gekoppelde FOYS-agenda’s reageerde op tijd.' }, { status: 502 })
+    }
+
     const { data: teams, error: teamsError } = await service
       .from('teams')
       .select('id,name,sport,foys_match_text,is_active,season_id')
       .eq('is_active', true)
     if (teamsError) throw teamsError
 
-    let synced = 0
+    // Dedupe dezelfde wedstrijd die in meerdere persoonlijke FOYS-feeds voorkomt.
+    const uniqueEvents = new Map()
+    for (const event of parsedEvents) {
+      const key = `${event.uid || normalizeText(event.title)}|${event.start}`
+      if (!uniqueEvents.has(key)) uniqueEvents.set(key, event)
+    }
+
     let skipped = 0
     const unmatched = []
-    const competitionIds = new Map()
-
-    for (const event of parsedEvents) {
+    const matched = []
+    for (const event of uniqueEvents.values()) {
       const matches = (teams || []).filter(team => eventMatchesTeam(event, team))
       if (matches.length !== 1) {
         skipped += 1
         unmatched.push({ title: event.title, start: event.start, matches: matches.map(team => team.name) })
         continue
       }
+      matched.push({ event, team: matches[0] })
+    }
 
-      const team = matches[0]
+    if (!matched.length) {
+      return NextResponse.json({ synced: 0, skipped, unmatched, feeds: connections.length, feedsFailed })
+    }
+
+    const years = [...new Set(matched.map(({ event }) => new Date(event.start).getFullYear()).filter(Boolean))]
+    const competitionPairs = await Promise.all(years.map(async year => [year, await ensureFoysCompetition(service, year)]))
+    const competitionIds = new Map(competitionPairs)
+
+    const starts = matched.map(({ event }) => new Date(event.start).getTime()).filter(Number.isFinite)
+    const minStart = new Date(Math.min(...starts) - 86400000).toISOString()
+    const maxStart = new Date(Math.max(...starts) + 86400000).toISOString()
+    const { data: existingRows, error: existingError } = await service
+      .from('events')
+      .select('id,team_id,start_at,external_source,external_uid')
+      .eq('type', 'game')
+      .gte('start_at', minStart)
+      .lte('start_at', maxStart)
+    if (existingError) throw existingError
+
+    const existingAtStart = new Map((existingRows || []).map(row => [`${Number(row.team_id)}|${new Date(row.start_at).toISOString()}`, row]))
+    const nowIso = new Date().toISOString()
+    const bulkPayloads = []
+    const manualMigrations = []
+
+    for (const { event, team } of matched) {
       const year = new Date(event.start).getFullYear()
-      let competitionId = competitionIds.get(year)
-      if (!competitionId) {
-        competitionId = await ensureFoysCompetition(service, year)
-        competitionIds.set(year, competitionId)
-      }
       const cancelled = isCancelled(event)
       const isPast = new Date(event.end || event.start).getTime() < Date.now()
       const score = parseScore(event)
       const uid = event.uid || `${normalizeText(event.title)}|${event.start}`
-
       const payload = {
         team_id: Number(team.id),
         type: 'game',
-        competition_id: competitionId,
+        competition_id: competitionIds.get(year),
         status: cancelled ? 'cancelled' : (isPast ? 'played' : 'scheduled'),
         audience_mode: 'all',
         title: event.title || 'Wedstrijd',
@@ -91,54 +137,49 @@ export async function GET(request) {
         location_name: event.location || null,
         home_score: score?.home ?? null,
         away_score: score?.away ?? null,
-        created_by: connection.profile_id,
+        created_by: event.sourceProfileId,
         external_source: 'foys',
         external_uid: uid,
         external_url: event.url || null,
-        updated_at: new Date().toISOString()
+        updated_at: nowIso
       }
-
-      // Historische wedstrijden kunnen al handmatig in public.events staan.
-      // Koppel FOYS dan aan die bestaande wedstrijd in plaats van een duplicaat te maken.
-      const { data: existingAtStart, error: existingError } = await service
-        .from('events')
-        .select('id,external_source,external_uid')
-        .eq('team_id', Number(team.id))
-        .eq('type', 'game')
-        .eq('start_at', event.start)
-        .order('id')
-        .limit(1)
-        .maybeSingle()
-      if (existingError) throw existingError
-
-      let saved
-      if (existingAtStart?.id) {
-        const { data: updated, error: updateError } = await service
-          .from('events')
-          .update(payload)
-          .eq('id', existingAtStart.id)
-          .select('id')
-          .single()
-        if (updateError) throw updateError
-        saved = updated
-      } else {
-        const { data: upserted, error: saveError } = await service
-          .from('events')
-          .upsert(payload, { onConflict: 'external_source,external_uid' })
-          .select('id')
-          .single()
-        if (saveError) throw saveError
-        saved = upserted
-      }
-
-      const { error: linkError } = await service
-        .from('event_teams')
-        .upsert({ event_id: saved.id, team_id: Number(team.id) }, { onConflict: 'event_id,team_id', ignoreDuplicates: true })
-      if (linkError) throw linkError
-      synced += 1
+      const sameStart = existingAtStart.get(`${Number(team.id)}|${new Date(event.start).toISOString()}`)
+      if (sameStart?.id && sameStart.external_source !== 'foys') manualMigrations.push({ id: sameStart.id, payload })
+      else bulkPayloads.push(payload)
     }
 
-    return NextResponse.json({ synced, skipped, unmatched }, { headers: { 'Cache-Control': 'private, no-store' } })
+    const savedIds = []
+    if (manualMigrations.length) {
+      const migrated = await Promise.all(manualMigrations.map(async item => {
+        const { data, error } = await service.from('events').update(item.payload).eq('id', item.id).select('id,team_id').single()
+        if (error) throw error
+        return data
+      }))
+      savedIds.push(...migrated)
+    }
+
+    if (bulkPayloads.length) {
+      const { data: upserted, error: upsertError } = await service
+        .from('events')
+        .upsert(bulkPayloads, { onConflict: 'external_source,external_uid' })
+        .select('id,team_id')
+      if (upsertError) throw upsertError
+      savedIds.push(...(upserted || []))
+    }
+
+    if (savedIds.length) {
+      const links = [...new Map(savedIds.map(row => [`${row.id}|${row.team_id}`, { event_id: row.id, team_id: Number(row.team_id) }])).values()]
+      const { error: linkError } = await service.from('event_teams').upsert(links, { onConflict: 'event_id,team_id', ignoreDuplicates: true })
+      if (linkError) throw linkError
+    }
+
+    return NextResponse.json({
+      synced: savedIds.length,
+      skipped,
+      unmatched: unmatched.slice(0, 25),
+      feeds: connections.length,
+      feedsFailed
+    }, { headers: { 'Cache-Control': 'private, no-store' } })
   } catch (error) {
     return NextResponse.json({ error: `FOYS-agenda kon niet worden gesynchroniseerd: ${error.message}` }, { status: 502 })
   }

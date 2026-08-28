@@ -148,9 +148,52 @@ export default function HomePage() {
     setSwingAccess(profileResult.data?.role === 'admin' ? 'admin' : (swingAccessResult.error ? null : swingAccessResult.data?.access_level || null))
     setLoading(false)
 
-    // v3.1.30: geen automatische FOYS-sync meer tijdens het openen van de app.
-    // Wedstrijden worden uit onze eigen database gelezen. FOYS synchroniseert alleen
-    // na een expliciete actie onder Meer > Koppelingen, zodat openen nooit wordt vertraagd.
+    // v3.1.31: controleer FOYS pas NADAT de app volledig zichtbaar is.
+    // Niet awaiten: deze controle mag de eerste schermweergave nooit vertragen.
+    window.setTimeout(() => { maybeAutoSyncFoys(accessToken) }, 1200)
+  }
+
+  async function refreshEventsOnly() {
+    const [eventResult, eventTeamsResult, eventParticipantsResult] = await Promise.all([
+      supabase.from('events').select('*').order('start_at', { ascending: true }),
+      supabase.from('event_teams').select('event_id,team_id,teams(id,name,sport)'),
+      supabase.from('event_participants').select('event_id,profile_id')
+    ])
+    if (eventResult.error || eventTeamsResult.error || eventParticipantsResult.error) return
+    const teamLinks = eventTeamsResult.data ?? []
+    const participantLinks = eventParticipantsResult.data ?? []
+    setEventTeamLinks(teamLinks)
+    setEventParticipantLinks(participantLinks)
+    const normalizedEvents = (eventResult.data ?? []).map(row => normalizeTrainingEvent(row, teamLinks, participantLinks))
+    setTrainingEvents(normalizedEvents.filter(event => event.type === 'training'))
+    setCalendarEvents(normalizedEvents.filter(event => event.type === 'game'))
+  }
+
+  async function maybeAutoSyncFoys(accessToken = session?.access_token) {
+    if (!accessToken || typeof window === 'undefined') return
+    const key = 'mijnog:foys-central-sync:last'
+    const last = Number(window.localStorage.getItem(key) || 0)
+    const interval = 2 * 60 * 60 * 1000
+    if (Date.now() - last < interval) return
+
+    // Meteen markeren voorkomt dat meerdere tabs tegelijk dezelfde sync starten.
+    window.localStorage.setItem(key, String(Date.now()))
+    const controller = new AbortController()
+    const timeout = window.setTimeout(() => controller.abort(), 8000)
+    try {
+      const response = await fetch('/api/calendar?background=1', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        cache: 'no-store',
+        signal: controller.signal
+      })
+      if (!response.ok) return
+      const payload = await response.json()
+      if (Number(payload.synced || 0) > 0) await refreshEventsOnly()
+    } catch (_) {
+      // Een FOYS-storing is nooit een reden om Mijn OG trager of onbruikbaar te maken.
+    } finally {
+      window.clearTimeout(timeout)
+    }
   }
 
   async function refreshAppData() {
@@ -3234,7 +3277,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="people" title="Taken & functies" subtitle="Bekijk club- en teamuitnodigingen" status={taskInvitations.some(row=>row.status==='invited')?'Nieuw':null} onClick={() => setSettingsView('tasks')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.1.30" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.1.31" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -3275,7 +3318,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 3.1.30</h3>
+        <h3>Versie 3.1.31</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS synchronisatie</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>
