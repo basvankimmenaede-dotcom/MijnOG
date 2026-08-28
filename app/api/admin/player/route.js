@@ -45,7 +45,7 @@ export async function POST(request) {
     const profilePayload={
       id, first_name:firstName, last_name:lastName, role:'player',
       jersey_number:String(body.jersey_number||'').trim() || null,
-      primary_position:String(body.primary_position||'').trim() || null,
+      primary_position:String(body.primary_position||'').replace(/[$＄﹩]/g,'').trim() || null,
       secondary_positions:secondary,
       throws_hand:['L','R'].includes(body.throws_hand) ? body.throws_hand : null,
       bats_side:['L','R','S'].includes(body.bats_side) ? body.bats_side : null,

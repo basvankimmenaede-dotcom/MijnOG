@@ -381,7 +381,7 @@ export default function HomePage() {
         <StaffInvitations session={session} events={trainingEvents} onChanged={refreshAppData} />
         {activeTab === 'Home' && <Dashboard session={session} profile={profile} teams={teams} events={allEvents} messages={teamMessages} playerRequests={playerRequests} playerCandidates={playerRequestCandidates} pushSubscriptions={pushSubscriptions} onRefresh={refreshAppData} transportEvents={transportEvents} transportResponses={transportResponses} calendarConnection={calendarConnection} calendarState={calendarState} ownAttendance={ownAttendance} onAttendance={setAttendanceStatus} attendanceBusy={attendanceBusy} onAgenda={() => navigate('Agenda')} onTeam={() => navigate('Team')} onStats={() => navigate('Stats')} onMore={() => navigate('Meer')} />}
         {activeTab === 'Agenda' && <Agenda events={allEvents} connection={calendarConnection} competitions={competitions} gameHighlights={gameHighlights} gameStats={playerGameStats} gameAttendance={gameAttendance} ownGameAttendance={ownGameAttendance} playerRequests={playerRequests} playerCandidates={playerRequestCandidates} transportEvents={transportEvents} transportResponses={transportResponses} clubLocations={clubLocations} state={calendarState} profile={profile} teams={teams} attendance={attendance} visibleProfiles={visibleProfiles} memberships={allMemberships} ownAttendance={ownAttendance} onAttendance={setAttendanceStatus} attendanceBusy={attendanceBusy} onRefresh={refreshAppData} onGoMore={() => navigate('Meer')} />}
-        {activeTab === 'Stats' && <Stats profile={profile} teams={teams} competitions={competitions} attendance={attendance} gameAttendance={gameAttendance} trainingEvents={visibleTrainingEvents} calendarEvents={calendarEvents} gameStats={playerGameStats} measurements={playerMeasurements} />}
+        {activeTab === 'Stats' && <Stats profile={profile} teams={teams} competitions={competitions} attendance={attendance} gameAttendance={gameAttendance} trainingEvents={visibleTrainingEvents} calendarEvents={calendarEvents} gameStats={playerGameStats} measurements={playerMeasurements} pitchingStats={playerPitchingStats} playerCards={playerCards} playerCardMetrics={playerCardMetrics} memberships={allMemberships} onPrepareProfile={()=>Promise.all(['memberships','cards','cardMetrics','pitchingStats'].map(key=>ensureData(key)))} onSaved={refreshAppData} />}
         {activeTab === 'Coach' && isCoachUser && <CoachDashboard session={session} competitions={competitions} profile={profile} teams={teams} gameStats={playerGameStats} measurements={playerMeasurements} pitchingStats={playerPitchingStats} playerCards={playerCards} playerCardMetrics={playerCardMetrics} trainingEvents={trainingEvents} calendarEvents={calendarEvents} attendance={attendance} gameAttendance={gameAttendance} ownGameAttendance={ownGameAttendance} profiles={visibleProfiles} memberships={allMemberships} messages={teamMessages} playerRequests={playerRequests} playerCandidates={playerRequestCandidates} pushSubscriptions={pushSubscriptions} ownAttendance={ownAttendance} onAttendance={setAttendanceStatus} attendanceBusy={attendanceBusy} clubLocations={clubLocations} transportEvents={transportEvents} transportResponses={transportResponses} onRefresh={refreshAppData} onMessage={setMessage} swingAccess={swingAccess} />}
         {activeTab === 'Team' && <Team session={session} competitions={competitions} profile={profile} teams={teams} profiles={visibleProfiles} memberships={allMemberships} gameStats={playerGameStats} measurements={playerMeasurements} pitchingStats={playerPitchingStats} playerCards={playerCards} playerCardMetrics={playerCardMetrics} attendance={attendance} gameAttendance={gameAttendance} trainingEvents={trainingEvents} calendarEvents={calendarEvents} onSaved={refreshAppData} onMessage={setMessage} />}
         {activeTab === 'Meer' && <More session={session} competitions={competitions} profile={profile} teams={teams} calendar={calendarConnection} attendance={attendance} gameAttendance={gameAttendance} trainingEvents={trainingEvents} calendarEvents={calendarEvents} memberships={allMemberships} gameStats={playerGameStats} measurements={playerMeasurements} pitchingStats={playerPitchingStats} playerCards={playerCards} playerCardMetrics={playerCardMetrics} onSaved={refreshAppData} onMessage={setMessage} />}
@@ -2104,7 +2104,7 @@ function PlayerGameHistoryModal({ person, rows = [], competitions = [], teams = 
   </SettingsModal>
 }
 
-function Stats({ profile, teams = [], competitions = [], attendance = [], gameAttendance = [], trainingEvents = [], calendarEvents = [], gameStats = [], measurements = [] }) {
+function Stats({ profile, teams = [], competitions = [], attendance = [], gameAttendance = [], trainingEvents = [], calendarEvents = [], gameStats = [], measurements = [], pitchingStats = [], playerCards = [], playerCardMetrics = [], memberships = [], onPrepareProfile, onSaved }) {
   const [statsView,setStatsView]=useState('overview')
   const allOwnGames=gameStats.filter(row=>row.profile_id===profile?.id).sort((a,b)=>new Date(a.game_date)-new Date(b.game_date))
   const gameYears=[...new Set(allOwnGames.map(statSeasonYear).filter(Boolean))].sort((a,b)=>b-a)
@@ -2117,6 +2117,8 @@ function Stats({ profile, teams = [], competitions = [], attendance = [], gameAt
   const [teamFilter,setTeamFilter]=useState('total')
   const [competitionFilter,setCompetitionFilter]=useState('total')
   const [gameHistoryOpen,setGameHistoryOpen]=useState(false)
+  const [ownProfileOpen,setOwnProfileOpen]=useState(false)
+  const [profileOpening,setProfileOpening]=useState(false)
   const year=Number(seasonYear)
   const seasonGames=allOwnGames.filter(row=>statSeasonYear(row)===year)
   const teamOptions=playerTeamOptions(seasonGames,teams)
@@ -2148,7 +2150,7 @@ function Stats({ profile, teams = [], competitions = [], attendance = [], gameAt
   return <section className="stats-page stats-growth-page">
     <ScreenHeader title="Mijn stats" />
     <div className="stats-growth-hero">
-      <div className="stats-growth-person"><ProfileAvatar person={profile} size="profile"/><div><h2>{personName(profile)}</h2><p>{team?.name || 'Mijn OG'}{profile?.primary_position?` · ${cleanPosition(profile.primary_position)}`:''}{profile?.jersey_number?` · #${profile.jersey_number}`:''}</p></div></div>
+      <div className="stats-growth-person"><ProfileAvatar person={profile} size="profile"/><div><h2>{personName(profile)}</h2><p>{team?.name || 'Mijn OG'}{profile?.primary_position?` · ${cleanPosition(profile.primary_position)}`:''}{profile?.jersey_number?` · #${profile.jersey_number}`:''}</p><button type="button" className="secondary stats-profile-open" disabled={profileOpening} onClick={async()=>{setProfileOpening(true);try{await onPrepareProfile?.()}finally{setProfileOpening(false);setOwnProfileOpen(true)}}}>{profileOpening?'Laden…':'Spelersprofiel'}</button></div></div>
       <div className="stats-attendance-summary"><span>Aanwezigheid {year}</span><strong>{att.percentage==null?'—':`${att.percentage}%`}</strong><small>{att.total?`${att.attended} van ${att.total} activiteiten`:'Nog geen gegevens'}</small><div className="stats-attendance-bar"><i style={{width:`${att.percentage||0}%`}}/></div></div>
     </div>
     <div className="stats-context-filters">
@@ -2164,6 +2166,7 @@ function Stats({ profile, teams = [], competitions = [], attendance = [], gameAt
     {statsView==='games' && <section className="stats-section"><div className="stats-section-heading"><div><h3>Mijn wedstrijden</h3><p>{year} · {teamFilter==='total'?'Alle teams':teamOptions.find(t=>t.id===teamFilter)?.name} · {competitionFilter==='total'?'Alle competities':competitionOptions.find(c=>c.key===competitionFilter)?.name}</p></div></div>{ownGames.length?<div className="stats-game-history">{[...ownGames].reverse().map(row=><article key={row.id||row.game_key}><div className="stats-game-history-head"><span>{new Date(row.game_date).toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'})} · {competitionNameForStat(row,competitions)}</span><strong>{row.opponent||'Wedstrijd'}</strong></div><div className="stats-game-history-values"><span><b>{Number(row.ab||0)}</b> AB</span><span><b>{Number(row.h||0)}</b> H</span><span><b>{row.partial_batting?'—':Number(row.rbi||0)}</b> RBI</span><span><b>{row.partial_batting?'—':Number(row.sb||0)}</b> SB</span><span><b>{statRate(Number(row.ab)?Number(row.h||0)/Number(row.ab):null)}</b> AVG</span></div></article>)}</div>:<div className="stats-empty-state">Nog geen wedstrijdgegevens</div>}</section>}
     {statsView==='trends' && <><section className="stats-section"><div className="stats-section-heading"><div><h3>Slagontwikkeling</h3><p>{year} · {teamFilter==='total'?'Alle teams':teamOptions.find(t=>t.id===teamFilter)?.name} · {competitionFilter==='total'?'Totaal':competitionOptions.find(c=>c.key===competitionFilter)?.name}</p>{season.hasPartial&&<small>Historische 2026-import bevat alleen de beschikbare slagstatistieken uit de bron.</small>}</div></div>{ownGames.length?<div className="stats-trend-grid"><article><span>AVG</span><strong>{fmtRate(season.avg)}</strong><StatsSparkline values={rolling.map(r=>r.avg).filter(v=>v!=null)}/><small>Laatste 5 · {fmtRate(last5.avg)}</small></article></div>:<div className="stats-empty-state">Nog geen wedstrijdgegevens</div>}</section></>}
     {gameHistoryOpen&&<PlayerGameHistoryModal person={profile} rows={ownGames} competitions={competitions} teams={teams} context={`${year} · ${teamFilter==='total'?'Alle teams':teamOptions.find(t=>t.id===teamFilter)?.name||'Team'} · ${competitionFilter==='total'?'Alle competities':competitionOptions.find(c=>c.key===competitionFilter)?.name||'Competitie'}`} onClose={()=>setGameHistoryOpen(false)}/>}
+    {ownProfileOpen&&<PlayerProfileModal person={profile} competitions={competitions} teams={teams} team={team} viewerProfile={profile} viewerMembership={memberships.find(row=>row.profile_id===profile?.id&&Number(row.team_id)===Number(team?.id))||null} attendance={attendance} gameAttendance={gameAttendance} trainingEvents={trainingEvents} calendarEvents={calendarEvents} gameStats={gameStats} measurements={measurements} pitchingStats={pitchingStats} playerCards={playerCards} playerCardMetrics={playerCardMetrics} memberships={memberships} onChanged={onSaved} onClose={()=>setOwnProfileOpen(false)}/>}
   </section>
 }
 function attendanceStatsForPerson(personId, team, attendance = [], gameAttendance = [], trainingEvents = [], calendarEvents = [], seasonYear = null) {
@@ -2250,7 +2253,7 @@ function PlayerProfileModal({ person, team, teams = [], competitions = [], viewe
     <div className="player-profile-modal">
       <div className="player-profile-hero player-profile-hero-v2">
         <div className="player-profile-avatar-wrap"><ProfileAvatar person={person} size="profile"/>{person?.jersey_number&&<span className="player-profile-number">#{person.jersey_number}</span>}</div>
-        <div className="player-profile-identity"><p className="eyebrow orange">{team?.name || 'MIJN OG'}</p><h2>{personName(person)}</h2><p className="player-profile-position">{cleanPosition(person?.primary_position) || 'Positie niet ingevuld'}{secondary.length ? ` · ${cleanPositions(secondary).join(' / ')}` : ''}</p><p className="player-profile-subline">{person?.jersey_number ? `Rugnummer ${person.jersey_number}` : 'Geen rugnummer'}{person?.is_placeholder ? ' · Nog geen Mijn OG-account' : ''}</p></div>
+        <div className="player-profile-identity"><p className="eyebrow orange">{team?.name || 'MIJN OG'}</p><h2>{personName(person)}</h2><p className="player-profile-position">{cleanPosition(person?.primary_position) || 'Positie niet ingevuld'}{secondary.length ? ` · ${cleanPositions(secondary).join(' / ')}` : ''}</p>{person?.is_placeholder&&<p className="player-profile-subline">Nog geen Mijn OG-account</p>}</div>
       </div>
       <div className="player-profile-data">
         <div><span>Primaire positie</span><strong>{cleanPosition(person?.primary_position) || 'Niet ingevuld'}</strong></div>
@@ -2311,7 +2314,7 @@ function PlayerDetailsEditorModal({person,team,onClose,onSaved}){
   const [busy,setBusy]=useState(false),[feedback,setFeedback]=useState('')
   async function save(){
     setBusy(true);setFeedback('')
-    const {error}=await supabase.rpc('update_team_player_details',{p_team_id:Number(team.id),p_profile_id:person.id,p_jersey_number:form.jersey_number.trim()||null,p_primary_position:form.primary_position.trim()||null,p_secondary_positions:form.secondary_positions.split(',').map(value=>value.trim()).filter(Boolean),p_throws_hand:form.throws_hand||null,p_bats_side:form.bats_side||null})
+    const {error}=await supabase.rpc('update_team_player_details',{p_team_id:Number(team.id),p_profile_id:person.id,p_jersey_number:form.jersey_number.trim()||null,p_primary_position:cleanPosition(form.primary_position)||null,p_secondary_positions:cleanPositions(form.secondary_positions.split(',')),p_throws_hand:form.throws_hand||null,p_bats_side:form.bats_side||null})
     if(error){setFeedback(`Opslaan mislukt: ${error.message}`);setBusy(false);return}
     await onSaved()
   }
@@ -2703,8 +2706,8 @@ function AdminPanel({ session, onMessage, onChanged }) {
     setBusy(true);setDirectoryFeedback('')
     const {error}=await supabase.rpc('update_member_directory',{
       target_profile_id:editingDirectoryMember.id,new_first_name:directoryForm.first_name,new_last_name:directoryForm.last_name,
-      new_jersey_number:directoryForm.jersey_number,new_primary_position:directoryForm.primary_position,
-      new_secondary_positions:directoryForm.secondary_positions.split(',').map(value=>value.trim()).filter(Boolean),
+      new_jersey_number:directoryForm.jersey_number,new_primary_position:cleanPosition(directoryForm.primary_position),
+      new_secondary_positions:cleanPositions(directoryForm.secondary_positions.split(',')),
       new_date_of_birth:directoryForm.date_of_birth||null,new_username:directoryForm.username
     })
     if(error){setBusy(false);return setDirectoryFeedback(error.message)}
@@ -2928,8 +2931,9 @@ function AdminPanel({ session, onMessage, onChanged }) {
         headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${session.access_token}` },
         body:JSON.stringify({
           ...placeholderForm,
+          primary_position:cleanPosition(placeholderForm.primary_position),
           team_id:Number(selectedTeamId),
-          secondary_positions:placeholderForm.secondary_positions.split(',').map(v=>v.trim()).filter(Boolean)
+          secondary_positions:cleanPositions(placeholderForm.secondary_positions.split(','))
         })
       })
       const payload=await response.json()
@@ -3174,7 +3178,7 @@ function AdminPanel({ session, onMessage, onChanged }) {
                     <p className="muted directory-count">{visibleDirectoryMembers.length} van {directoryMembers.length} leden</p>
                     {directoryFeedback&&<div className="push-feedback" role="status">{directoryFeedback}</div>}
                     {directoryLoading?<div className="subtle-loading">Ledenlijst laden…</div>:<div className="member-directory-list">
-                      {visibleDirectoryMembers.map(person=>{const age=memberAge(person.date_of_birth);const positions=[person.primary_position,...(person.secondary_positions||[])].filter(Boolean).join(', ');return <article className="directory-member-card" key={person.id}>
+                      {visibleDirectoryMembers.map(person=>{const age=memberAge(person.date_of_birth);const positions=cleanPositions([person.primary_position,...(person.secondary_positions||[])]).join(', ');return <article className="directory-member-card" key={person.id}>
                         <div className="directory-member-head"><span className="member-avatar">{initials(person)}</span><div><strong>{personName(person)}</strong><small>{age!=null?`${age} jaar`:'Leeftijd niet ingevuld'}{person.jersey_number?` · #${person.jersey_number}`:''}</small></div></div>
                         <dl className="directory-member-data"><div><dt>Posities</dt><dd>{positions||'Niet ingevuld'}</dd></div><div><dt>Gebruikersnaam</dt><dd>{person.username?`@${person.username}`:'Niet ingesteld'}</dd></div><div className="directory-email"><dt>E-mailadres</dt><dd>{person.email||'Geen e-mailadres'}</dd></div></dl>
                         <div className="directory-member-actions"><button className="mini-action" type="button" onClick={()=>openDirectoryEditor(person)}>Bewerken</button><button className="mini-action" type="button" disabled={busy||person.is_placeholder} onClick={()=>openPasswordEditor(person)}>{person.is_placeholder?'Geen account':'Wachtwoord wijzigen'}</button><button className="mini-action reset" type="button" disabled={busy||!person.email} onClick={()=>sendMemberReset(person)}>{person.email?'Resetmail sturen':'Geen resetmail'}</button></div>
@@ -3283,7 +3287,6 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
   const [settingsView, setSettingsView] = useState(null)
   const [avatarBusy, setAvatarBusy] = useState(false)
   const [avatarCropFile, setAvatarCropFile] = useState(null)
-  const [ownProfileOpen, setOwnProfileOpen] = useState(false)
   const [taskInvitations,setTaskInvitations]=useState([])
   const [taskBusy,setTaskBusy]=useState(false)
 
@@ -3402,7 +3405,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
           <ProfileAvatar person={profile} size="profile" />
           <label className="avatar-change-button" title="Profielfoto aanpassen"><Icon name="camera" /><input type="file" accept="image/*" disabled={avatarBusy} onChange={e => { const file=e.target.files?.[0]; if(file) setAvatarCropFile(file); e.target.value='' }} /></label>
         </div>
-        <div className="profile-copy"><h2>{displayName}</h2><p>{teamLine}</p><div className="profile-inline-actions"><button type="button" className="profile-action-button" onClick={()=>setOwnProfileOpen(true)}>Spelersprofiel</button><button type="button" className="profile-action-button primary-profile-action" onClick={() => setSettingsView('personal')}><Icon name="edit" /> Gegevens aanpassen</button></div></div>
+        <div className="profile-copy"><h2>{displayName}</h2><p>{teamLine}</p><div className="profile-inline-actions"><button type="button" className="profile-action-button primary-profile-action" onClick={() => setSettingsView('personal')}><Icon name="edit" /> Gegevens aanpassen</button></div></div>
       </article>
 
       <PushOnboarding session={session} onOpen={()=>setSettingsView('notifications')} />
@@ -3413,7 +3416,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="people" title="Taken & functies" subtitle="Bekijk club- en teamuitnodigingen" status={taskInvitations.some(row=>row.status==='invited')?'Nieuw':null} onClick={() => setSettingsView('tasks')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.2.4" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.2.5" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -3421,7 +3424,6 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
       <button className="logout-button" onClick={signOut}><Icon name="logout" /> Uitloggen</button>
     </section>
 
-    {ownProfileOpen && <PlayerProfileModal person={profile} competitions={competitions} teams={teams} team={null} viewerProfile={profile} viewerMembership={null} attendance={attendance} gameAttendance={gameAttendance} trainingEvents={trainingEvents} calendarEvents={calendarEvents} gameStats={gameStats} measurements={measurements} pitchingStats={pitchingStats} playerCards={playerCards} playerCardMetrics={playerCardMetrics} memberships={memberships} onChanged={onSaved} onClose={()=>setOwnProfileOpen(false)} />}
     {settingsView && <SettingsModal title={settingsView === 'personal' ? 'Persoonlijke gegevens' : settingsView === 'password' ? 'Wachtwoord' : settingsView === 'notifications' ? 'Meldingen' : settingsView === 'calendar' ? 'Koppelingen' : settingsView==='tasks'?'Taken & functies':'Over Mijn OG'} onClose={() => { if (settingsView === 'personal') { setFirstName(profile?.first_name ?? ''); setLastName(profile?.last_name ?? '') } setSettingsView(null) }}>
       {settingsView === 'personal' && <div className="form-stack">
         <p className="settings-modal-intro">Pas hier je naam aan. Je e-mailadres blijft gekoppeld aan je account.</p>
@@ -3454,7 +3456,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 3.2.4</h3>
+        <h3>Versie 3.2.5</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS synchronisatie</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>
@@ -3923,7 +3925,7 @@ async function cropImageFile(file,{shape,zoom,offset,maxBytes}) {
 }
 
 function cleanPosition(value) {
-  return String(value || '').replace(/^\$+/, '').trim()
+  return String(value || '').replace(/[$＄﹩]/g, '').replace(/\s+/g, ' ').trim()
 }
 
 function cleanPositions(values = []) {
