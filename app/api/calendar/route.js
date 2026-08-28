@@ -264,8 +264,7 @@ function bestTeamMatch(event, teams) {
   const scored = []
   for (const team of teams || []) {
     const aliases = String(team?.foys_match_text || '')
-      .split(/[,;|
-]+/)
+      .split(/[,;|\r\n]+/)
       .map(normalizeText)
       .filter(Boolean)
     const hits = aliases.filter(alias => haystack.includes(alias))

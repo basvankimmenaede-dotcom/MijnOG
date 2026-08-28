@@ -3422,7 +3422,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="people" title="Taken & functies" subtitle="Bekijk club- en teamuitnodigingen" status={taskInvitations.some(row=>row.status==='invited')?'Nieuw':null} onClick={() => setSettingsView('tasks')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS databron gekoppeld' : 'FOYS databron toevoegen'} status={calendar ? 'Databron actief' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.2.7" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.2.8" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -3462,7 +3462,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 3.2.7</h3>
+        <h3>Versie 3.2.8</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS databron</span><strong>{calendar ? 'Dit account levert een feed' : 'Geen persoonlijke feed'}</strong></div>
