@@ -107,13 +107,14 @@ export async function GET(request) {
     const maxStart = new Date(Math.max(...starts) + 86400000).toISOString()
     const { data: existingRows, error: existingError } = await service
       .from('events')
-      .select('id,team_id,start_at,external_source,external_uid')
+      .select('id,team_id,start_at,external_source,external_uid,title,description,end_at,location_name,home_score,away_score,external_url,competition_id,created_by')
       .eq('type', 'game')
       .gte('start_at', minStart)
       .lte('start_at', maxStart)
     if (existingError) throw existingError
 
     const existingAtStart = new Map((existingRows || []).map(row => [`${Number(row.team_id)}|${new Date(row.start_at).toISOString()}`, row]))
+    const existingByExternalUid = new Map((existingRows || []).filter(row => row.external_source === 'foys' && row.external_uid).map(row => [`foys|${row.external_uid}`, row]))
     const nowIso = new Date().toISOString()
     const bulkPayloads = []
     const manualMigrations = []
@@ -124,26 +125,32 @@ export async function GET(request) {
       const isPast = new Date(event.end || event.start).getTime() < Date.now()
       const score = parseScore(event)
       const uid = event.uid || `${normalizeText(event.title)}|${event.start}`
+      const sameStart = existingAtStart.get(`${Number(team.id)}|${new Date(event.start).toISOString()}`)
+      const existingFoys = existingByExternalUid.get(`foys|${uid}`) || (sameStart?.external_source === 'foys' ? sameStart : null)
+      const existing = existingFoys || sameStart || null
+
+      // v3.2.3: FOYS is een synchronisatiebron, geen wisactie. Sommige ICS-feeds leveren
+      // bijvoorbeeld geen uitslag, locatie of omschrijving. In dat geval behouden we de
+      // reeds opgeslagen/verrijkte databasewaarde in plaats van die met NULL te overschrijven.
       const payload = {
         team_id: Number(team.id),
         type: 'game',
-        competition_id: competitionIds.get(year),
+        competition_id: competitionIds.get(year) || existing?.competition_id || null,
         status: cancelled ? 'cancelled' : (isPast ? 'played' : 'scheduled'),
         audience_mode: 'all',
-        title: event.title || 'Wedstrijd',
-        description: event.description || null,
+        title: event.title || existing?.title || 'Wedstrijd',
+        description: event.description || existing?.description || null,
         start_at: event.start,
-        end_at: event.end || null,
-        location_name: event.location || null,
-        home_score: score?.home ?? null,
-        away_score: score?.away ?? null,
-        created_by: event.sourceProfileId,
+        end_at: event.end || existing?.end_at || null,
+        location_name: event.location || existing?.location_name || null,
+        home_score: score?.home ?? existing?.home_score ?? null,
+        away_score: score?.away ?? existing?.away_score ?? null,
+        created_by: existing?.created_by || event.sourceProfileId,
         external_source: 'foys',
         external_uid: uid,
-        external_url: event.url || null,
+        external_url: event.url || existing?.external_url || null,
         updated_at: nowIso
       }
-      const sameStart = existingAtStart.get(`${Number(team.id)}|${new Date(event.start).toISOString()}`)
       if (sameStart?.id && sameStart.external_source !== 'foys') manualMigrations.push({ id: sameStart.id, payload })
       else bulkPayloads.push(payload)
     }
