@@ -697,10 +697,19 @@ function attendanceCoachSummary(rows = [], event) {
 }
 
 function eventTeamMatches(event, teams = []) {
-  if (event.source === 'supabase' || event.type === 'training') {
-    const ids = (event.teamIds?.length ? event.teamIds : event.teamId ? [event.teamId] : []).map(Number)
-    return teams.filter(team => ids.includes(Number(team.id))).map(team => Number(team.id))
+  // Mijn OG database is de bron van waarheid voor de kalender. Zodra een event
+  // een team_id/event_teams-koppeling heeft, gebruiken we die altijd - ook als
+  // external_source = 'foys'. FOYS-tekstmatching is alleen een fallback voor
+  // oude/onvolledige events zonder expliciete teamkoppeling.
+  const explicitIds = (event.teamIds?.length ? event.teamIds : event.teamId != null ? [event.teamId] : [])
+    .map(Number)
+    .filter(Number.isFinite)
+  if (explicitIds.length) {
+    return teams.filter(team => explicitIds.includes(Number(team.id))).map(team => Number(team.id))
   }
+
+  if (event.type === 'training') return []
+
   const haystack = normalizeMatchText([event.title, event.description, event.location].filter(Boolean).join(' | '))
   return teams.filter(team => {
     const configured = String(team.foys_match_text || '').split(/[,;|\n]+/).map(value => normalizeMatchText(value)).filter(Boolean)
@@ -3422,7 +3431,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="people" title="Taken & functies" subtitle="Bekijk club- en teamuitnodigingen" status={taskInvitations.some(row=>row.status==='invited')?'Nieuw':null} onClick={() => setSettingsView('tasks')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS databron gekoppeld' : 'FOYS databron toevoegen'} status={calendar ? 'Databron actief' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.2.8" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.2.9" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -3462,7 +3471,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 3.2.8</h3>
+        <h3>Versie 3.2.9</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS databron</span><strong>{calendar ? 'Dit account levert een feed' : 'Geen persoonlijke feed'}</strong></div>
