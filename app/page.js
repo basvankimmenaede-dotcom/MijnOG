@@ -1991,8 +1991,10 @@ function Stats({ profile, teams = [], competitions = [], attendance = [], gameAt
   const home1Best=home1Series.length?Math.min(...home1Series.map(r=>Number(r.value))):null
   const gameCards=[
     {label:'AVG',value:fmtRate(season.avg),context:`${season.ab||0} AB`,recent:fmtRate(last5.avg),series:rolling.map(r=>r.avg).filter(v=>v!=null)},
-    {label:'OPS',value:fmtRate(season.ops),context:season.hasPartial?'Niet beschikbaar voor historische import':`${(season.ab||0)+(season.bb||0)+(season.hbp||0)+(season.sf||0)} PA`,recent:fmtRate(last5.ops),series:rolling.map(r=>r.ops).filter(v=>v!=null)},
+    {label:'AB',value:String(season.ab||0),context:'At bats',recent:String(last5.ab||0),series:ownGames.map(r=>Number(r.ab||0))},
     {label:'Hits',value:String(season.h||0),context:`${season.ab||0} AB`,recent:String(last5.h||0),series:ownGames.map(r=>Number(r.h||0))},
+    {label:'OB',value:String((season.h||0)+(season.bb||0)+(season.hbp||0)),context:'Hits + walks + HBP',recent:String((last5.h||0)+(last5.bb||0)+(last5.hbp||0)),series:ownGames.map(r=>Number(r.h||0)+Number(r.bb||0)+Number(r.hbp||0))},
+    {label:'BB',value:String(season.bb||0),context:'Walks',recent:String(last5.bb||0),series:ownGames.map(r=>Number(r.bb||0))},
     {label:'RBI',value:season.hasPartial?'—':String(season.rbi||0),context:season.hasPartial?'Niet aanwezig in historische bron':`${ownGames.length} wedstrijden`,recent:season.hasPartial?'—':String(last5.rbi||0),series:season.hasPartial?[]:ownGames.map(r=>Number(r.rbi||0))},
     {label:'SB',value:season.hasPartial?'—':String(season.sb||0),context:season.hasPartial?'Niet aanwezig in historische bron':'Gestolen honken',recent:season.hasPartial?'—':String(last5.sb||0),series:season.hasPartial?[]:ownGames.map(r=>Number(r.sb||0))}
   ]
@@ -2013,7 +2015,7 @@ function Stats({ profile, teams = [], competitions = [], attendance = [], gameAt
       <section className="stats-section"><div className="stats-section-heading"><div><h3>Metingen</h3>{ownMeasurements.length>0&&<p>Ontwikkeling over tijd</p>}</div></div>{ownMeasurements.length?<div className="stats-development-grid"><article className="stats-development-card"><span>Exit velocity</span><strong>{exitLatest?`${Number(exitLatest.value).toFixed(0)} km/u`:'—'}</strong><small>{exitBest!=null?`Beste: ${exitBest.toFixed(0)} km/u`:'Nog geen metingen'}</small><StatsSparkline values={exitSeries.map(r=>r.value)}/></article><article className="stats-development-card"><span>Home → 1</span><strong>{home1Latest?`${Number(home1Latest.value).toFixed(2).replace('.',',')} sec`:'—'}</strong><small>{home1Best!=null?`Beste: ${home1Best.toFixed(2).replace('.',',')} sec`:'Nog geen metingen'}</small><StatsSparkline values={home1Series.map(r=>r.value)}/></article></div>:<div className="stats-empty-state">Nog geen metingen</div>}</section>
     </>}
     {statsView==='games' && <section className="stats-section"><div className="stats-section-heading"><div><h3>Mijn wedstrijden</h3><p>{year} · {teamFilter==='total'?'Alle teams':teamOptions.find(t=>t.id===teamFilter)?.name} · {competitionFilter==='total'?'Alle competities':competitionOptions.find(c=>c.key===competitionFilter)?.name}</p></div></div>{ownGames.length?<div className="stats-game-history">{[...ownGames].reverse().map(row=><article key={row.id||row.game_key}><div className="stats-game-history-head"><span>{new Date(row.game_date).toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'})} · {competitionNameForStat(row,competitions)}</span><strong>{row.opponent||'Wedstrijd'}</strong></div><div className="stats-game-history-values"><span><b>{Number(row.ab||0)}</b> AB</span><span><b>{Number(row.h||0)}</b> H</span><span><b>{row.partial_batting?'—':Number(row.rbi||0)}</b> RBI</span><span><b>{row.partial_batting?'—':Number(row.sb||0)}</b> SB</span><span><b>{statRate(Number(row.ab)?Number(row.h||0)/Number(row.ab):null)}</b> AVG</span></div></article>)}</div>:<div className="stats-empty-state">Nog geen wedstrijdgegevens</div>}</section>}
-    {statsView==='trends' && <><section className="stats-section"><div className="stats-section-heading"><div><h3>Slagontwikkeling</h3><p>{year} · {teamFilter==='total'?'Alle teams':teamOptions.find(t=>t.id===teamFilter)?.name} · {competitionFilter==='total'?'Totaal':competitionOptions.find(c=>c.key===competitionFilter)?.name}</p>{season.hasPartial&&<small>Historische 2026-import bevat H, AB en BB; daarom tonen we AVG wel en OPS niet.</small>}</div></div>{ownGames.length?<div className="stats-trend-grid"><article><span>AVG</span><strong>{fmtRate(season.avg)}</strong><StatsSparkline values={rolling.map(r=>r.avg).filter(v=>v!=null)}/><small>Laatste 5 · {fmtRate(last5.avg)}</small></article><article><span>OPS</span><strong>{fmtRate(season.ops)}</strong><StatsSparkline values={rolling.map(r=>r.ops).filter(v=>v!=null)}/><small>Laatste 5 · {fmtRate(last5.ops)}</small></article></div>:<div className="stats-empty-state">Nog geen wedstrijdgegevens</div>}</section></>}
+    {statsView==='trends' && <><section className="stats-section"><div className="stats-section-heading"><div><h3>Slagontwikkeling</h3><p>{year} · {teamFilter==='total'?'Alle teams':teamOptions.find(t=>t.id===teamFilter)?.name} · {competitionFilter==='total'?'Totaal':competitionOptions.find(c=>c.key===competitionFilter)?.name}</p>{season.hasPartial&&<small>Historische 2026-import bevat alleen de beschikbare slagstatistieken uit de bron.</small>}</div></div>{ownGames.length?<div className="stats-trend-grid"><article><span>AVG</span><strong>{fmtRate(season.avg)}</strong><StatsSparkline values={rolling.map(r=>r.avg).filter(v=>v!=null)}/><small>Laatste 5 · {fmtRate(last5.avg)}</small></article></div>:<div className="stats-empty-state">Nog geen wedstrijdgegevens</div>}</section></>}
     {gameHistoryOpen&&<PlayerGameHistoryModal person={profile} rows={ownGames} competitions={competitions} teams={teams} context={`${year} · ${teamFilter==='total'?'Alle teams':teamOptions.find(t=>t.id===teamFilter)?.name||'Team'} · ${competitionFilter==='total'?'Alle competities':competitionOptions.find(c=>c.key===competitionFilter)?.name||'Competitie'}`} onClose={()=>setGameHistoryOpen(false)}/>}
   </section>
 }
@@ -2054,6 +2056,16 @@ function formatCardValue(value, unit) {
   return `${Number(value).toFixed(decimals).replace('.',',')} ${unit || ''}`.trim()
 }
 
+function PlayerMissedAttendanceModal({ person, team, attendance = [], gameAttendance = [], trainingEvents = [], calendarEvents = [], seasonYear, onClose }) {
+  const inYear=value=>!seasonYear || new Date(value).getFullYear()===Number(seasonYear)
+  const trainingMap=new Map(trainingEvents.filter(ev=>inYear(ev.start)&&(!team||(ev.teamIds?.length?ev.teamIds:[ev.teamId]).map(Number).includes(Number(team.id)))).map(ev=>[String(ev.id),ev]))
+  const missedTrainings=attendance.filter(row=>row.profile_id===person?.id&&['absent','injured'].includes(row.status)&&trainingMap.has(String(row.event_id))).map(row=>{const ev=trainingMap.get(String(row.event_id));return {key:`training-${row.event_id}`,type:'Training',title:ev?.title||'Training',start:ev?.start,status:row.status,note:row.note}})
+  const games=calendarEvents.filter(ev=>inYear(ev.start)&&(!team||eventTeamMatches(ev,[team]).includes(Number(team.id))))
+  const missedGames=gameAttendance.filter(row=>row.profile_id===person?.id&&['absent','injured'].includes(row.status)&&inYear(row.event_start)).map(row=>{const ev=games.find(item=>eventKeyCandidates(item).includes(row.event_key));if(team&&!ev)return null;return {key:`game-${row.event_key}-${row.event_start}`,type:'Wedstrijd',title:ev?.title||row.event_title||row.opponent||'Wedstrijd',start:ev?.start||row.event_start,status:row.status,note:row.note}}).filter(Boolean)
+  const missed=[...missedTrainings,...missedGames].sort((a,b)=>new Date(b.start)-new Date(a.start))
+  return <SettingsModal title="Gemiste activiteiten" onClose={onClose}><div className="player-missed-attendance"><div className="player-game-history-intro"><div><p className="eyebrow orange">AANWEZIGHEID · {seasonYear}</p><h3>{personName(person)}</h3></div><small>{missed.length} gemist</small></div>{missed.length?<div className="player-game-history-list">{missed.map(item=><article key={item.key}><div className="stats-game-history-head"><span>{item.start?formatLongDate(item.start):'Datum onbekend'}</span><strong>{item.title}</strong></div><div className="player-game-history-context"><span>{item.type}</span><span>{item.status==='injured'?'Geblesseerd':'Afwezig'}</span></div>{item.note&&<p className="player-attendance-reason"><strong>Reden:</strong> {item.note}</p>}</article>)}</div>:<div className="stats-empty-state">Geen gemiste activiteiten in {seasonYear}.</div>}</div></SettingsModal>
+}
+
 function PlayerProfileModal({ person, team, teams = [], competitions = [], viewerProfile, viewerMembership, attendance = [], gameAttendance = [], trainingEvents = [], calendarEvents = [], gameStats = [], measurements = [], pitchingStats = [], playerCards = [], playerCardMetrics = [], onChanged, onClose }) {
   const canSeeAttendance = viewerProfile?.id === person?.id || viewerProfile?.role === 'admin' || viewerMembership?.member_role === 'coach'
   const canManageCards = viewerProfile?.role === 'admin' || viewerMembership?.member_role === 'coach'
@@ -2065,6 +2077,7 @@ function PlayerProfileModal({ person, team, teams = [], competitions = [], viewe
   const [profileTeam,setProfileTeam]=useState('total')
   const [profileCompetition,setProfileCompetition]=useState('total')
   const [profileGameHistoryOpen,setProfileGameHistoryOpen]=useState(false)
+  const [attendanceHistoryOpen,setAttendanceHistoryOpen]=useState(false)
   const profileYear=Number(profileSeason)
   const playerSeasonGames=allPlayerGames.filter(row=>statSeasonYear(row)===profileYear)
   const profileTeamOptions=playerTeamOptions(playerSeasonGames,teams)
@@ -2102,7 +2115,7 @@ function PlayerProfileModal({ person, team, teams = [], competitions = [], viewe
         {canSeePlayerStats&&<div className="player-stats-context-filters"><label>Seizoen<select value={profileSeason} onChange={e=>{setProfileSeason(e.target.value);setProfileTeam('total');setProfileCompetition('total')}}>{playerYears.length?playerYears.map(y=><option key={y} value={y}>{y}</option>):<option value={profileYear}>{profileYear}</option>}</select></label><label>Team<select value={profileTeam} onChange={e=>{setProfileTeam(e.target.value);setProfileCompetition('total')}}><option value="total">Alle teams</option>{profileTeamOptions.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select></label><label>Competitie<select value={profileCompetition} onChange={e=>setProfileCompetition(e.target.value)}><option value="total">Totaal</option>{profileCompetitionOptions.map(c=><option key={c.key} value={c.key}>{c.name}</option>)}</select></label></div>}
         {canSeePlayerStats&&<button type="button" className="player-measurement-card player-game-stats-card player-game-stats-open" onClick={()=>setProfileGameHistoryOpen(true)}>
           <div className="player-measurement-card-head"><span className="player-measurement-card-icon"><Icon name="stats"/></span><div><strong>Wedstrijdstats</strong><small>{profileYear} · {profileTeam==='total'?'Alle teams / invalbeurten':profileTeamOptions.find(t=>t.id===profileTeam)?.name||'Team'} · {profileCompetition==='total'?'Totaal':profileCompetitionOptions.find(c=>c.key===profileCompetition)?.name||'Competitie'}</small></div><Icon name="chevron"/></div>
-          <div className="player-profile-stats-grid">{[['AVG',statRate(performance.avg)],['OPS',statRate(performance.ops)],['Hits',performance.h||0],['RBI',performance.rbi==null?'—':performance.rbi],['SB',performance.sb==null?'—':performance.sb]].map(([label,value])=><div key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>
+          <div className="player-profile-stats-grid">{[['AVG',statRate(performance.avg)],['AB',performance.ab||0],['Hits',performance.h||0],['OB',(performance.h||0)+(performance.bb||0)+(performance.hbp||0)],['BB',performance.bb||0],['RBI',performance.rbi==null?'—':performance.rbi],['SB',performance.sb==null?'—':performance.sb]].map(([label,value])=><div key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>
         </button>}
         {canSeePlayerStats&&(isPitcher||pitching.hasData)&&<article className="player-measurement-card player-game-stats-card">
           <div className="player-measurement-card-head"><span className="player-measurement-card-icon"><Icon name="target"/></span><div><strong>Pitchingstats</strong><small>{profileYear} · {profileCompetition==='total'?'Totaal':profileCompetitionOptions.find(c=>c.key===profileCompetition)?.name||'Competitie'}</small></div></div>
@@ -2122,8 +2135,8 @@ function PlayerProfileModal({ person, team, teams = [], competitions = [], viewe
         })}
         {!cards.length&&<div className="player-cards-empty"><Icon name="stats"/><strong>Nog geen aanvullende metingen</strong><p>Nieuwe metingen worden door de coach vanuit Team stats toegevoegd.</p></div>}
       </section>
-      {canSeeAttendance && <section className="player-attendance-card">
-        <div className="player-attendance-heading"><div><p className="eyebrow orange">AANWEZIGHEID · {profileYear}</p><h3>{stats.percentage == null ? 'Nog geen percentage' : `${stats.percentage}%`}</h3></div><span>{stats.total} geregistreerde sessie{stats.total===1?'':'s'}</span></div>
+      {canSeeAttendance && <section className="player-attendance-card player-attendance-open" role="button" tabIndex="0" onClick={()=>setAttendanceHistoryOpen(true)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' ')setAttendanceHistoryOpen(true)}}>
+        <div className="player-attendance-heading"><div><p className="eyebrow orange">AANWEZIGHEID · {profileYear}</p><h3>{stats.percentage == null ? 'Nog geen percentage' : `${stats.percentage}%`}</h3></div><span className="player-attendance-open-meta">{stats.total} geregistreerde sessie{stats.total===1?'':'s'} <Icon name="chevron"/></span></div>
         {stats.total ? <><div className="attendance-progress"><span style={{width:`${stats.percentage}%`}} /></div><div className="player-attendance-grid">
           <div><strong>{stats.present}</strong><span>Aanwezig</span></div>
           <div><strong>{stats.absent}</strong><span>Afwezig</span></div>
@@ -2134,6 +2147,7 @@ function PlayerProfileModal({ person, team, teams = [], competitions = [], viewe
       </section>}
     </div>
     {profileGameHistoryOpen&&<PlayerGameHistoryModal person={person} rows={playerFilteredGames} competitions={competitions} teams={teams} context={`${profileYear} · ${profileTeam==='total'?'Alle teams':profileTeamOptions.find(t=>t.id===profileTeam)?.name||'Team'} · ${profileCompetition==='total'?'Alle competities':profileCompetitionOptions.find(c=>c.key===profileCompetition)?.name||'Competitie'}`} onClose={()=>setProfileGameHistoryOpen(false)}/>}
+    {attendanceHistoryOpen&&<PlayerMissedAttendanceModal person={person} team={selectedProfileTeam} attendance={attendance} gameAttendance={gameAttendance} trainingEvents={trainingEvents} calendarEvents={calendarEvents} seasonYear={profileYear} onClose={()=>setAttendanceHistoryOpen(false)}/>}
     {cardEditor&&<PlayerCardEditorModal person={person} team={team} card={cardEditor.id?cardEditor:null} metrics={cardEditor.id?playerCardMetrics.filter(metric=>metric.card_id===cardEditor.id):[]} viewerProfile={viewerProfile} onClose={()=>setCardEditor(null)} onSaved={async()=>{setCardEditor(null);await onChanged?.()}} />}
     {measurementMetric&&<PlayerMeasurementModal metric={measurementMetric} person={person} team={team} viewerProfile={viewerProfile} canManage={canManageCards} history={measurements.filter(row=>Number(row.card_metric_id)===Number(measurementMetric.id)||(measurementMetric.metric_key&&row.metric_type===measurementMetric.metric_key))} onClose={()=>setMeasurementMetric(null)} onSaved={async()=>{await onChanged?.()}} />}
     {detailsEditor&&<PlayerDetailsEditorModal person={person} team={team} onClose={()=>setDetailsEditor(false)} onSaved={async()=>{await onChanged?.();setDetailsEditor(false);onClose()}}/>}
@@ -3189,7 +3203,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="people" title="Taken & functies" subtitle="Bekijk club- en teamuitnodigingen" status={taskInvitations.some(row=>row.status==='invited')?'Nieuw':null} onClick={() => setSettingsView('tasks')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.1.24" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.1.25" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -3229,7 +3243,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 3.1.24</h3>
+        <h3>Versie 3.1.25</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS agenda</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>
