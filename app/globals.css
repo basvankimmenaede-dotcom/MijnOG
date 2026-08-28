@@ -3018,3 +3018,6 @@ button.swing-primary { width: 100%; margin-top: 12px; border: 0; background: var
 /* v3.2.5 - spelersprofiel bij Mijn stats */
 .stats-profile-open{margin-top:10px;align-self:flex-start;min-height:36px;padding:8px 12px}
 @media(max-width:560px){.stats-profile-open{width:100%;margin-top:12px}}
+
+/* v3.2.7 - rugnummer en positie zijn aparte UI-elementen; positie kan nooit een prefix uit de rugnummeropmaak erven */
+.player-number-position{display:inline-flex;align-items:baseline;gap:0}.player-position-code{font-variant-numeric:normal}.jersey-number{font-variant-numeric:tabular-nums}

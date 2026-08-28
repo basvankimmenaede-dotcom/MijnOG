@@ -27,9 +27,15 @@ export async function GET(request) {
   if (userError || !userData?.user) return NextResponse.json({ error: 'Sessie is verlopen. Log opnieuw in.' }, { status: 401 })
 
   try {
-    // v3.1.31: een ingelogde gebruiker triggert een LICHTE centrale sync.
-    // We lezen de actieve FOYS-koppelingen centraal, zodat wedstrijden niet afhangen
-    // van de persoon die op dat moment is ingelogd.
+    // v3.2.7: FOYS is uitsluitend een centrale databron. De Mijn OG-kalender leest nooit
+    // rechtstreeks uit een persoonlijke feed. We verzamelen daarom centraal genoeg feeds
+    // om alle actieve teams te dekken, zonder de paginalaad te blokkeren.
+    const { data: teams, error: teamsError } = await service
+      .from('teams')
+      .select('id,name,sport,foys_match_text,is_active,season_id')
+      .eq('is_active', true)
+    if (teamsError) throw teamsError
+
     const { data: rawConnections, error: connectionError } = await service
       .from('calendar_connections')
       .select('id,profile_id,ics_url,is_active,updated_at')
@@ -37,11 +43,48 @@ export async function GET(request) {
       .eq('is_active', true)
       .not('ics_url', 'is', null)
       .order('updated_at', { ascending: false })
-      .limit(20)
+      .limit(100)
     if (connectionError) throw connectionError
 
+    const profileIds = [...new Set((rawConnections || []).map(row => row.profile_id).filter(Boolean))]
+    let memberships = []
+    if (profileIds.length) {
+      const { data: membershipRows, error: membershipError } = await service
+        .from('team_members')
+        .select('profile_id,team_id')
+        .in('profile_id', profileIds)
+      if (membershipError) throw membershipError
+      memberships = membershipRows || []
+    }
+
+    const teamIdsByProfile = new Map()
+    for (const row of memberships) {
+      if (!teamIdsByProfile.has(row.profile_id)) teamIdsByProfile.set(row.profile_id, new Set())
+      teamIdsByProfile.get(row.profile_id).add(Number(row.team_id))
+    }
+
+    // Neem per actief team minimaal de meest recent gekoppelde feed van een teamlid mee.
+    // Voeg daarnaast enkele recente feeds toe als vangnet voor invallers/multi-team spelers.
+    const selectedConnections = []
+    const selectedIds = new Set()
+    for (const team of (teams || [])) {
+      const candidate = (rawConnections || []).find(connection =>
+        teamIdsByProfile.get(connection.profile_id)?.has(Number(team.id)) && isAllowedFoysUrl(connection.ics_url)
+      )
+      if (candidate && !selectedIds.has(candidate.id)) {
+        selectedIds.add(candidate.id)
+        selectedConnections.push(candidate)
+      }
+    }
+    for (const connection of (rawConnections || [])) {
+      if (selectedConnections.length >= Math.max((teams || []).length + 5, 12)) break
+      if (!isAllowedFoysUrl(connection.ics_url) || selectedIds.has(connection.id)) continue
+      selectedIds.add(connection.id)
+      selectedConnections.push(connection)
+    }
+
     const seenUrls = new Set()
-    const connections = (rawConnections || []).filter(connection => {
+    const connections = selectedConnections.filter(connection => {
       if (!connection?.ics_url || !isAllowedFoysUrl(connection.ics_url) || seenUrls.has(connection.ics_url)) return false
       seenUrls.add(connection.ics_url)
       return true
@@ -52,7 +95,7 @@ export async function GET(request) {
       const response = await fetch(connection.ics_url, {
         cache: 'no-store',
         headers: { Accept: 'text/calendar,text/plain;q=0.9,*/*;q=0.8' },
-        signal: AbortSignal.timeout(6000)
+        signal: AbortSignal.timeout(7000)
       })
       if (!response.ok) throw new Error(`FOYS gaf status ${response.status}`)
       const text = await response.text()
@@ -65,14 +108,8 @@ export async function GET(request) {
       .sort((a, b) => new Date(a.start) - new Date(b.start))
     const feedsFailed = feedResults.filter(result => result.status === 'rejected').length
     if (!parsedEvents.length && feedsFailed === feedResults.length) {
-      return NextResponse.json({ error: 'Geen van de gekoppelde FOYS-agenda’s reageerde op tijd.' }, { status: 502 })
+      return NextResponse.json({ error: 'Geen van de gekoppelde FOYS-databronnen reageerde op tijd.' }, { status: 502 })
     }
-
-    const { data: teams, error: teamsError } = await service
-      .from('teams')
-      .select('id,name,sport,foys_match_text,is_active,season_id')
-      .eq('is_active', true)
-    if (teamsError) throw teamsError
 
     // Dedupe dezelfde wedstrijd die in meerdere persoonlijke FOYS-feeds voorkomt.
     const uniqueEvents = new Map()
@@ -85,13 +122,13 @@ export async function GET(request) {
     const unmatched = []
     const matched = []
     for (const event of uniqueEvents.values()) {
-      const matches = (teams || []).filter(team => eventMatchesTeam(event, team))
-      if (matches.length !== 1) {
+      const match = bestTeamMatch(event, teams || [])
+      if (!match.team) {
         skipped += 1
-        unmatched.push({ title: event.title, start: event.start, matches: matches.map(team => team.name) })
+        unmatched.push({ title: event.title, start: event.start, matches: match.candidates.map(team => team.name) })
         continue
       }
-      matched.push({ event, team: matches[0] })
+      matched.push({ event, team: match.team })
     }
 
     if (!matched.length) {
@@ -219,6 +256,29 @@ async function ensureFoysCompetition(service, year) {
     .single()
   if (createError) throw createError
   return created.id
+}
+
+
+function bestTeamMatch(event, teams) {
+  const haystack = normalizeText(`${event.title || ''} ${event.description || ''}`)
+  const scored = []
+  for (const team of teams || []) {
+    const aliases = String(team?.foys_match_text || '')
+      .split(/[,;|
+]+/)
+      .map(normalizeText)
+      .filter(Boolean)
+    const hits = aliases.filter(alias => haystack.includes(alias))
+    if (!hits.length) continue
+    const bestAlias = hits.sort((a,b) => b.length - a.length)[0]
+    scored.push({ team, score: bestAlias.length, alias: bestAlias })
+  }
+  if (!scored.length) return { team: null, candidates: [] }
+  scored.sort((a,b) => b.score - a.score || Number(a.team.id) - Number(b.team.id))
+  const bestScore = scored[0].score
+  const best = scored.filter(item => item.score === bestScore)
+  if (best.length !== 1) return { team: null, candidates: best.map(item => item.team) }
+  return { team: best[0].team, candidates: best.map(item => item.team) }
 }
 
 function eventMatchesTeam(event, team) {

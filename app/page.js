@@ -247,15 +247,20 @@ export default function HomePage() {
 
   async function maybeAutoSyncFoys(accessToken = session?.access_token) {
     if (!accessToken || typeof window === 'undefined') return
-    const key = 'mijnog:foys-central-sync:last'
-    const last = Number(window.localStorage.getItem(key) || 0)
-    const interval = 2 * 60 * 60 * 1000
-    if (Date.now() - last < interval) return
+    const successKey = 'mijnog:foys-central-sync:last-success'
+    const attemptKey = 'mijnog:foys-central-sync:last-attempt'
+    const lastSuccess = Number(window.localStorage.getItem(successKey) || 0)
+    const lastAttempt = Number(window.localStorage.getItem(attemptKey) || 0)
+    const successInterval = 60 * 60 * 1000
+    const retryInterval = 10 * 60 * 1000
+    if (Date.now() - lastSuccess < successInterval) return
+    if (Date.now() - lastAttempt < retryInterval) return
 
-    // Meteen markeren voorkomt dat meerdere tabs tegelijk dezelfde sync starten.
-    window.localStorage.setItem(key, String(Date.now()))
+    // FOYS is alleen een databron. De app blijft altijd uit onze eigen events-database lezen.
+    // Een mislukte poging mag een volgende controle niet twee uur blokkeren.
+    window.localStorage.setItem(attemptKey, String(Date.now()))
     const controller = new AbortController()
-    const timeout = window.setTimeout(() => controller.abort(), 8000)
+    const timeout = window.setTimeout(() => controller.abort(), 12000)
     try {
       const response = await fetch('/api/calendar?background=1', {
         headers: { Authorization: `Bearer ${accessToken}` },
@@ -264,9 +269,10 @@ export default function HomePage() {
       })
       if (!response.ok) return
       const payload = await response.json()
+      window.localStorage.setItem(successKey, String(Date.now()))
       if (Number(payload.synced || 0) > 0) await refreshEventsOnly()
     } catch (_) {
-      // Een FOYS-storing is nooit een reden om Mijn OG trager of onbruikbaar te maken.
+      // FOYS mag de app nooit blokkeren. Na 10 minuten mag automatisch opnieuw geprobeerd worden.
     } finally {
       window.clearTimeout(timeout)
     }
@@ -555,7 +561,7 @@ function Dashboard({ session, profile, teams, events, messages = [], playerReque
         {nextEvent.location && <div className="hero-meta"><Icon name="pin" /><span>{nextEvent.location}</span></div>}
         {nextEvent.type === 'training' && <AttendanceButtons current={ownAttendance[String(nextEvent.id)]?.status} onSelect={status => onAttendance(nextEvent, status)} busy={attendanceBusy} compact />}
         <button className="hero-action" onClick={onAgenda}>Bekijk details <Icon name="arrow" /></button>
-      </> : calendarConnection ? <div className="hero-empty"><strong>Geen komende activiteiten.</strong><span>Nieuwe wedstrijden en trainingen verschijnen hier automatisch.</span><button className="hero-action" onClick={onAgenda}>Bekijk agenda <Icon name="arrow" /></button></div> : <div className="hero-empty"><strong>Koppel je KNBSB-agenda.</strong><span>Voeg je persoonlijke FOYS-link toe om wedstrijden te zien.</span><button className="hero-action" onClick={onMore}>Agenda koppelen <Icon name="arrow" /></button></div>}
+      </> : <div className="hero-empty"><strong>Geen komende activiteiten.</strong><span>Wedstrijden uit FOYS worden centraal naar Mijn OG gesynchroniseerd; de kalender zelf komt uit onze eigen database.</span><button className="hero-action" onClick={onAgenda}>Bekijk agenda <Icon name="arrow" /></button></div>}
     </section>
     <SectionTitle title="Komende activiteiten" action="Alles bekijken" onAction={onAgenda} />
     <section className="activity-card">{upcoming.length ? upcoming.map(event => <CompactEvent key={event.uid || `${event.type}-${event.id}`} event={event} transportEvent={findTransportEvent(event, transportEvents)} responses={transportResponses} />) : <EmptyState icon="calendar" title="Geen activiteiten gevonden" text="Trainingen en wedstrijden verschijnen hier zodra ze beschikbaar zijn." />}</section>
@@ -1873,7 +1879,7 @@ function CoachStatsModal({team,players=[],attendance=[],gameAttendance=[],traini
     <div className="attendance-total-table"><div className="attendance-total-head"><span>Speelster</span><span>Aanw.</span><span>Afgemeld</span><span>Te laat</span><span>%</span></div>{attendanceRows.map(row=><div className="attendance-total-row" key={row.person.id}><span><ProfileAvatar person={row.person} size="small"/><strong>{teamDisplayName(row.person)}</strong></span><span>{row.present}</span><span>{row.absent}</span><span>{row.late}</span><strong>{row.percentage==null?'—':`${row.percentage}%`}</strong></div>)}</div>
     <button type="button" className="secondary orange-outline attendance-detail-button" onClick={()=>setAttendanceDetailOpen(true)}>Bekijk aanwezigheid per activiteit <Icon name="chevron"/></button>
     <div className="coach-stats-player-head"><strong>Persoonlijke stats</strong><small>Tik op een speelster</small></div>
-    <div className="coach-stats-players">{rows.map(({person,stats})=><button key={person.id} onClick={()=>onPlayer(person)}><span className="coach-stats-person"><ProfileAvatar person={person} size="small"/><span><strong>{teamDisplayName(person)}</strong><small>{person.jersey_number?`#${person.jersey_number} · `:''}${cleanPosition(person.primary_position) || 'Geen positie'}</small></span></span><span className="coach-stats-mini"><strong>{statRate(stats.avg)}</strong><small>AVG</small></span><span className="coach-stats-mini"><strong>{statPercent(stats.obp)}</strong><small>OB%</small></span><span className="coach-stats-mini"><strong>{stats.attendance.percentage==null?'—':`${stats.attendance.percentage}%`}</strong><small>Aanw.</small></span><Icon name="chevron"/></button>)}</div>
+    <div className="coach-stats-players">{rows.map(({person,stats})=><button key={person.id} onClick={()=>onPlayer(person)}><span className="coach-stats-person"><ProfileAvatar person={person} size="small"/><span><strong>{teamDisplayName(person)}</strong><small className="player-number-position">{person.jersey_number&&<span className="jersey-number">#{person.jersey_number}</span>}{person.jersey_number&&<span aria-hidden="true"> · </span>}<span className="player-position-code">{cleanPosition(person.primary_position) || 'Geen positie'}</span></small></span></span><span className="coach-stats-mini"><strong>{statRate(stats.avg)}</strong><small>AVG</small></span><span className="coach-stats-mini"><strong>{statPercent(stats.obp)}</strong><small>OB%</small></span><span className="coach-stats-mini"><strong>{stats.attendance.percentage==null?'—':`${stats.attendance.percentage}%`}</strong><small>Aanw.</small></span><Icon name="chevron"/></button>)}</div>
   </div>{attendanceDetailOpen&&<SettingsModal title="Aanwezigheid per activiteit" onClose={()=>setAttendanceDetailOpen(false)}><div className="attendance-detail-modal"><p className="settings-modal-intro">T = training · W = wedstrijd. Veeg horizontaal om eerdere activiteiten te bekijken.</p><div className="attendance-matrix-wrap"><table className="attendance-matrix"><thead><tr><th>Speelster</th>{sessions.map(event=><th key={event.uid||`${event.type}-${event.id}`} title={`${event.title} · ${formatLongDate(event.start)}`}><span>{formatShortDate(event.start)}</span><small>{event.type==='game'?'W':'T'}</small></th>)}</tr></thead><tbody>{attendanceRows.map(row=><tr key={row.person.id}><th>{teamDisplayName(row.person)}</th>{row.statuses.map((status,index)=>{const [mark,label]=statusMark(status);return <td key={`${row.person.id}-${index}`} className={`attendance-cell ${status}`} title={label}>{mark}</td>})}</tr>)}</tbody></table>{!sessions.length&&<p className="muted">Nog geen afgelopen trainingen of wedstrijden.</p>}</div></div></SettingsModal>}</SettingsModal>
 }
 function CoachStatEntryModal({mode,team,players=[],onClose,onSaved}){
@@ -2257,7 +2263,7 @@ function PlayerProfileModal({ person, team, teams = [], competitions = [], viewe
       </div>
       <div className="player-profile-data">
         <div><span>Primaire positie</span><strong>{cleanPosition(person?.primary_position) || 'Niet ingevuld'}</strong></div>
-        <div><span>Secundair</span><strong>{secondary.length ? secondary.join(', ') : 'Niet ingevuld'}</strong></div>
+        <div><span>Secundair</span><strong>{secondary.length ? cleanPositions(secondary).join(', ') : 'Niet ingevuld'}</strong></div>
         <div><span>Gooit</span><strong>{throwsLabel}</strong></div>
         <div><span>Slaat</span><strong>{batsLabel}</strong></div>
       </div>
@@ -2412,8 +2418,8 @@ function Team({ session, profile, teams, competitions = [], profiles, membership
     last_name: row.last_name,
     jersey_number: row.jersey_number,
     avatar_url: row.avatar_url,
-    primary_position: row.primary_position,
-    secondary_positions: row.secondary_positions || []
+    primary_position: cleanPosition(row.primary_position),
+    secondary_positions: cleanPositions(row.secondary_positions || [])
   }))
   const profileMap = new Map(publicProfiles.map(person => [person.id, person]))
   profiles.forEach(person => profileMap.set(person.id, { ...(profileMap.get(person.id) || {}), ...person }))
@@ -2519,10 +2525,10 @@ function teamDisplayName(person) {
   return `${first ? `${first.charAt(0).toUpperCase()}. ` : ''}${last}`
 }
 
-function teamPlayerMeta(person) {
+function TeamPlayerMeta({ person }) {
   const number=person?.jersey_number ? `#${person.jersey_number}` : 'Geen rugnummer'
   const position=cleanPosition(person?.primary_position) || 'Geen positie'
-  return `${number} · ${position}`
+  return <span className="player-number-position"><span className="jersey-number">{number}</span><span aria-hidden="true"> · </span><span className="player-position-code">{position}</span></span>
 }
 
 function TeamModal({ team, currentProfile, currentMembership, members, busy, onTeamPhoto, onAvatar, onPerson, onClose }) {
@@ -2560,7 +2566,7 @@ function TeamPeopleSection({ title, rows, admin, busy, onAvatar, onPerson, canOp
     {displayRows.length ? <div className={`team-people-grid ${displayRows.length % 2 === 1 ? 'odd-count' : ''}`}>{displayRows.map(row => { const openable=onPerson && canOpenPerson?.(row.person); return <article className={`team-person ${openable?'profile-openable':''}`} key={row.id} onClick={()=>openable&&onPerson(row.person)} role={openable?'button':undefined} tabIndex={openable?0:undefined} onKeyDown={e=>{if(openable&&(e.key==='Enter'||e.key===' ')){e.preventDefault();onPerson(row.person)}}}>
       <div className="team-person-avatar-wrap"><ProfileAvatar person={row.person} size="large" />{admin && <label className="avatar-admin-edit" title="Profielfoto aanpassen" onClick={e=>e.stopPropagation()}><Icon name="edit" /><input type="file" accept="image/*" disabled={busy} onChange={e => { const file=e.target.files?.[0]; if(file) onAvatar(row.person,file); e.target.value='' }} /></label>}</div>
       <strong>{row.member_role==='player' ? teamDisplayName(row.person) : personName(row.person)}</strong>
-      <small>{row.member_role==='player' ? teamPlayerMeta(row.person) : staffRoleLabel(row.team_function || (row.member_role==='coach'?'head_coach':'team_manager'))}</small>
+      <small>{row.member_role==='player' ? <TeamPlayerMeta person={row.person}/> : staffRoleLabel(row.team_function || (row.member_role==='coach'?'head_coach':'team_manager'))}</small>
       {openable && <span className="profile-open-hint">Bekijk profiel</span>}
     </article>})}</div> : <div className="admin-empty">Nog geen {title.toLowerCase()} gekoppeld.</div>}
   </section>
@@ -3354,7 +3360,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
       })
       const payload = await response.json()
       if (!response.ok) throw new Error(payload.error || 'FOYS kon niet worden gesynchroniseerd.')
-      onMessage(`FOYS bijgewerkt: ${payload.synced || 0} wedstrijd${Number(payload.synced || 0) === 1 ? '' : 'en'} verwerkt.`)
+      onMessage(`FOYS databron bijgewerkt: ${payload.synced || 0} wedstrijd${Number(payload.synced || 0) === 1 ? '' : 'en'} verwerkt · ${payload.feeds || 0} feed${Number(payload.feeds || 0) === 1 ? '' : 's'} gecontroleerd${payload.skipped ? ` · ${payload.skipped} niet gekoppeld` : ''}.`)
       await onSaved()
     } catch (error) {
       onMessage(`FOYS synchroniseren mislukt: ${error.message}`)
@@ -3415,8 +3421,8 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
         <SettingsRow icon="lock" title="Wachtwoord" subtitle="Wachtwoord wijzigen via resetmail" onClick={() => setSettingsView('password')} />
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="people" title="Taken & functies" subtitle="Bekijk club- en teamuitnodigingen" status={taskInvitations.some(row=>row.status==='invited')?'Nieuw':null} onClick={() => setSettingsView('tasks')} />
-        <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.2.5" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS databron gekoppeld' : 'FOYS databron toevoegen'} status={calendar ? 'Databron actief' : null} onClick={() => setSettingsView('calendar')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.2.7" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -3446,7 +3452,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
       {settingsView==='tasks'&&<div className="task-invitation-list">{taskInvitations.map(invitation=><article className={`task-invitation-card ${invitation.status}`} key={invitation.id}><div><span>{invitation.teams?.name||'Hele club'}</span><strong>{staffRoleLabel(invitation.task_role)}</strong>{invitation.note&&<small>{invitation.note}</small>}</div>{invitation.status==='invited'?<div className="task-invitation-actions"><button className="secondary" disabled={taskBusy} onClick={()=>respondTask(invitation,'declined')}>Afwijzen</button><button className="primary" disabled={taskBusy} onClick={()=>respondTask(invitation,'accepted')}>Accepteren</button></div>:<span className={`task-status ${invitation.status}`}>{invitation.status==='accepted'?'Geaccepteerd':'Afgewezen'}</span>}</article>)}{!taskInvitations.length&&<div className="admin-empty">Je hebt nog geen taakuitnodigingen.</div>}</div>}
 
       {settingsView === 'calendar' && <div className="form-stack">
-        <p className="settings-modal-intro">Een FOYS-link synchroniseert de herkende KNBSB-wedstrijden naar Mijn OG. Daarna zijn die wedstrijden vanuit onze database voor het hele gekoppelde team zichtbaar.</p>
+        <p className="settings-modal-intro">FOYS gebruiken we uitsluitend als databron. Een gekoppelde feed levert wedstrijdinformatie aan onze eigen database; alle leden zien daarna dezelfde Mijn OG-kalender. Een persoonlijke koppeling is dus niet nodig om wedstrijden te kunnen zien.</p>
         <label>FOYS ICS-link<textarea rows="4" value={icsUrl} onChange={e => setIcsUrl(e.target.value)} placeholder="https://api.foys.io/competition/public-api/v1/persons/.../ics" /></label>
         <button className="primary" onClick={saveCalendar} disabled={calendarBusy}>{calendarBusy ? 'Bezig…' : calendar ? 'Koppeling bijwerken' : 'Agenda koppelen'}</button>
         {calendar && <button className="secondary orange-outline" onClick={syncCalendarNow} disabled={calendarBusy}>Wedstrijden nu synchroniseren</button>}
@@ -3456,10 +3462,10 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 3.2.5</h3>
+        <h3>Versie 3.2.7</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
-        <div className="about-version-row"><span>FOYS synchronisatie</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>
+        <div className="about-version-row"><span>FOYS databron</span><strong>{calendar ? 'Dit account levert een feed' : 'Geen persoonlijke feed'}</strong></div>
       </div>}
     </SettingsModal>}
   </>)
@@ -3925,7 +3931,10 @@ async function cropImageFile(file,{shape,zoom,offset,maxBytes}) {
 }
 
 function cleanPosition(value) {
-  return String(value || '').replace(/[$＄﹩]/g, '').replace(/\s+/g, ' ').trim()
+  const raw=String(value || '').normalize('NFKC').toUpperCase().trim()
+  // Positievelden horen alleen uit letters/cijfers te bestaan (CF, SS, 2B, etc.).
+  // Door alles daarbuiten te verwijderen verdwijnen ook $, €, £ en andere vreemde prefix/suffix tekens definitief uit de UI.
+  return raw.replace(/[^A-Z0-9]/g, '')
 }
 
 function cleanPositions(values = []) {
