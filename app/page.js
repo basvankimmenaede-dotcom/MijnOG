@@ -1491,13 +1491,31 @@ function CoachDashboard({ session, profile, teams, competitions = [], gameStats 
 }
 
 
+function battingObpForRows(rows = []) {
+  // Volledige regels gebruiken de officiele OBP-formule. Historische partial_batting
+  // regels bevatten wel H, AB en BB; daarvoor gebruiken we de best beschikbare
+  // berekening (H + BB) / (AB + BB) in plaats van de hele selectie op '—' te zetten.
+  const parts=rows.reduce((acc,row)=>{
+    const ab=Number(row.ab||0), h=Number(row.h||0), bb=Number(row.bb||0)
+    if(Boolean(row.partial_batting)){
+      acc.num+=h+bb
+      acc.den+=ab+bb
+    }else{
+      const hbp=Number(row.hbp||0), sf=Number(row.sf||0)
+      acc.num+=h+bb+hbp
+      acc.den+=ab+bb+hbp+sf
+    }
+    return acc
+  },{num:0,den:0})
+  return parts.den?parts.num/parts.den:null
+}
+
 function coreStatsForPlayer(personId, team, attendance=[], gameAttendance=[], trainingEvents=[], calendarEvents=[], gameStats=[], measurements=[]) {
   const games=gameStats.filter(r=>r.profile_id===personId && (!team || Number(r.team_id)===Number(team.id)))
   const sums=games.reduce((a,r)=>{['ab','h','rbi','bb','hbp','sf','tb','sb'].forEach(k=>a[k]=(a[k]||0)+Number(r[k]||0));return a},{})
   const hasPartial=games.some(r=>Boolean(r.partial_batting))
   const avg=sums.ab?sums.h/sums.ab:null
-  const den=(sums.ab||0)+(sums.bb||0)+(sums.hbp||0)+(sums.sf||0)
-  const obp=!hasPartial&&den?((sums.h||0)+(sums.bb||0)+(sums.hbp||0))/den:null
+  const obp=battingObpForRows(games)
   const slg=!hasPartial&&sums.ab?(sums.tb||0)/sums.ab:null
   const ops=obp!=null&&slg!=null?obp+slg:null
   const own=measurements.filter(r=>r.profile_id===personId && (!team || Number(r.team_id)===Number(team.id)))
@@ -1761,7 +1779,7 @@ function CoachStatsModal({team,players=[],attendance=[],gameAttendance=[],traini
   const teamGames=gameStats.filter(r=>Number(r.team_id)===Number(team?.id))
   const sum=teamGames.reduce((a,r)=>{['ab','h','rbi','bb','hbp','sf','tb','sb'].forEach(k=>a[k]=(a[k]||0)+Number(r[k]||0));return a},{})
   const teamHasPartial=teamGames.some(r=>Boolean(r.partial_batting))
-  const avg=sum.ab?sum.h/sum.ab:null, den=(sum.ab||0)+(sum.bb||0)+(sum.hbp||0)+(sum.sf||0), obp=!teamHasPartial&&den?((sum.h||0)+(sum.bb||0)+(sum.hbp||0))/den:null
+  const avg=sum.ab?sum.h/sum.ab:null, obp=battingObpForRows(teamGames)
   const ev=rows.map(r=>Number(r.stats.exit?.value)).filter(Number.isFinite), h1=rows.map(r=>Number(r.stats.home1?.value)).filter(Number.isFinite)
   const pastTraining=trainingEvents.filter(event=>event.type==='training'&&(event.teamIds||[event.teamId]).map(Number).includes(Number(team?.id))&&new Date(event.end||event.start).getTime()<Date.now())
   const pastGames=[...trainingEvents.filter(event=>event.type!=='training'),...calendarEvents].filter(event=>eventTeamMatches(event,[team]).includes(Number(team?.id))&&new Date(event.end||event.start).getTime()<Date.now())
@@ -1770,7 +1788,7 @@ function CoachStatsModal({team,players=[],attendance=[],gameAttendance=[],traini
   function statusFor(person,event){if(!eligible(person,event))return 'not_invited';return event.type==='training'?attendance.find(row=>String(row.event_id)===String(event.id)&&row.profile_id===person.id)?.status||'none':gameAttendance.find(row=>row.event_key===eventTransportKey(event)&&row.profile_id===person.id)?.status||'none'}
   const attendanceRows=sortedPlayers.map(person=>{const statuses=sessions.map(event=>statusFor(person,event));const present=statuses.filter(value=>value==='present'||value==='late').length, absent=statuses.filter(value=>value==='absent'||value==='injured').length, late=statuses.filter(value=>value==='late').length, total=present+absent;return {person,statuses,present,absent,late,percentage:total?Math.round(present/total*100):null}})
   const teamRegistered=attendanceRows.reduce((total,row)=>total+row.present+row.absent,0), teamPresent=attendanceRows.reduce((total,row)=>total+row.present,0)
-  const cards=[['AVG',statRate(avg)],['OB%',statPercent(obp)],['AB',sum.ab||0],['Hits',sum.h||0],['BB',teamHasPartial?'—':(sum.bb||0)],['RBI',teamHasPartial?'—':(sum.rbi||0)],['SB',teamHasPartial?'—':(sum.sb||0)],['Aanwezig',teamRegistered?`${Math.round(teamPresent/teamRegistered*100)}%`:'—']]
+  const cards=[['AVG',statRate(avg)],['OB%',statPercent(obp)],['AB',sum.ab||0],['Hits',sum.h||0],['BB',sum.bb||0],['RBI',teamHasPartial?'—':(sum.rbi||0)],['SB',teamHasPartial?'—':(sum.sb||0)],['Aanwezig',teamRegistered?`${Math.round(teamPresent/teamRegistered*100)}%`:'—']]
   const statusMark=status=>status==='present'?['✓','Aanwezig']:status==='late'?['T','Te laat']:status==='absent'?['×','Afwezig']:status==='injured'?['G','Geblesseerd']:status==='maybe'?['?','Misschien']:status==='not_invited'?['–','Niet uitgenodigd']:['','Niet geregistreerd']
   return <SettingsModal title={`${team?.name||'Team'} stats`} onClose={onClose}><div className="coach-stats-modal">
     <div className="coach-stats-actions"><button className="secondary orange-outline" onClick={onAddMeasurement}>+ Meting</button></div><p className="settings-modal-intro">Wedstrijdstats registreer je vanuit <strong>Agenda → Gespeeld</strong>. Zo blijven team, competitie, invallers en wedstrijd altijd aan dezelfde registratie gekoppeld.</p>
@@ -1967,8 +1985,7 @@ function battingRates(rows = []) {
   const x=rows.reduce((acc,row)=>{['ab','h','rbi','bb','hbp','sf','tb','sb'].forEach(k=>acc[k]=(acc[k]||0)+Number(row[k]||0));return acc},{})
   const hasPartial=rows.some(row=>Boolean(row.partial_batting))
   const avg=x.ab?x.h/x.ab:null
-  const den=(x.ab||0)+(x.bb||0)+(x.hbp||0)+(x.sf||0)
-  const obp=!hasPartial&&den?((x.h||0)+(x.bb||0)+(x.hbp||0))/den:null
+  const obp=battingObpForRows(rows)
   const slg=!hasPartial&&x.ab?(x.tb||0)/x.ab:null
   return {...x,avg,obp,slg,ops:obp!=null&&slg!=null?obp+slg:null,hasPartial}
 }
@@ -2045,9 +2062,9 @@ function Stats({ profile, teams = [], competitions = [], attendance = [], gameAt
   const home1Best=home1Series.length?Math.min(...home1Series.map(r=>Number(r.value))):null
   const gameCards=[
     {label:'AVG',value:fmtRate(season.avg),context:`${season.ab||0} AB`,recent:fmtRate(last5.avg),series:rolling.map(r=>r.avg).filter(v=>v!=null)},
+    {label:'OB%',value:statPercent(season.obp),context:'On-base percentage',recent:statPercent(last5.obp),series:rolling.map(r=>r.obp).filter(v=>v!=null)},
     {label:'AB',value:String(season.ab||0),context:'At bats',recent:String(last5.ab||0),series:ownGames.map(r=>Number(r.ab||0))},
     {label:'Hits',value:String(season.h||0),context:`${season.ab||0} AB`,recent:String(last5.h||0),series:ownGames.map(r=>Number(r.h||0))},
-    {label:'OB',value:String((season.h||0)+(season.bb||0)+(season.hbp||0)),context:'Hits + walks + HBP',recent:String((last5.h||0)+(last5.bb||0)+(last5.hbp||0)),series:ownGames.map(r=>Number(r.h||0)+Number(r.bb||0)+Number(r.hbp||0))},
     {label:'BB',value:String(season.bb||0),context:'Walks',recent:String(last5.bb||0),series:ownGames.map(r=>Number(r.bb||0))},
     {label:'RBI',value:season.hasPartial?'—':String(season.rbi||0),context:season.hasPartial?'Niet aanwezig in historische bron':`${ownGames.length} wedstrijden`,recent:season.hasPartial?'—':String(last5.rbi||0),series:season.hasPartial?[]:ownGames.map(r=>Number(r.rbi||0))},
     {label:'SB',value:season.hasPartial?'—':String(season.sb||0),context:season.hasPartial?'Niet aanwezig in historische bron':'Gestolen honken',recent:season.hasPartial?'—':String(last5.sb||0),series:season.hasPartial?[]:ownGames.map(r=>Number(r.sb||0))}
@@ -2287,11 +2304,17 @@ function Team({ session, profile, teams, competitions = [], profiles, membership
   const [cropRequest, setCropRequest] = useState(null)
   const [busy, setBusy] = useState(false)
   const [playerProfile, setPlayerProfile] = useState(null)
+  const [publicTeamDirectory, setPublicTeamDirectory] = useState([])
 
   useEffect(() => {
-    supabase.from('teams').select('id,name,sport,season_id,is_active,team_photo_url,seasons(is_active)').eq('is_active',true).order('sport').order('name').then(({data,error}) => {
-      if (error) onMessage(`Teams laden mislukt: ${error.message}`)
-      else setDirectoryTeams(sortOgTeams((data||[]).filter(team => team.seasons?.is_active !== false)))
+    Promise.all([
+      supabase.from('teams').select('id,name,sport,season_id,is_active,team_photo_url,seasons(is_active)').eq('is_active',true).order('sport').order('name'),
+      supabase.rpc('get_public_team_directory')
+    ]).then(([teamResult, directoryResult]) => {
+      if (teamResult.error) onMessage(`Teams laden mislukt: ${teamResult.error.message}`)
+      else setDirectoryTeams(sortOgTeams((teamResult.data||[]).filter(team => team.seasons?.is_active !== false)))
+      if (directoryResult.error) onMessage(`Teamleden laden mislukt: ${directoryResult.error.message}`)
+      else setPublicTeamDirectory(directoryResult.data || [])
     })
   }, [])
 
@@ -2299,9 +2322,41 @@ function Team({ session, profile, teams, competitions = [], profiles, membership
   const sortedOwnTeams = sortOgTeams(teams)
   const otherTeams = directoryTeams.filter(team => !ownTeamIds.has(Number(team.id)))
 
-  const membersForTeam = teamId => memberships
+  const publicProfiles = publicTeamDirectory.map(row => ({
+    id: row.profile_id,
+    first_name: row.first_name,
+    last_name: row.last_name,
+    jersey_number: row.jersey_number,
+    avatar_url: row.avatar_url,
+    primary_position: row.primary_position,
+    secondary_positions: row.secondary_positions || []
+  }))
+  const profileMap = new Map(publicProfiles.map(person => [person.id, person]))
+  profiles.forEach(person => profileMap.set(person.id, { ...(profileMap.get(person.id) || {}), ...person }))
+  const teamProfileDirectory = [...profileMap.values()]
+
+  const membershipMap = new Map()
+  publicTeamDirectory.forEach(row => membershipMap.set(`public-${row.membership_id}`, {
+    id: row.membership_id,
+    team_id: row.team_id,
+    profile_id: row.profile_id,
+    member_role: row.member_role,
+    team_function: row.team_function
+  }))
+  memberships.forEach(row => {
+    const duplicateKey = [...membershipMap.entries()].find(([,existing]) =>
+      Number(existing.team_id) === Number(row.team_id) &&
+      existing.profile_id === row.profile_id &&
+      existing.member_role === row.member_role
+    )?.[0]
+    if (duplicateKey) membershipMap.delete(duplicateKey)
+    membershipMap.set(`full-${row.id}`, row)
+  })
+  const teamMembershipDirectory = [...membershipMap.values()]
+
+  const membersForTeam = teamId => teamMembershipDirectory
     .filter(row => Number(row.team_id) === Number(teamId))
-    .map(row => ({ ...row, person: profiles.find(person => person.id === row.profile_id) }))
+    .map(row => ({ ...row, person: teamProfileDirectory.find(person => person.id === row.profile_id) }))
     .filter(row => row.person)
 
   async function uploadTeamPhoto(team, file) {
@@ -3277,7 +3332,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="people" title="Taken & functies" subtitle="Bekijk club- en teamuitnodigingen" status={taskInvitations.some(row=>row.status==='invited')?'Nieuw':null} onClick={() => setSettingsView('tasks')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.1.31" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.1.33" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -3318,7 +3373,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 3.1.31</h3>
+        <h3>Versie 3.1.33</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS synchronisatie</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>
