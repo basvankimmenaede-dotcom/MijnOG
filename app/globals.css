@@ -2981,7 +2981,32 @@ button.swing-primary { width: 100%; margin-top: 12px; border: 0; background: var
 .player-attendance-card{border-radius:18px;background:#fff;border:1px solid var(--border,#e7e1da);box-shadow:0 6px 20px rgba(70,45,25,.04)}.player-attendance-heading h3{color:var(--og-orange,#f36f21)}.attendance-progress{background:#f3eee9}.attendance-progress span{background:var(--og-orange,#f36f21)}
 .player-measurement-card{border-radius:18px!important}.player-metric-row{transition:background .15s ease}.player-metric-row:hover{background:#fffaf6}
 @media(max-width:560px){.player-profile-hero-v2{padding:15px;align-items:flex-start}.player-profile-identity h2{font-size:22px}.player-profile-data{grid-template-columns:1fr 1fr}.player-profile-stats-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.player-profile-stats-grid>div:nth-child(n+5){border-top:1px solid var(--border,#e7e1da)}}
-\n\n/* v3.2.1 - positie-opmaak + iOS/Safari kleurfix Coach */\n.coach-page button,\n.coach-page input,\n.coach-page select,\n.coach-page textarea,\n.coach-page a,\n.detail-modal button,\n.settings-modal button {\n  -webkit-appearance: none;\n  appearance: none;\n  -webkit-text-fill-color: currentColor;\n}\n.coach-page button:not(.primary):not(.text-button):not(.orange-outline):not(.active),\n.coach-page a:not(.orange),\n.coach-session-card,\n.coach-history-tabs button:not(.active),\n.coach-stats-players > button {\n  color: var(--ink,#171717);\n}\n.coach-page select, .coach-page input, .coach-page textarea { color: var(--ink,#171717); }\n.coach-page .primary { color:#fff; -webkit-text-fill-color:#fff; }\n.coach-page .text-button, .coach-page .orange-outline, .coach-page .orange { color:var(--og-orange-dark,#d95712); -webkit-text-fill-color:currentColor; }\n.coach-page * { -webkit-tap-highlight-color: rgba(243,111,33,.14); }\n
+
+
+/* v3.2.1 - positie-opmaak + iOS/Safari kleurfix Coach */
+.coach-page button,
+.coach-page input,
+.coach-page select,
+.coach-page textarea,
+.coach-page a,
+.detail-modal button,
+.settings-modal button {
+  -webkit-appearance: none;
+  appearance: none;
+  -webkit-text-fill-color: currentColor;
+}
+.coach-page button:not(.primary):not(.text-button):not(.orange-outline):not(.active),
+.coach-page a:not(.orange),
+.coach-session-card,
+.coach-history-tabs button:not(.active),
+.coach-stats-players > button {
+  color: var(--ink,#171717);
+}
+.coach-page select, .coach-page input, .coach-page textarea { color: var(--ink,#171717); }
+.coach-page .primary { color:#fff; -webkit-text-fill-color:#fff; }
+.coach-page .text-button, .coach-page .orange-outline, .coach-page .orange { color:var(--og-orange-dark,#d95712); -webkit-text-fill-color:currentColor; }
+.coach-page * { -webkit-tap-highlight-color: rgba(243,111,33,.14); }
+
 /* v3.2.2 player profile drill-down + coaching */
 .player-profile-stat-buttons>button{border:0;background:#fff;border-radius:11px;padding:10px 5px;text-align:center;color:inherit;cursor:pointer}.player-profile-stat-buttons>button span,.player-profile-stat-buttons>button strong,.player-profile-stat-buttons>button small{display:block}.player-profile-stat-buttons>button span{font-size:9px;color:var(--muted);font-weight:800}.player-profile-stat-buttons>button strong{font-size:19px;margin-top:4px}.player-profile-stat-buttons>button small{font-size:8px;color:var(--og-orange);margin-top:3px;font-weight:800}.player-profile-stat-buttons>button:first-child strong,.player-profile-stat-buttons>button:nth-child(2) strong{color:var(--og-orange)}
 .player-coaching-launchers{display:grid;gap:10px}.player-coaching-button-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.player-coaching-button-grid>button{display:grid;grid-template-columns:30px 1fr 18px;align-items:center;gap:9px;text-align:left;padding:13px;border:1px solid var(--border);border-radius:15px;background:#fff;color:inherit}.player-coaching-button-grid>button>span{display:grid;gap:2px}.player-coaching-button-grid small{font-size:10px;color:var(--muted)}
