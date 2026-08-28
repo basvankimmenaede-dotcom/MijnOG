@@ -83,7 +83,7 @@ export async function GET(request) {
         redirect: 'follow',
         headers: {
           Accept: 'text/calendar,application/ics,text/plain;q=0.9,*/*;q=0.8',
-          'User-Agent': 'MijnOG-FOYS-Sync/3.2.13'
+          'User-Agent': 'MijnOG-FOYS-Sync/3.2.14'
         },
         signal: AbortSignal.timeout(15000)
       })
