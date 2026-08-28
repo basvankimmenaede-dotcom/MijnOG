@@ -3292,6 +3292,15 @@ function AdminMenuItem({ icon, title, subtitle, onClick }) {
   return <button className="admin-menu-item" onClick={onClick}><span className="admin-menu-icon"><Icon name={icon} /></span><span><strong>{title}</strong><small>{subtitle}</small></span><Icon name="chevron" /></button>
 }
 
+function isAllowedFoysFeedUrl(value) {
+  try {
+    const url = new URL(String(value || '').trim())
+    return url.protocol === 'https:' && (url.hostname === 'foys.io' || url.hostname.endsWith('.foys.io'))
+  } catch {
+    return false
+  }
+}
+
 function More({ session, profile, teams, competitions = [], calendar, attendance = [], gameAttendance = [], trainingEvents = [], calendarEvents = [], memberships = [], gameStats = [], measurements = [], pitchingStats = [], playerCards = [], playerCardMetrics = [], onSaved, onMessage }) {
   const [icsUrl, setIcsUrl] = useState(calendar?.ics_url ?? '')
   const [firstName, setFirstName] = useState(profile?.first_name ?? '')
@@ -3340,8 +3349,8 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
 
   async function saveCalendar() {
     const url = icsUrl.trim()
-    if (!/^https:\/\/api\.foys\.io\/.+\/persons\/.+\/ics(?:\?.*)?$/i.test(url)) {
-      onMessage('Dit lijkt geen geldige persoonlijke FOYS/KNBSB ICS-link.')
+    if (!isAllowedFoysFeedUrl(url)) {
+      onMessage('Dit lijkt geen geldige FOYS-link.')
       return
     }
     setCalendarBusy(true)
@@ -3355,7 +3364,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
     }, { onConflict: 'profile_id,provider' })
     setCalendarBusy(false)
     if (error) onMessage(`Opslaan mislukt: ${error.message}`)
-    else { onMessage('KNBSB-agenda gekoppeld ✓'); setSettingsView(null); onSaved() }
+    else { onMessage('FOYS databron gekoppeld ✓'); setSettingsView(null); onSaved() }
   }
 
   async function syncCalendarNow() {
@@ -3431,7 +3440,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="people" title="Taken & functies" subtitle="Bekijk club- en teamuitnodigingen" status={taskInvitations.some(row=>row.status==='invited')?'Nieuw':null} onClick={() => setSettingsView('tasks')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS databron gekoppeld' : 'FOYS databron toevoegen'} status={calendar ? 'Databron actief' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.2.9" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.2.11" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -3462,7 +3471,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
 
       {settingsView === 'calendar' && <div className="form-stack">
         <p className="settings-modal-intro">FOYS gebruiken we uitsluitend als databron. Een gekoppelde feed levert wedstrijdinformatie aan onze eigen database; alle leden zien daarna dezelfde Mijn OG-kalender. Een persoonlijke koppeling is dus niet nodig om wedstrijden te kunnen zien.</p>
-        <label>FOYS ICS-link<textarea rows="4" value={icsUrl} onChange={e => setIcsUrl(e.target.value)} placeholder="https://api.foys.io/competition/public-api/v1/persons/.../ics" /></label>
+        <label>FOYS ICS-link<textarea rows="4" value={icsUrl} onChange={e => setIcsUrl(e.target.value)} placeholder="Plak hier je persoonlijke FOYS ICS-link" /></label>
         <button className="primary" onClick={saveCalendar} disabled={calendarBusy}>{calendarBusy ? 'Bezig…' : calendar ? 'Koppeling bijwerken' : 'Agenda koppelen'}</button>
         {calendar && <button className="secondary orange-outline" onClick={syncCalendarNow} disabled={calendarBusy}>Wedstrijden nu synchroniseren</button>}
         {calendar && <button className="disconnect-calendar-button" onClick={removeCalendar} disabled={calendarBusy}><Icon name="trash" /> Koppeling verwijderen</button>}
@@ -3471,7 +3480,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 3.2.9</h3>
+        <h3>Versie 3.2.11</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS databron</span><strong>{calendar ? 'Dit account levert een feed' : 'Geen persoonlijke feed'}</strong></div>

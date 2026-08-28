@@ -317,7 +317,7 @@ function parseScore(event) {
 function isAllowedFoysUrl(value) {
   try {
     const url = new URL(value)
-    return url.protocol === 'https:' && url.hostname === 'api.foys.io' && /\/competition\/public-api\/v1\/persons\/[^/]+\/ics\/?$/.test(url.pathname)
+    return url.protocol === 'https:' && (url.hostname === 'foys.io' || url.hostname.endsWith('.foys.io'))
   } catch {
     return false
   }
