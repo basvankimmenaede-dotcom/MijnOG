@@ -56,6 +56,7 @@ export async function GET(request) {
     let synced = 0
     let skipped = 0
     const unmatched = []
+    const competitionIds = new Map()
 
     for (const event of parsedEvents) {
       const matches = (teams || []).filter(team => eventMatchesTeam(event, team))
@@ -67,7 +68,11 @@ export async function GET(request) {
 
       const team = matches[0]
       const year = new Date(event.start).getFullYear()
-      const competitionId = await ensureFoysCompetition(service, year)
+      let competitionId = competitionIds.get(year)
+      if (!competitionId) {
+        competitionId = await ensureFoysCompetition(service, year)
+        competitionIds.set(year, competitionId)
+      }
       const cancelled = isCancelled(event)
       const isPast = new Date(event.end || event.start).getTime() < Date.now()
       const score = parseScore(event)

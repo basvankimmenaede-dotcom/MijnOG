@@ -2961,3 +2961,4 @@ button.swing-primary { width: 100%; margin-top: 12px; border: 0; background: var
 /* v3.1.27 - FOYS database sync */
 
 /* v3.1.28 - VS-2 historical results + FOYS dedupe */
+/* v3.1.29 - non-blocking FOYS background sync */

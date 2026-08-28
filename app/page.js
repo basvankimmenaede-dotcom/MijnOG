@@ -107,23 +107,16 @@ export default function HomePage() {
     else setProfile(profileResult.data)
     if (teamResult.error) setMessage(`Teamgegevens konden niet worden geladen: ${teamResult.error.message}`)
     else setTeams((teamResult.data ?? []).filter(row => row.teams && row.teams.is_active !== false && row.teams.seasons?.is_active !== false).map(row => ({ ...row.teams, member_role: row.member_role })))
-    let syncedFoys = false
     if (calendarResult.error) { setMessage(`Agendakoppeling kon niet worden geladen: ${calendarResult.error.message}`); setCalendarConnection(null) }
     else {
       setCalendarConnection(calendarResult.data)
-      if (calendarResult.data?.is_active && accessToken) syncedFoys = await loadCalendar(accessToken)
     }
 
-    let effectiveEventResult = eventResult
-    let effectiveEventTeamsResult = eventTeamsResult
-    let effectiveEventParticipantsResult = eventParticipantsResult
-    if (syncedFoys) {
-      ;[effectiveEventResult, effectiveEventTeamsResult, effectiveEventParticipantsResult] = await Promise.all([
-        supabase.from('events').select('*').order('start_at', { ascending: true }),
-        supabase.from('event_teams').select('event_id,team_id,teams(id,name,sport)'),
-        supabase.from('event_participants').select('event_id,profile_id')
-      ])
-    }
+    // FOYS mag de eerste schermweergave nooit blokkeren. De app leest eerst direct
+    // de centrale events-database en synchroniseert FOYS daarna op de achtergrond.
+    const effectiveEventResult = eventResult
+    const effectiveEventTeamsResult = eventTeamsResult
+    const effectiveEventParticipantsResult = eventParticipantsResult
     if (effectiveEventResult.error) setMessage(`Activiteiten konden niet worden geladen: ${effectiveEventResult.error.message}`)
     else {
       const teamLinks = effectiveEventTeamsResult.data ?? []
@@ -154,6 +147,28 @@ export default function HomePage() {
     if (!competitionResult.error) setCompetitions(competitionResult.data ?? [])
     setSwingAccess(profileResult.data?.role === 'admin' ? 'admin' : (swingAccessResult.error ? null : swingAccessResult.data?.access_level || null))
     setLoading(false)
+
+    if (!calendarResult.error && calendarResult.data?.is_active && accessToken) {
+      void syncFoysInBackground(accessToken)
+    }
+  }
+
+  async function syncFoysInBackground(accessToken) {
+    const synced = await loadCalendar(accessToken)
+    if (!synced) return
+    const [eventsResult, linksResult, participantsResult] = await Promise.all([
+      supabase.from('events').select('*').order('start_at', { ascending: true }),
+      supabase.from('event_teams').select('event_id,team_id,teams(id,name,sport)'),
+      supabase.from('event_participants').select('event_id,profile_id')
+    ])
+    if (eventsResult.error || linksResult.error || participantsResult.error) return
+    const teamLinks = linksResult.data ?? []
+    const participantLinks = participantsResult.data ?? []
+    const normalizedEvents = (eventsResult.data ?? []).map(row => normalizeTrainingEvent(row, teamLinks, participantLinks))
+    setEventTeamLinks(teamLinks)
+    setEventParticipantLinks(participantLinks)
+    setTrainingEvents(normalizedEvents.filter(event => event.type === 'training'))
+    setCalendarEvents(normalizedEvents.filter(event => event.type === 'game'))
   }
 
   async function refreshAppData() {
@@ -3217,7 +3232,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="people" title="Taken & functies" subtitle="Bekijk club- en teamuitnodigingen" status={taskInvitations.some(row=>row.status==='invited')?'Nieuw':null} onClick={() => setSettingsView('tasks')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.1.28" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.1.29" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -3257,7 +3272,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 3.1.28</h3>
+        <h3>Versie 3.1.29</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS synchronisatie</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>
