@@ -45,6 +45,9 @@ export default function HomePage() {
   const [gameHighlights, setGameHighlights] = useState([])
   const [competitions, setCompetitions] = useState([])
   const [swingAccess, setSwingAccess] = useState(null)
+  const loadedDataRef = useRef(new Set())
+  const loadingDataRef = useRef(new Set())
+  const fullEventsLoadedRef = useRef(false)
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -67,99 +70,172 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!session?.user?.id) {
-      setProfile(null); setTeams([]); setCalendarConnection(null); setCalendarEvents([]); setTrainingEvents([]); setAttendance([]); setVisibleProfiles([]); setAllMemberships([]); setEventTeamLinks([]); setEventParticipantLinks([]); setClubLocations([]); setTransportEvents([]); setTransportResponses([]); setTeamMessages([]); setGameAttendance([]); setPlayerRequests([]); setPlayerRequestCandidates([]); setPushSubscriptions([]); setPlayerGameStats([]); setPlayerMeasurements([]); setPlayerCards([]); setPlayerCardMetrics([]); setPlayerPitchingStats([]); setGameHighlights([]); setCompetitions([]); setSwingAccess(null)
+      setProfile(null); setTeams([]); setCalendarConnection(null); setCalendarEvents([]); setTrainingEvents([]); setAttendance([]); setVisibleProfiles([]); setAllMemberships([]); setEventTeamLinks([]); setEventParticipantLinks([]); setClubLocations([]); setTransportEvents([]); setTransportResponses([]); setTeamMessages([]); setGameAttendance([]); setPlayerRequests([]); setPlayerRequestCandidates([]); setPushSubscriptions([]); setPlayerGameStats([]); setPlayerMeasurements([]); setPlayerCards([]); setPlayerCardMetrics([]); setPlayerPitchingStats([]); setGameHighlights([]); setCompetitions([]); setSwingAccess(null); loadedDataRef.current.clear(); loadingDataRef.current.clear(); fullEventsLoadedRef.current = false
       return
     }
     loadUserData(session.user.id, session.access_token)
   }, [session?.user?.id])
 
+  useEffect(() => {
+    if (!session?.user?.id || !profile?.id) return
+    ensureDataForTab(activeTab, session.user.id)
+  }, [activeTab, session?.user?.id, profile?.id])
+
+  function perfCount(data) {
+    if (Array.isArray(data)) return `${data.length} rijen`
+    if (data == null) return '0 rijen'
+    return '1 rij'
+  }
+
+  async function timedQuery(label, query) {
+    const started = typeof performance !== 'undefined' ? performance.now() : Date.now()
+    try {
+      const result = await query
+      const elapsed = Math.round((typeof performance !== 'undefined' ? performance.now() : Date.now()) - started)
+      console.info(`[MIJN OG PERF] ${label}: ${elapsed} ms · ${perfCount(result?.data)}${result?.error ? ` · ERROR ${result.error.message}` : ''}`)
+      return result
+    } catch (error) {
+      const elapsed = Math.round((typeof performance !== 'undefined' ? performance.now() : Date.now()) - started)
+      console.error(`[MIJN OG PERF] ${label}: ${elapsed} ms · EXCEPTION`, error)
+      return { data: null, error }
+    }
+  }
+
   async function loadUserData(userId, accessToken = session?.access_token) {
     setLoading(true)
     setMessage('')
-    const [profileResult, teamResult, calendarResult, eventResult, attendanceResult, profilesResult, membershipResult, eventTeamsResult, eventParticipantsResult, locationsResult, transportEventsResult, transportResponsesResult, messagesResult, gameAttendanceResult, playerRequestsResult, playerCandidatesResult, pushSubscriptionsResult, playerGameStatsResult, playerMeasurementsResult, playerCardsResult, playerCardMetricsResult, playerPitchingStatsResult, gameHighlightsResult, competitionResult, swingAccessResult] = await Promise.all([
-      supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
-      supabase.from('team_members').select('member_role, teams(id, name, sport, season_id, is_active, team_photo_url, foys_match_text, seasons(is_active))').eq('profile_id', userId),
-      supabase.from('calendar_connections').select('*').eq('profile_id', userId).eq('provider', 'foys').maybeSingle(),
-      supabase.from('events').select('*').order('start_at', { ascending: true }),
-      supabase.from('attendance').select('*'),
-      supabase.from('profiles').select('id, first_name, last_name, jersey_number, role, avatar_url, primary_position, secondary_positions, throws_hand, bats_side, is_placeholder'),
-      supabase.from('team_members').select('id,team_id,profile_id,member_role,team_function'),
-      supabase.from('event_teams').select('event_id,team_id,teams(id,name,sport)'),
-      supabase.from('event_participants').select('event_id,profile_id'),
-      supabase.from('club_locations').select('*').eq('is_active', true).order('name'),
-      supabase.from('transport_events').select('*'),
-      supabase.from('transport_responses').select('*'),
-      supabase.from('team_messages').select('*').order('created_at', { ascending: false }).limit(50),
-      supabase.from('game_attendance').select('*'),
-      supabase.from('player_requests_safe').select('*').order('created_at', { ascending: false }),
-      supabase.from('player_request_candidates').select('*'),
-      supabase.from('push_subscriptions').select('profile_id,enabled').eq('enabled', true),
-      supabase.from('player_game_stats').select('*,teams(id,name,sport)').order('game_date', { ascending: true }),
-      supabase.from('player_measurements').select('*').order('measured_at', { ascending: true }),
-      supabase.from('player_cards').select('*').order('sort_order', { ascending: true }),
-      supabase.from('player_card_metrics').select('*').order('sort_order', { ascending: true }),
-      supabase.from('player_pitching_stats').select('*').order('game_date', { ascending: true }),
-      supabase.from('game_highlights').select('*').order('updated_at', { ascending: false }),
-      supabase.from('competitions').select('*').eq('is_active', true).order('season_year', { ascending: false }).order('name'),
-      supabase.from('swing_analyzer_permissions').select('access_level').eq('profile_id', userId).maybeSingle()
+    const bootStarted = typeof performance !== 'undefined' ? performance.now() : Date.now()
+
+    // v3.1.34: de eerste schermweergave haalt alleen de data op die Home echt nodig heeft.
+    // Zware tabellen (spelers, stats, metingen, aanwezigheidshistorie, enz.) worden pas
+    // geladen wanneer de gebruiker de betreffende tab opent.
+    const [profileResult, teamResult, calendarResult] = await Promise.all([
+      timedQuery('BOOT profile', supabase.from('profiles').select('*').eq('id', userId).maybeSingle()),
+      timedQuery('BOOT own teams', supabase.from('team_members').select('member_role, teams(id, name, sport, season_id, is_active, team_photo_url, foys_match_text, seasons(is_active))').eq('profile_id', userId)),
+      timedQuery('BOOT FOYS connection', supabase.from('calendar_connections').select('*').eq('profile_id', userId).eq('provider', 'foys').maybeSingle())
     ])
+
     if (profileResult.error) setMessage(`Profiel kon niet worden geladen: ${profileResult.error.message}`)
     else setProfile(profileResult.data)
     if (teamResult.error) setMessage(`Teamgegevens konden niet worden geladen: ${teamResult.error.message}`)
     else setTeams((teamResult.data ?? []).filter(row => row.teams && row.teams.is_active !== false && row.teams.seasons?.is_active !== false).map(row => ({ ...row.teams, member_role: row.member_role })))
     if (calendarResult.error) { setMessage(`Agendakoppeling kon niet worden geladen: ${calendarResult.error.message}`); setCalendarConnection(null) }
-    else {
-      setCalendarConnection(calendarResult.data)
-    }
+    else setCalendarConnection(calendarResult.data)
 
-    // FOYS mag de eerste schermweergave nooit blokkeren. De app leest eerst direct
-    // de centrale events-database en synchroniseert FOYS daarna op de achtergrond.
-    const effectiveEventResult = eventResult
-    const effectiveEventTeamsResult = eventTeamsResult
-    const effectiveEventParticipantsResult = eventParticipantsResult
-    if (effectiveEventResult.error) setMessage(`Activiteiten konden niet worden geladen: ${effectiveEventResult.error.message}`)
+    // Alleen recente + toekomstige activiteiten voor Home. Volledige historie volgt pas
+    // wanneer een tab die nodig heeft wordt geopend.
+    const since = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString()
+    const eventResult = await timedQuery('BOOT recent events', supabase.from('events').select('*').gte('start_at', since).order('start_at', { ascending: true }))
+    const eventIds = (eventResult.data || []).map(row => row.id).filter(id => id != null)
+    const [eventTeamsResult, eventParticipantsResult] = eventIds.length ? await Promise.all([
+      timedQuery('BOOT event teams', supabase.from('event_teams').select('event_id,team_id,teams(id,name,sport)').in('event_id', eventIds)),
+      timedQuery('BOOT event participants', supabase.from('event_participants').select('event_id,profile_id').in('event_id', eventIds))
+    ]) : [{ data: [], error: null }, { data: [], error: null }]
+
+    if (eventResult.error) setMessage(`Activiteiten konden niet worden geladen: ${eventResult.error.message}`)
     else {
-      const teamLinks = effectiveEventTeamsResult.data ?? []
-      const participantLinks = effectiveEventParticipantsResult.data ?? []
+      const teamLinks = eventTeamsResult.data ?? []
+      const participantLinks = eventParticipantsResult.data ?? []
       setEventTeamLinks(teamLinks)
       setEventParticipantLinks(participantLinks)
-      const normalizedEvents = (effectiveEventResult.data ?? []).map(row => normalizeTrainingEvent(row, teamLinks, participantLinks))
+      const normalizedEvents = (eventResult.data ?? []).map(row => normalizeTrainingEvent(row, teamLinks, participantLinks))
       setTrainingEvents(normalizedEvents.filter(event => event.type === 'training'))
       setCalendarEvents(normalizedEvents.filter(event => event.type === 'game'))
     }
-    if (!attendanceResult.error) setAttendance(attendanceResult.data ?? [])
-    if (!profilesResult.error) setVisibleProfiles(profilesResult.data ?? [])
-    if (!membershipResult.error) setAllMemberships(membershipResult.data ?? [])
-    if (!locationsResult.error) setClubLocations(locationsResult.data ?? [])
-    if (!transportEventsResult.error) setTransportEvents(transportEventsResult.data ?? [])
-    if (!transportResponsesResult.error) setTransportResponses(transportResponsesResult.data ?? [])
-    if (!messagesResult.error) setTeamMessages(messagesResult.data ?? [])
-    if (!gameAttendanceResult.error) setGameAttendance(gameAttendanceResult.data ?? [])
-    if (!playerRequestsResult.error) setPlayerRequests(playerRequestsResult.data ?? [])
-    if (!playerCandidatesResult.error) setPlayerRequestCandidates(playerCandidatesResult.data ?? [])
-    if (!pushSubscriptionsResult.error) setPushSubscriptions(pushSubscriptionsResult.data ?? [])
-    if (!playerGameStatsResult.error) setPlayerGameStats(playerGameStatsResult.data ?? [])
-    if (!playerMeasurementsResult.error) setPlayerMeasurements(playerMeasurementsResult.data ?? [])
-    if (!playerCardsResult.error) setPlayerCards(playerCardsResult.data ?? [])
-    if (!playerCardMetricsResult.error) setPlayerCardMetrics(playerCardMetricsResult.data ?? [])
-    if (!playerPitchingStatsResult.error) setPlayerPitchingStats(playerPitchingStatsResult.data ?? [])
-    if (!gameHighlightsResult.error) setGameHighlights(gameHighlightsResult.data ?? [])
-    if (!competitionResult.error) setCompetitions(competitionResult.data ?? [])
-    setSwingAccess(profileResult.data?.role === 'admin' ? 'admin' : (swingAccessResult.error ? null : swingAccessResult.data?.access_level || null))
-    setLoading(false)
 
-    // v3.1.31: controleer FOYS pas NADAT de app volledig zichtbaar is.
-    // Niet awaiten: deze controle mag de eerste schermweergave nooit vertragen.
+    setSwingAccess(profileResult.data?.role === 'admin' ? 'admin' : null)
+    setLoading(false)
+    const bootElapsed = Math.round((typeof performance !== 'undefined' ? performance.now() : Date.now()) - bootStarted)
+    console.info(`[MIJN OG PERF] BOOT TOTAL: ${bootElapsed} ms`)
+
+    // Home-data mag na de eerste render binnenkomen en blokkeert de app niet.
+    window.setTimeout(() => { ensureDataForTab('Home', userId) }, 0)
+
+    // FOYS controleert nog steeds licht op de achtergrond, maar nooit in de boot-critical path.
     window.setTimeout(() => { maybeAutoSyncFoys(accessToken) }, 1200)
   }
 
+  async function loadFullEvents() {
+    if (fullEventsLoadedRef.current) return
+    const eventResult = await timedQuery('LAZY full events', supabase.from('events').select('*').order('start_at', { ascending: true }))
+    if (eventResult.error) return
+    const eventIds = (eventResult.data || []).map(row => row.id).filter(id => id != null)
+    const [eventTeamsResult, eventParticipantsResult] = eventIds.length ? await Promise.all([
+      timedQuery('LAZY full event teams', supabase.from('event_teams').select('event_id,team_id,teams(id,name,sport)').in('event_id', eventIds)),
+      timedQuery('LAZY full event participants', supabase.from('event_participants').select('event_id,profile_id').in('event_id', eventIds))
+    ]) : [{ data: [], error: null }, { data: [], error: null }]
+    const teamLinks = eventTeamsResult.data ?? []
+    const participantLinks = eventParticipantsResult.data ?? []
+    setEventTeamLinks(teamLinks)
+    setEventParticipantLinks(participantLinks)
+    const normalizedEvents = (eventResult.data ?? []).map(row => normalizeTrainingEvent(row, teamLinks, participantLinks))
+    setTrainingEvents(normalizedEvents.filter(event => event.type === 'training'))
+    setCalendarEvents(normalizedEvents.filter(event => event.type === 'game'))
+    fullEventsLoadedRef.current = true
+  }
+
+  async function ensureData(key, userId = session?.user?.id) {
+    if (!userId || loadedDataRef.current.has(key) || loadingDataRef.current.has(key)) return
+    loadingDataRef.current.add(key)
+    let result = null
+    try {
+      switch (key) {
+        case 'attendance': result = await timedQuery('LAZY attendance', supabase.from('attendance').select('*')); if (!result.error) setAttendance(result.data ?? []); break
+        case 'profiles': result = await timedQuery('LAZY profiles', supabase.from('profiles').select('id, first_name, last_name, jersey_number, role, avatar_url, primary_position, secondary_positions, throws_hand, bats_side, is_placeholder')); if (!result.error) setVisibleProfiles(result.data ?? []); break
+        case 'memberships': result = await timedQuery('LAZY memberships', supabase.from('team_members').select('id,team_id,profile_id,member_role,team_function')); if (!result.error) setAllMemberships(result.data ?? []); break
+        case 'locations': result = await timedQuery('LAZY locations', supabase.from('club_locations').select('*').eq('is_active', true).order('name')); if (!result.error) setClubLocations(result.data ?? []); break
+        case 'transportEvents': result = await timedQuery('LAZY transport events', supabase.from('transport_events').select('*')); if (!result.error) setTransportEvents(result.data ?? []); break
+        case 'transportResponses': result = await timedQuery('LAZY transport responses', supabase.from('transport_responses').select('*')); if (!result.error) setTransportResponses(result.data ?? []); break
+        case 'messages': result = await timedQuery('LAZY team messages', supabase.from('team_messages').select('*').order('created_at', { ascending: false }).limit(50)); if (!result.error) setTeamMessages(result.data ?? []); break
+        case 'gameAttendance': result = await timedQuery('LAZY game attendance', supabase.from('game_attendance').select('*')); if (!result.error) setGameAttendance(result.data ?? []); break
+        case 'playerRequests': result = await timedQuery('LAZY player requests', supabase.from('player_requests_safe').select('*').order('created_at', { ascending: false })); if (!result.error) setPlayerRequests(result.data ?? []); break
+        case 'playerCandidates': result = await timedQuery('LAZY request candidates', supabase.from('player_request_candidates').select('*')); if (!result.error) setPlayerRequestCandidates(result.data ?? []); break
+        case 'pushSubscriptions': result = await timedQuery('LAZY push subscriptions', supabase.from('push_subscriptions').select('profile_id,enabled').eq('enabled', true)); if (!result.error) setPushSubscriptions(result.data ?? []); break
+        case 'gameStats': result = await timedQuery('LAZY game stats', supabase.from('player_game_stats').select('*,teams(id,name,sport)').order('game_date', { ascending: true })); if (!result.error) setPlayerGameStats(result.data ?? []); break
+        case 'measurements': result = await timedQuery('LAZY measurements', supabase.from('player_measurements').select('*').order('measured_at', { ascending: true })); if (!result.error) setPlayerMeasurements(result.data ?? []); break
+        case 'cards': result = await timedQuery('LAZY player cards', supabase.from('player_cards').select('*').order('sort_order', { ascending: true })); if (!result.error) setPlayerCards(result.data ?? []); break
+        case 'cardMetrics': result = await timedQuery('LAZY card metrics', supabase.from('player_card_metrics').select('*').order('sort_order', { ascending: true })); if (!result.error) setPlayerCardMetrics(result.data ?? []); break
+        case 'pitchingStats': result = await timedQuery('LAZY pitching stats', supabase.from('player_pitching_stats').select('*').order('game_date', { ascending: true })); if (!result.error) setPlayerPitchingStats(result.data ?? []); break
+        case 'highlights': result = await timedQuery('LAZY highlights', supabase.from('game_highlights').select('*').order('updated_at', { ascending: false })); if (!result.error) setGameHighlights(result.data ?? []); break
+        case 'competitions': result = await timedQuery('LAZY competitions', supabase.from('competitions').select('*').eq('is_active', true).order('season_year', { ascending: false }).order('name')); if (!result.error) setCompetitions(result.data ?? []); break
+        case 'swingAccess': result = await timedQuery('LAZY swing access', supabase.from('swing_analyzer_permissions').select('access_level').eq('profile_id', userId).maybeSingle()); if (!result.error) setSwingAccess(profile?.role === 'admin' ? 'admin' : result.data?.access_level || null); break
+      }
+      if (result && !result.error) loadedDataRef.current.add(key)
+    } finally {
+      loadingDataRef.current.delete(key)
+    }
+  }
+
+  async function ensureDataForTab(tab, userId = session?.user?.id) {
+    if (!userId) return
+    const tabStarted = typeof performance !== 'undefined' ? performance.now() : Date.now()
+    const keysByTab = {
+      Home: ['attendance','gameAttendance','messages','transportEvents','transportResponses','playerRequests','playerCandidates','pushSubscriptions'],
+      Agenda: ['attendance','gameAttendance','profiles','memberships','locations','transportEvents','transportResponses','playerRequests','playerCandidates','gameStats','highlights','competitions'],
+      Stats: ['attendance','gameAttendance','gameStats','measurements','competitions'],
+      Coach: ['attendance','gameAttendance','profiles','memberships','locations','transportEvents','transportResponses','messages','playerRequests','playerCandidates','pushSubscriptions','gameStats','measurements','cards','cardMetrics','pitchingStats','highlights','competitions','swingAccess'],
+      Team: ['attendance','gameAttendance','gameStats','measurements','cards','cardMetrics','pitchingStats','competitions'],
+      Meer: ['attendance','gameAttendance','memberships','gameStats','measurements','cards','cardMetrics','pitchingStats','competitions']
+    }
+    if (tab !== 'Home') await loadFullEvents()
+    await Promise.all((keysByTab[tab] || []).map(key => ensureData(key, userId)))
+    const elapsed = Math.round((typeof performance !== 'undefined' ? performance.now() : Date.now()) - tabStarted)
+    console.info(`[MIJN OG PERF] TAB ${tab} ready: ${elapsed} ms`)
+  }
+
   async function refreshEventsOnly() {
-    const [eventResult, eventTeamsResult, eventParticipantsResult] = await Promise.all([
-      supabase.from('events').select('*').order('start_at', { ascending: true }),
-      supabase.from('event_teams').select('event_id,team_id,teams(id,name,sport)'),
-      supabase.from('event_participants').select('event_id,profile_id')
-    ])
-    if (eventResult.error || eventTeamsResult.error || eventParticipantsResult.error) return
+    const since = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString()
+    const eventQuery = fullEventsLoadedRef.current
+      ? supabase.from('events').select('*').order('start_at', { ascending: true })
+      : supabase.from('events').select('*').gte('start_at', since).order('start_at', { ascending: true })
+    const eventResult = await timedQuery(fullEventsLoadedRef.current ? 'REFRESH full events' : 'REFRESH recent events', eventQuery)
+    if (eventResult.error) return
+    const eventIds = (eventResult.data || []).map(row => row.id).filter(id => id != null)
+    const [eventTeamsResult, eventParticipantsResult] = eventIds.length ? await Promise.all([
+      timedQuery('REFRESH event teams', supabase.from('event_teams').select('event_id,team_id,teams(id,name,sport)').in('event_id', eventIds)),
+      timedQuery('REFRESH event participants', supabase.from('event_participants').select('event_id,profile_id').in('event_id', eventIds))
+    ]) : [{ data: [], error: null }, { data: [], error: null }]
+    if (eventTeamsResult.error || eventParticipantsResult.error) return
     const teamLinks = eventTeamsResult.data ?? []
     const participantLinks = eventParticipantsResult.data ?? []
     setEventTeamLinks(teamLinks)
@@ -3332,7 +3408,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="people" title="Taken & functies" subtitle="Bekijk club- en teamuitnodigingen" status={taskInvitations.some(row=>row.status==='invited')?'Nieuw':null} onClick={() => setSettingsView('tasks')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.1.33" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.1.34" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -3373,7 +3449,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 3.1.33</h3>
+        <h3>Versie 3.1.34</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS synchronisatie</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>
