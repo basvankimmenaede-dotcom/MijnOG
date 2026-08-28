@@ -94,7 +94,7 @@ export default function HomePage() {
       supabase.from('player_requests_safe').select('*').order('created_at', { ascending: false }),
       supabase.from('player_request_candidates').select('*'),
       supabase.from('push_subscriptions').select('profile_id,enabled').eq('enabled', true),
-      supabase.from('player_game_stats').select('*').order('game_date', { ascending: true }),
+      supabase.from('player_game_stats').select('*,teams(id,name,sport)').order('game_date', { ascending: true }),
       supabase.from('player_measurements').select('*').order('measured_at', { ascending: true }),
       supabase.from('player_cards').select('*').order('sort_order', { ascending: true }),
       supabase.from('player_card_metrics').select('*').order('sort_order', { ascending: true }),
@@ -1432,7 +1432,7 @@ function CoachDashboard({ session, profile, teams, competitions = [], gameStats 
     {coachStatsOpen && <CoachStatsModal team={selectedTeam} players={teamPlayers} attendance={attendance} gameAttendance={gameAttendance} trainingEvents={teamTrainingEvents} calendarEvents={teamGames} gameStats={gameStats} measurements={measurements} onPlayer={person=>{setCoachStatsOpen(false);setCoachPlayerProfile(person)}} onAddGame={()=>setStatEntryOpen('game')} onAddMeasurement={()=>setStatEntryOpen('measurement')} onClose={()=>setCoachStatsOpen(false)} />}
     {statEntryOpen && <CoachStatEntryModal mode={statEntryOpen} team={selectedTeam} players={teamPlayers} onClose={()=>setStatEntryOpen(null)} onSaved={async()=>{setStatEntryOpen(null);await onRefresh()}} />}
     {swingAnalyzerOpen && <SwingAnalyzerModal session={session} profile={profile} accessLevel={profile?.role === 'admin' ? 'admin' : swingAccess} team={selectedTeam} players={teamPlayers} profiles={profiles} memberships={memberships} onClose={()=>setSwingAnalyzerOpen(false)} />}
-    {coachPlayerProfile && <PlayerProfileModal person={coachPlayerProfile} competitions={competitions} team={selectedTeam} viewerProfile={profile} viewerMembership={{member_role:'coach'}} attendance={attendance} gameAttendance={gameAttendance} trainingEvents={trainingEvents} calendarEvents={calendarEvents} gameStats={gameStats} measurements={measurements} pitchingStats={pitchingStats} playerCards={playerCards} playerCardMetrics={playerCardMetrics} memberships={memberships} onChanged={onRefresh} onClose={()=>setCoachPlayerProfile(null)} />}
+    {coachPlayerProfile && <PlayerProfileModal person={coachPlayerProfile} competitions={competitions} teams={teams} team={selectedTeam} viewerProfile={profile} viewerMembership={{member_role:'coach'}} attendance={attendance} gameAttendance={gameAttendance} trainingEvents={trainingEvents} calendarEvents={calendarEvents} gameStats={gameStats} measurements={measurements} pitchingStats={pitchingStats} playerCards={playerCards} playerCardMetrics={playerCardMetrics} memberships={memberships} onChanged={onRefresh} onClose={()=>setCoachPlayerProfile(null)} />}
   </section>
 }
 
@@ -1923,6 +1923,38 @@ function playerCompetitionOptions(rows = [], competitions = []) {
   return [...seen.entries()].map(([key,name])=>({key,name})).sort((a,b)=>a.name.localeCompare(b.name,'nl'))
 }
 
+function playerTeamOptions(rows = [], teams = []) {
+  const seen=new Map()
+  rows.forEach(row=>{
+    const id=Number(row.team_id)
+    if(!Number.isFinite(id)||seen.has(id)) return
+    const team=teams.find(t=>Number(t.id)===id)
+    seen.set(id,row.teams?.name||team?.name||`Team ${id}`)
+  })
+  return [...seen.entries()].map(([id,name])=>({id:String(id),name})).sort((a,b)=>a.name.localeCompare(b.name,'nl',{numeric:true}))
+}
+
+function statTeamName(row, teams = []) {
+  const team=teams.find(t=>Number(t.id)===Number(row?.team_id))
+  return row?.teams?.name || team?.name || (row?.team_id!=null ? `Team ${row.team_id}` : 'Onbekend team')
+}
+
+function PlayerGameHistoryModal({ person, rows = [], competitions = [], teams = [], context = '', onClose }) {
+  return <SettingsModal title="Wedstrijdstats" onClose={onClose}>
+    <div className="player-game-history-modal">
+      <div className="player-game-history-intro"><div><p className="eyebrow orange">PER WEDSTRIJD</p><h3>{person ? personName(person) : 'Mijn wedstrijden'}</h3></div>{context&&<small>{context}</small>}</div>
+      {rows.length ? <div className="stats-game-history player-game-history-list">{[...rows].sort((a,b)=>new Date(b.game_date)-new Date(a.game_date)).map(row=>{
+        const avg=Number(row.ab||0)>0?Number(row.h||0)/Number(row.ab):null
+        return <article key={row.id||`${row.game_key}-${row.profile_id}`}>
+          <div className="stats-game-history-head"><span>{new Date(`${row.game_date}T12:00:00`).toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'})}</span><strong>{row.opponent||'Wedstrijd'}</strong></div>
+          <div className="player-game-history-context"><span>{statTeamName(row,teams)}</span><span>{competitionNameForStat(row,competitions)}</span></div>
+          <div className="stats-game-history-values player-game-history-values"><span><b>{Number(row.ab||0)}</b> AB</span><span><b>{Number(row.h||0)}</b> H</span><span><b>{Number(row.bb||0)}</b> BB</span><span><b>{statRate(avg)}</b> AVG</span>{!row.partial_batting&&<span><b>{Number(row.rbi||0)}</b> RBI</span>}{!row.partial_batting&&<span><b>{Number(row.sb||0)}</b> SB</span>}</div>
+        </article>
+      })}</div> : <div className="stats-empty-state">Geen wedstrijden binnen dit filter.</div>}
+    </div>
+  </SettingsModal>
+}
+
 function Stats({ profile, teams = [], competitions = [], attendance = [], gameAttendance = [], trainingEvents = [], calendarEvents = [], gameStats = [], measurements = [] }) {
   const [statsView,setStatsView]=useState('overview')
   const allOwnGames=gameStats.filter(row=>row.profile_id===profile?.id).sort((a,b)=>new Date(a.game_date)-new Date(b.game_date))
@@ -1933,17 +1965,22 @@ function Stats({ profile, teams = [], competitions = [], attendance = [], gameAt
     ...trainingEvents.map(e=>new Date(e.start).getFullYear()).filter(Number.isFinite)
   ])].sort((a,b)=>b-a)
   const [seasonYear,setSeasonYear]=useState(()=>String(gameYears[0]||yearOptions[0]||new Date().getFullYear()))
+  const [teamFilter,setTeamFilter]=useState('total')
   const [competitionFilter,setCompetitionFilter]=useState('total')
+  const [gameHistoryOpen,setGameHistoryOpen]=useState(false)
   const year=Number(seasonYear)
   const seasonGames=allOwnGames.filter(row=>statSeasonYear(row)===year)
-  const competitionOptions=playerCompetitionOptions(seasonGames,competitions)
-  const ownGames=competitionFilter==='total'?seasonGames:seasonGames.filter(row=>competitionKeyForStat(row,competitions)===competitionFilter)
+  const teamOptions=playerTeamOptions(seasonGames,teams)
+  const teamGames=teamFilter==='total'?seasonGames:seasonGames.filter(row=>String(row.team_id)===String(teamFilter))
+  const competitionOptions=playerCompetitionOptions(teamGames,competitions)
+  const ownGames=competitionFilter==='total'?teamGames:teamGames.filter(row=>competitionKeyForStat(row,competitions)===competitionFilter)
   const ownMeasurements=measurements.filter(row=>row.profile_id===profile?.id).sort((a,b)=>new Date(a.measured_at)-new Date(b.measured_at))
   const season=battingRates(ownGames)
   const last5=battingRates(ownGames.slice(-5))
   const rolling=ownGames.map((_,idx)=>battingRates(ownGames.slice(0,idx+1)))
   const team=teams.find(t=>t.member_role==='player') || teams[0]
-  const att=attendanceStatsForPerson(profile?.id,null,attendance,gameAttendance,trainingEvents,calendarEvents,year)
+  const selectedStatsTeam=teamFilter==='total'?null:teams.find(t=>String(t.id)===String(teamFilter))||null
+  const att=attendanceStatsForPerson(profile?.id,selectedStatsTeam,attendance,gameAttendance,trainingEvents,calendarEvents,year)
   const fmtRate=v=>v==null?'—':Number(v).toFixed(3).replace(/^0/,'')
   const metricSeries=type=>ownMeasurements.filter(r=>r.metric_type===type)
   const exitSeries=metricSeries('exit_velocity'), home1Series=metricSeries('home_to_first')
@@ -1964,16 +2001,18 @@ function Stats({ profile, teams = [], competitions = [], attendance = [], gameAt
       <div className="stats-attendance-summary"><span>Aanwezigheid {year}</span><strong>{att.percentage==null?'—':`${att.percentage}%`}</strong><small>{att.total?`${att.attended} van ${att.total} activiteiten`:'Nog geen gegevens'}</small><div className="stats-attendance-bar"><i style={{width:`${att.percentage||0}%`}}/></div></div>
     </div>
     <div className="stats-context-filters">
-      <label>Seizoen<select value={seasonYear} onChange={e=>{setSeasonYear(e.target.value);setCompetitionFilter('total')}}>{yearOptions.length?yearOptions.map(y=><option key={y} value={y}>{y}</option>):<option value={year}>{year}</option>}</select></label>
+      <label>Seizoen<select value={seasonYear} onChange={e=>{setSeasonYear(e.target.value);setTeamFilter('total');setCompetitionFilter('total')}}>{yearOptions.length?yearOptions.map(y=><option key={y} value={y}>{y}</option>):<option value={year}>{year}</option>}</select></label>
+      <label>Team<select value={teamFilter} onChange={e=>{setTeamFilter(e.target.value);setCompetitionFilter('total')}}><option value="total">Alle teams</option>{teamOptions.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select></label>
       <label>Competitie<select value={competitionFilter} onChange={e=>setCompetitionFilter(e.target.value)}><option value="total">Totaal</option>{competitionOptions.map(c=><option key={c.key} value={c.key}>{c.name}</option>)}</select></label>
     </div>
     <div className="stats-tabs-static"><button className={statsView==='overview'?'active':''} onClick={()=>setStatsView('overview')}>Overzicht</button><button className={statsView==='games'?'active':''} onClick={()=>setStatsView('games')}>Wedstrijden</button><button className={statsView==='trends'?'active':''} onClick={()=>setStatsView('trends')}>Trends</button></div>
     {statsView==='overview' && <>
-      <section className="stats-section"><div className="stats-section-heading"><div><h3>Wedstrijdstatistieken</h3>{ownGames.length>0&&<p>{competitionFilter==='total'?'Totaal':competitionOptions.find(c=>c.key===competitionFilter)?.name} · {ownGames.length} wedstrijd{ownGames.length===1?'':'en'}</p>}</div></div>{ownGames.length?<div className="stats-game-grid">{gameCards.map(card=><article className="stats-game-card" key={card.label}><span>{card.label}</span><strong>{card.value}</strong><small>{card.context}</small><StatsSparkline values={card.series}/><em>Laatste 5 · {card.recent}</em></article>)}</div>:<div className="stats-empty-state">Nog geen wedstrijdgegevens binnen dit filter</div>}</section>
+      <section className="stats-section"><div className="stats-section-heading"><div><h3>Wedstrijdstatistieken</h3>{ownGames.length>0&&<p>{teamFilter==='total'?'Alle teams':teamOptions.find(t=>t.id===teamFilter)?.name} · {competitionFilter==='total'?'Totaal':competitionOptions.find(c=>c.key===competitionFilter)?.name} · {ownGames.length} wedstrijd{ownGames.length===1?'':'en'}</p>}</div>{ownGames.length>0&&<button type="button" className="secondary stats-history-open" onClick={()=>setGameHistoryOpen(true)}>Bekijk per wedstrijd</button>}</div>{ownGames.length?<div className="stats-game-grid">{gameCards.map(card=><article className="stats-game-card" key={card.label}><span>{card.label}</span><strong>{card.value}</strong><small>{card.context}</small><StatsSparkline values={card.series}/><em>Laatste 5 · {card.recent}</em></article>)}</div>:<div className="stats-empty-state">Nog geen wedstrijdgegevens binnen dit filter</div>}</section>
       <section className="stats-section"><div className="stats-section-heading"><div><h3>Metingen</h3>{ownMeasurements.length>0&&<p>Ontwikkeling over tijd</p>}</div></div>{ownMeasurements.length?<div className="stats-development-grid"><article className="stats-development-card"><span>Exit velocity</span><strong>{exitLatest?`${Number(exitLatest.value).toFixed(0)} km/u`:'—'}</strong><small>{exitBest!=null?`Beste: ${exitBest.toFixed(0)} km/u`:'Nog geen metingen'}</small><StatsSparkline values={exitSeries.map(r=>r.value)}/></article><article className="stats-development-card"><span>Home → 1</span><strong>{home1Latest?`${Number(home1Latest.value).toFixed(2).replace('.',',')} sec`:'—'}</strong><small>{home1Best!=null?`Beste: ${home1Best.toFixed(2).replace('.',',')} sec`:'Nog geen metingen'}</small><StatsSparkline values={home1Series.map(r=>r.value)}/></article></div>:<div className="stats-empty-state">Nog geen metingen</div>}</section>
     </>}
-    {statsView==='games' && <section className="stats-section"><div className="stats-section-heading"><div><h3>Mijn wedstrijden</h3><p>{year} · {competitionFilter==='total'?'Alle competities':competitionOptions.find(c=>c.key===competitionFilter)?.name}</p></div></div>{ownGames.length?<div className="stats-game-history">{[...ownGames].reverse().map(row=><article key={row.id||row.game_key}><div className="stats-game-history-head"><span>{new Date(row.game_date).toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'})} · {competitionNameForStat(row,competitions)}</span><strong>{row.opponent||'Wedstrijd'}</strong></div><div className="stats-game-history-values"><span><b>{Number(row.ab||0)}</b> AB</span><span><b>{Number(row.h||0)}</b> H</span><span><b>{row.partial_batting?'—':Number(row.rbi||0)}</b> RBI</span><span><b>{row.partial_batting?'—':Number(row.sb||0)}</b> SB</span><span><b>{statRate(Number(row.ab)?Number(row.h||0)/Number(row.ab):null)}</b> AVG</span></div></article>)}</div>:<div className="stats-empty-state">Nog geen wedstrijdgegevens</div>}</section>}
-    {statsView==='trends' && <><section className="stats-section"><div className="stats-section-heading"><div><h3>Slagontwikkeling</h3><p>{year} · {competitionFilter==='total'?'Totaal':competitionOptions.find(c=>c.key===competitionFilter)?.name}</p>{season.hasPartial&&<small>Historische 2026-import bevat H, AB en BB; daarom tonen we AVG wel en OPS niet.</small>}</div></div>{ownGames.length?<div className="stats-trend-grid"><article><span>AVG</span><strong>{fmtRate(season.avg)}</strong><StatsSparkline values={rolling.map(r=>r.avg).filter(v=>v!=null)}/><small>Laatste 5 · {fmtRate(last5.avg)}</small></article><article><span>OPS</span><strong>{fmtRate(season.ops)}</strong><StatsSparkline values={rolling.map(r=>r.ops).filter(v=>v!=null)}/><small>Laatste 5 · {fmtRate(last5.ops)}</small></article></div>:<div className="stats-empty-state">Nog geen wedstrijdgegevens</div>}</section></>}
+    {statsView==='games' && <section className="stats-section"><div className="stats-section-heading"><div><h3>Mijn wedstrijden</h3><p>{year} · {teamFilter==='total'?'Alle teams':teamOptions.find(t=>t.id===teamFilter)?.name} · {competitionFilter==='total'?'Alle competities':competitionOptions.find(c=>c.key===competitionFilter)?.name}</p></div></div>{ownGames.length?<div className="stats-game-history">{[...ownGames].reverse().map(row=><article key={row.id||row.game_key}><div className="stats-game-history-head"><span>{new Date(row.game_date).toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'})} · {competitionNameForStat(row,competitions)}</span><strong>{row.opponent||'Wedstrijd'}</strong></div><div className="stats-game-history-values"><span><b>{Number(row.ab||0)}</b> AB</span><span><b>{Number(row.h||0)}</b> H</span><span><b>{row.partial_batting?'—':Number(row.rbi||0)}</b> RBI</span><span><b>{row.partial_batting?'—':Number(row.sb||0)}</b> SB</span><span><b>{statRate(Number(row.ab)?Number(row.h||0)/Number(row.ab):null)}</b> AVG</span></div></article>)}</div>:<div className="stats-empty-state">Nog geen wedstrijdgegevens</div>}</section>}
+    {statsView==='trends' && <><section className="stats-section"><div className="stats-section-heading"><div><h3>Slagontwikkeling</h3><p>{year} · {teamFilter==='total'?'Alle teams':teamOptions.find(t=>t.id===teamFilter)?.name} · {competitionFilter==='total'?'Totaal':competitionOptions.find(c=>c.key===competitionFilter)?.name}</p>{season.hasPartial&&<small>Historische 2026-import bevat H, AB en BB; daarom tonen we AVG wel en OPS niet.</small>}</div></div>{ownGames.length?<div className="stats-trend-grid"><article><span>AVG</span><strong>{fmtRate(season.avg)}</strong><StatsSparkline values={rolling.map(r=>r.avg).filter(v=>v!=null)}/><small>Laatste 5 · {fmtRate(last5.avg)}</small></article><article><span>OPS</span><strong>{fmtRate(season.ops)}</strong><StatsSparkline values={rolling.map(r=>r.ops).filter(v=>v!=null)}/><small>Laatste 5 · {fmtRate(last5.ops)}</small></article></div>:<div className="stats-empty-state">Nog geen wedstrijdgegevens</div>}</section></>}
+    {gameHistoryOpen&&<PlayerGameHistoryModal person={profile} rows={ownGames} competitions={competitions} teams={teams} context={`${year} · ${teamFilter==='total'?'Alle teams':teamOptions.find(t=>t.id===teamFilter)?.name||'Team'} · ${competitionFilter==='total'?'Alle competities':competitionOptions.find(c=>c.key===competitionFilter)?.name||'Competitie'}`} onClose={()=>setGameHistoryOpen(false)}/>}
   </section>
 }
 function attendanceStatsForPerson(personId, team, attendance = [], gameAttendance = [], trainingEvents = [], calendarEvents = [], seasonYear = null) {
@@ -2013,7 +2052,7 @@ function formatCardValue(value, unit) {
   return `${Number(value).toFixed(decimals).replace('.',',')} ${unit || ''}`.trim()
 }
 
-function PlayerProfileModal({ person, team, competitions = [], viewerProfile, viewerMembership, attendance = [], gameAttendance = [], trainingEvents = [], calendarEvents = [], gameStats = [], measurements = [], pitchingStats = [], playerCards = [], playerCardMetrics = [], onChanged, onClose }) {
+function PlayerProfileModal({ person, team, teams = [], competitions = [], viewerProfile, viewerMembership, attendance = [], gameAttendance = [], trainingEvents = [], calendarEvents = [], gameStats = [], measurements = [], pitchingStats = [], playerCards = [], playerCardMetrics = [], onChanged, onClose }) {
   const canSeeAttendance = viewerProfile?.id === person?.id || viewerProfile?.role === 'admin' || viewerMembership?.member_role === 'coach'
   const canManageCards = viewerProfile?.role === 'admin' || viewerMembership?.member_role === 'coach'
   const canEditPlayerDetails = Boolean(team?.id) && (viewerProfile?.role === 'admin' || viewerMembership?.member_role === 'coach')
@@ -2021,15 +2060,20 @@ function PlayerProfileModal({ person, team, competitions = [], viewerProfile, vi
   const allPlayerGames=gameStats.filter(row=>row.profile_id===person?.id).sort((a,b)=>new Date(a.game_date)-new Date(b.game_date))
   const playerYears=[...new Set(allPlayerGames.map(statSeasonYear).filter(Boolean))].sort((a,b)=>b-a)
   const [profileSeason,setProfileSeason]=useState(()=>String(playerYears[0]||new Date().getFullYear()))
+  const [profileTeam,setProfileTeam]=useState('total')
   const [profileCompetition,setProfileCompetition]=useState('total')
+  const [profileGameHistoryOpen,setProfileGameHistoryOpen]=useState(false)
   const profileYear=Number(profileSeason)
   const playerSeasonGames=allPlayerGames.filter(row=>statSeasonYear(row)===profileYear)
-  const profileCompetitionOptions=playerCompetitionOptions(playerSeasonGames,competitions)
-  const playerFilteredGames=profileCompetition==='total'?playerSeasonGames:playerSeasonGames.filter(row=>competitionKeyForStat(row,competitions)===profileCompetition)
+  const profileTeamOptions=playerTeamOptions(playerSeasonGames,teams)
+  const playerTeamGames=profileTeam==='total'?playerSeasonGames:playerSeasonGames.filter(row=>String(row.team_id)===String(profileTeam))
+  const profileCompetitionOptions=playerCompetitionOptions(playerTeamGames,competitions)
+  const playerFilteredGames=profileCompetition==='total'?playerTeamGames:playerTeamGames.filter(row=>competitionKeyForStat(row,competitions)===profileCompetition)
   const performance=canSeePlayerStats?battingRates(playerFilteredGames):null
-  const selectedPitching=pitchingStats.filter(row=>row.profile_id===person?.id&&statSeasonYear(row)===profileYear&&(profileCompetition==='total'||competitionKeyForStat(row,competitions)===profileCompetition))
+  const selectedPitching=pitchingStats.filter(row=>row.profile_id===person?.id&&statSeasonYear(row)===profileYear&&(profileTeam==='total'||String(row.team_id)===String(profileTeam))&&(profileCompetition==='total'||competitionKeyForStat(row,competitions)===profileCompetition))
   const pitching=canSeePlayerStats?pitchingStatsForPlayer(person?.id,null,selectedPitching):null
-  const stats = canSeeAttendance ? attendanceStatsForPerson(person?.id, null, attendance, gameAttendance, trainingEvents, calendarEvents, profileYear) : null
+  const selectedProfileTeam=profileTeam==='total'?null:teams.find(t=>String(t.id)===String(profileTeam))||null
+  const stats = canSeeAttendance ? attendanceStatsForPerson(person?.id, selectedProfileTeam, attendance, gameAttendance, trainingEvents, calendarEvents, profileYear) : null
   const cards = playerCards.filter(card=>card.player_id===person?.id && (!team || card.team_id==null || Number(card.team_id)===Number(team.id)))
   const [cardEditor,setCardEditor]=useState(null)
   const [measurementMetric,setMeasurementMetric]=useState(null)
@@ -2053,11 +2097,11 @@ function PlayerProfileModal({ person, team, competitions = [], viewerProfile, vi
       {canEditPlayerDetails&&<button type="button" className="secondary orange-outline player-details-edit" onClick={()=>setDetailsEditor(true)}><Icon name="edit"/> Spelersgegevens aanpassen</button>}
       <section className="player-custom-cards">
         <div className="player-cards-heading"><div><p className="eyebrow orange">PERSOONLIJKE STATS</p><h3>Stats & ontwikkeling</h3></div></div>
-        {canSeePlayerStats&&<div className="player-stats-context-filters"><label>Seizoen<select value={profileSeason} onChange={e=>{setProfileSeason(e.target.value);setProfileCompetition('total')}}>{playerYears.length?playerYears.map(y=><option key={y} value={y}>{y}</option>):<option value={profileYear}>{profileYear}</option>}</select></label><label>Competitie<select value={profileCompetition} onChange={e=>setProfileCompetition(e.target.value)}><option value="total">Totaal</option>{profileCompetitionOptions.map(c=><option key={c.key} value={c.key}>{c.name}</option>)}</select></label></div>}
-        {canSeePlayerStats&&<article className="player-measurement-card player-game-stats-card">
-          <div className="player-measurement-card-head"><span className="player-measurement-card-icon"><Icon name="stats"/></span><div><strong>Wedstrijdstats</strong><small>{profileYear} · {profileCompetition==='total'?'Totaal':profileCompetitionOptions.find(c=>c.key===profileCompetition)?.name||'Competitie'} · alle teams/invalbeurten</small></div></div>
+        {canSeePlayerStats&&<div className="player-stats-context-filters"><label>Seizoen<select value={profileSeason} onChange={e=>{setProfileSeason(e.target.value);setProfileTeam('total');setProfileCompetition('total')}}>{playerYears.length?playerYears.map(y=><option key={y} value={y}>{y}</option>):<option value={profileYear}>{profileYear}</option>}</select></label><label>Team<select value={profileTeam} onChange={e=>{setProfileTeam(e.target.value);setProfileCompetition('total')}}><option value="total">Alle teams</option>{profileTeamOptions.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select></label><label>Competitie<select value={profileCompetition} onChange={e=>setProfileCompetition(e.target.value)}><option value="total">Totaal</option>{profileCompetitionOptions.map(c=><option key={c.key} value={c.key}>{c.name}</option>)}</select></label></div>}
+        {canSeePlayerStats&&<button type="button" className="player-measurement-card player-game-stats-card player-game-stats-open" onClick={()=>setProfileGameHistoryOpen(true)}>
+          <div className="player-measurement-card-head"><span className="player-measurement-card-icon"><Icon name="stats"/></span><div><strong>Wedstrijdstats</strong><small>{profileYear} · {profileTeam==='total'?'Alle teams / invalbeurten':profileTeamOptions.find(t=>t.id===profileTeam)?.name||'Team'} · {profileCompetition==='total'?'Totaal':profileCompetitionOptions.find(c=>c.key===profileCompetition)?.name||'Competitie'}</small></div><Icon name="chevron"/></div>
           <div className="player-profile-stats-grid">{[['AVG',statRate(performance.avg)],['OPS',statRate(performance.ops)],['Hits',performance.h||0],['RBI',performance.rbi==null?'—':performance.rbi],['SB',performance.sb==null?'—':performance.sb]].map(([label,value])=><div key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>
-        </article>}
+        </button>}
         {canSeePlayerStats&&(isPitcher||pitching.hasData)&&<article className="player-measurement-card player-game-stats-card">
           <div className="player-measurement-card-head"><span className="player-measurement-card-icon"><Icon name="target"/></span><div><strong>Pitchingstats</strong><small>{profileYear} · {profileCompetition==='total'?'Totaal':profileCompetitionOptions.find(c=>c.key===profileCompetition)?.name||'Competitie'}</small></div></div>
           <div className="player-profile-stats-grid">{[['IP',pitching.ip],['ERA',pitching.era],['WHIP',pitching.whip],['K',pitching.k],['BB',pitching.bb],['Strike %',pitching.strikePct],['FPS %',pitching.fpsPct]].map(([label,value])=><div key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>
@@ -2087,6 +2131,7 @@ function PlayerProfileModal({ person, team, competitions = [], viewerProfile, vi
         </div><small className="player-attendance-note">Percentage = Aanwezig + Te laat ten opzichte van alle definitief geregistreerde sessies.</small></> : <p className="muted">Er zijn nog geen definitief geregistreerde trainingen of wedstrijden.</p>}
       </section>}
     </div>
+    {profileGameHistoryOpen&&<PlayerGameHistoryModal person={person} rows={playerFilteredGames} competitions={competitions} teams={teams} context={`${profileYear} · ${profileTeam==='total'?'Alle teams':profileTeamOptions.find(t=>t.id===profileTeam)?.name||'Team'} · ${profileCompetition==='total'?'Alle competities':profileCompetitionOptions.find(c=>c.key===profileCompetition)?.name||'Competitie'}`} onClose={()=>setProfileGameHistoryOpen(false)}/>}
     {cardEditor&&<PlayerCardEditorModal person={person} team={team} card={cardEditor.id?cardEditor:null} metrics={cardEditor.id?playerCardMetrics.filter(metric=>metric.card_id===cardEditor.id):[]} viewerProfile={viewerProfile} onClose={()=>setCardEditor(null)} onSaved={async()=>{setCardEditor(null);await onChanged?.()}} />}
     {measurementMetric&&<PlayerMeasurementModal metric={measurementMetric} person={person} team={team} viewerProfile={viewerProfile} canManage={canManageCards} history={measurements.filter(row=>Number(row.card_metric_id)===Number(measurementMetric.id)||(measurementMetric.metric_key&&row.metric_type===measurementMetric.metric_key))} onClose={()=>setMeasurementMetric(null)} onSaved={async()=>{await onChanged?.()}} />}
     {detailsEditor&&<PlayerDetailsEditorModal person={person} team={team} onClose={()=>setDetailsEditor(false)} onSaved={async()=>{await onChanged?.();setDetailsEditor(false);onClose()}}/>}
@@ -2242,7 +2287,7 @@ function Team({ session, profile, teams, competitions = [], profiles, membership
     </button>)}</div> : <p className="muted coach-empty-line">Geen andere actieve OG-teams gevonden.</p>}
     {cropRequest && <ImageCropModal file={cropRequest.file} shape={cropRequest.kind==='avatar'?'circle':'wide'} onClose={() => setCropRequest(null)} onSave={async blob => { const request=cropRequest; setCropRequest(null); if(request.kind==='avatar') await uploadMemberAvatar(request.person,blob); else await uploadTeamPhoto(request.team,blob) }} />}
     {selectedTeam && <TeamModal team={selectedTeam} currentProfile={profile} currentMembership={teams.find(t => Number(t.id)===Number(selectedTeam.id))} members={membersForTeam(selectedTeam.id)} busy={busy} onTeamPhoto={(team,file) => setCropRequest({ kind:'team', team, file })} onAvatar={(person,file) => setCropRequest({ kind:'avatar', person, file })} onPerson={person => setPlayerProfile({ person, team:selectedTeam })} onClose={() => setSelectedTeam(null)} />}
-    {playerProfile && <PlayerProfileModal person={playerProfile.person} competitions={competitions} team={playerProfile.team} viewerProfile={profile} viewerMembership={teams.find(t=>Number(t.id)===Number(playerProfile.team.id))} attendance={attendance} gameAttendance={gameAttendance} trainingEvents={trainingEvents} calendarEvents={calendarEvents} gameStats={gameStats} measurements={measurements} pitchingStats={pitchingStats} playerCards={playerCards} playerCardMetrics={playerCardMetrics} memberships={memberships} onChanged={onSaved} onClose={()=>setPlayerProfile(null)} />}
+    {playerProfile && <PlayerProfileModal person={playerProfile.person} competitions={competitions} teams={teams} team={playerProfile.team} viewerProfile={profile} viewerMembership={teams.find(t=>Number(t.id)===Number(playerProfile.team.id))} attendance={attendance} gameAttendance={gameAttendance} trainingEvents={trainingEvents} calendarEvents={calendarEvents} gameStats={gameStats} measurements={measurements} pitchingStats={pitchingStats} playerCards={playerCards} playerCardMetrics={playerCardMetrics} memberships={memberships} onChanged={onSaved} onClose={()=>setPlayerProfile(null)} />}
   </section>
 }
 
@@ -3144,7 +3189,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
       <button className="logout-button" onClick={signOut}><Icon name="logout" /> Uitloggen</button>
     </section>
 
-    {ownProfileOpen && <PlayerProfileModal person={profile} competitions={competitions} team={null} viewerProfile={profile} viewerMembership={null} attendance={attendance} gameAttendance={gameAttendance} trainingEvents={trainingEvents} calendarEvents={calendarEvents} gameStats={gameStats} measurements={measurements} pitchingStats={pitchingStats} playerCards={playerCards} playerCardMetrics={playerCardMetrics} memberships={memberships} onChanged={onSaved} onClose={()=>setOwnProfileOpen(false)} />}
+    {ownProfileOpen && <PlayerProfileModal person={profile} competitions={competitions} teams={teams} team={null} viewerProfile={profile} viewerMembership={null} attendance={attendance} gameAttendance={gameAttendance} trainingEvents={trainingEvents} calendarEvents={calendarEvents} gameStats={gameStats} measurements={measurements} pitchingStats={pitchingStats} playerCards={playerCards} playerCardMetrics={playerCardMetrics} memberships={memberships} onChanged={onSaved} onClose={()=>setOwnProfileOpen(false)} />}
     {settingsView && <SettingsModal title={settingsView === 'personal' ? 'Persoonlijke gegevens' : settingsView === 'password' ? 'Wachtwoord' : settingsView === 'notifications' ? 'Meldingen' : settingsView === 'calendar' ? 'Koppelingen' : settingsView==='tasks'?'Taken & functies':'Over Mijn OG'} onClose={() => { if (settingsView === 'personal') { setFirstName(profile?.first_name ?? ''); setLastName(profile?.last_name ?? '') } setSettingsView(null) }}>
       {settingsView === 'personal' && <div className="form-stack">
         <p className="settings-modal-intro">Pas hier je naam aan. Je e-mailadres blijft gekoppeld aan je account.</p>
