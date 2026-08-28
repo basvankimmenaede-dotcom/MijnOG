@@ -1394,14 +1394,15 @@ function CoachDashboard({ session, profile, teams, competitions = [], gameStats 
       {(profile?.role === 'admin' || swingAccess === 'coach' || swingAccess === 'admin') && <button className="swing-launch" onClick={()=>setSwingAnalyzerOpen(true)}><span><Icon name="swing"/></span><strong>Swing Analyzer</strong><small>Video, coachanalyse & drills</small></button>}
     </div>
 
-    <SectionTitle title="Komend" />
+    <SectionTitle title="Aanwezigheid & historie" />
+    <div className="coach-history-group-head"><strong>Komende activiteiten</strong><small>{upcoming.length} gepland</small></div>
     <div className="coach-session-list">{upcoming.length ? upcoming.map(ev=>{
       const rows=ev.type==='training'?attendance.filter(a=>String(a.event_id)===String(ev.id)):gameAttendance.filter(a=>eventKeyCandidates(ev).includes(a.event_key))
       const yes=rows.filter(r=>r.status==='present'||r.status==='late').length, late=rows.filter(r=>r.status==='late').length, maybe=rows.filter(r=>r.status==='maybe').length
       return <button type="button" className="coach-session-card" key={ev.uid||`${ev.type}-${ev.id}`} onClick={()=>setDetailEvent(ev)}><div><span className="coach-session-type">{eventTypeLabel(ev)}</span><strong>{ev.title}</strong><small>{formatShortDate(ev.start)} · {formatTimeRange(ev.start,ev.end)}</small></div><div className="coach-session-count"><strong>{yes}</strong><span>aanwezig</span>{late>0&&<small>{late} te laat</small>}{maybe>0&&<small>{maybe} misschien</small>}<Icon name="chevron"/></div></button>
     }) : <p className="muted coach-empty-line">Geen komende activiteiten voor dit team.</p>}</div>
 
-    <SectionTitle title="Aanwezigheid & historie" />
+    <div className="coach-history-group-head history"><strong>Historie</strong><small>{past.length} afgelopen</small></div>
     <div className="coach-history-tabs"><button className={historyView==='sessions'?'active':''} onClick={()=>setHistoryView('sessions')}>Activiteiten</button><button className={historyView==='players'?'active':''} onClick={()=>setHistoryView('players')}>Per speler</button></div>
     {historyView==='sessions' ? <div className="coach-history-list">{past.map(ev=>{
       const rows=ev.type==='training'?attendance.filter(a=>String(a.event_id)===String(ev.id)):gameAttendance.filter(a=>eventKeyCandidates(ev).includes(a.event_key))
@@ -1701,7 +1702,8 @@ function formatSwingDate(value){try{return new Intl.DateTimeFormat('nl-NL',{day:
 
 function CoachStatsModal({team,players=[],attendance=[],gameAttendance=[],trainingEvents=[],calendarEvents=[],gameStats=[],measurements=[],onPlayer,onAddGame,onAddMeasurement,onClose}){
   const [attendanceDetailOpen,setAttendanceDetailOpen]=useState(false)
-  const rows=players.map(person=>({person,stats:coreStatsForPlayer(person.id,team,attendance,gameAttendance,trainingEvents,calendarEvents,gameStats,measurements)}))
+  const sortedPlayers=[...players].sort(comparePlayersByJersey)
+  const rows=sortedPlayers.map(person=>({person,stats:coreStatsForPlayer(person.id,team,attendance,gameAttendance,trainingEvents,calendarEvents,gameStats,measurements)}))
   const teamGames=gameStats.filter(r=>Number(r.team_id)===Number(team?.id))
   const sum=teamGames.reduce((a,r)=>{['ab','h','rbi','bb','hbp','sf','tb','sb'].forEach(k=>a[k]=(a[k]||0)+Number(r[k]||0));return a},{})
   const teamHasPartial=teamGames.some(r=>Boolean(r.partial_batting))
@@ -1712,7 +1714,7 @@ function CoachStatsModal({team,players=[],attendance=[],gameAttendance=[],traini
   const sessions=[...pastTraining,...pastGames].sort((a,b)=>new Date(b.start)-new Date(a.start))
   function eligible(person,event){return event.type!=='training'||event.audienceMode!=='selected'||event.guestProfileIds?.includes(person.id)}
   function statusFor(person,event){if(!eligible(person,event))return 'not_invited';return event.type==='training'?attendance.find(row=>String(row.event_id)===String(event.id)&&row.profile_id===person.id)?.status||'none':gameAttendance.find(row=>row.event_key===eventTransportKey(event)&&row.profile_id===person.id)?.status||'none'}
-  const attendanceRows=players.map(person=>{const statuses=sessions.map(event=>statusFor(person,event));const present=statuses.filter(value=>value==='present'||value==='late').length, absent=statuses.filter(value=>value==='absent'||value==='injured').length, late=statuses.filter(value=>value==='late').length, total=present+absent;return {person,statuses,present,absent,late,percentage:total?Math.round(present/total*100):null}})
+  const attendanceRows=sortedPlayers.map(person=>{const statuses=sessions.map(event=>statusFor(person,event));const present=statuses.filter(value=>value==='present'||value==='late').length, absent=statuses.filter(value=>value==='absent'||value==='injured').length, late=statuses.filter(value=>value==='late').length, total=present+absent;return {person,statuses,present,absent,late,percentage:total?Math.round(present/total*100):null}})
   const teamRegistered=attendanceRows.reduce((total,row)=>total+row.present+row.absent,0), teamPresent=attendanceRows.reduce((total,row)=>total+row.present,0)
   const cards=[['AVG',statRate(avg)],['OPS',statRate(ops)],['Hits',sum.h||0],['RBI',teamHasPartial?'—':(sum.rbi||0)],['SB',teamHasPartial?'—':(sum.sb||0)],['Exit velo',ev.length?`${Math.round(ev.reduce((a,b)=>a+b,0)/ev.length)} km/u`:'—'],['Home → 1',h1.length?`${(h1.reduce((a,b)=>a+b,0)/h1.length).toFixed(2).replace('.',',')} s`:'—'],['Aanwezig',teamRegistered?`${Math.round(teamPresent/teamRegistered*100)}%`:'—']]
   const statusMark=status=>status==='present'?['✓','Aanwezig']:status==='late'?['T','Te laat']:status==='absent'?['×','Afwezig']:status==='injured'?['G','Geblesseerd']:status==='maybe'?['?','Misschien']:status==='not_invited'?['–','Niet uitgenodigd']:['','Niet geregistreerd']
@@ -2295,6 +2297,12 @@ function TeamThumb({ team }) {
   return team?.team_photo_url ? <img className="team-thumb-image" src={team.team_photo_url} alt={`Teamfoto ${team.name}`} /> : <span className="soft-icon large"><Icon name="team" /></span>
 }
 
+
+function comparePlayersByJersey(a,b) {
+  const an=Number.parseInt(a?.jersey_number,10), bn=Number.parseInt(b?.jersey_number,10)
+  const av=Number.isFinite(an)?an:Number.MAX_SAFE_INTEGER, bv=Number.isFinite(bn)?bn:Number.MAX_SAFE_INTEGER
+  return av-bv || personName(a).localeCompare(personName(b),'nl')
+}
 
 function teamDisplayName(person) {
   if (!person) return 'Onbekend'
@@ -3181,7 +3189,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="people" title="Taken & functies" subtitle="Bekijk club- en teamuitnodigingen" status={taskInvitations.some(row=>row.status==='invited')?'Nieuw':null} onClick={() => setSettingsView('tasks')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.1.21" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.1.24" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -3221,7 +3229,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 3.1.21</h3>
+        <h3>Versie 3.1.24</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS agenda</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>

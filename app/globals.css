@@ -2941,3 +2941,6 @@ button.swing-primary { width: 100%; margin-top: 12px; border: 0; background: var
   .player-game-history-intro small { text-align:left; }
   .player-game-history-values { grid-template-columns:repeat(3,minmax(0,1fr)); }
 }
+
+/* v3.12.4 - Coach: komende activiteiten vs historie */
+.coach-history-group-head{display:flex;align-items:end;justify-content:space-between;gap:12px;margin:4px 0 10px}.coach-history-group-head strong{font-size:16px}.coach-history-group-head small{font-size:11px;color:var(--muted,#77736f)}.coach-history-group-head.history{margin-top:24px;padding-top:18px;border-top:1px solid var(--warm-grey,#e8e4df)}
