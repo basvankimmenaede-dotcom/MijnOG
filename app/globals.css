@@ -2962,3 +2962,22 @@ button.swing-primary { width: 100%; margin-top: 12px; border: 0; background: var
 
 /* v3.1.28 - VS-2 historical results + FOYS dedupe */
 /* v3.1.29 - non-blocking FOYS background sync */
+
+/* v3.2.0 - Spelersprofiel 2.0, in bestaand Mijn OG thema */
+.player-profile-modal{gap:14px}
+.player-profile-hero-v2{position:relative;padding:18px;border:1px solid var(--border,#e7e1da);border-radius:20px;background:linear-gradient(135deg,#fff 0%,#fffaf5 100%);overflow:hidden}
+.player-profile-hero-v2:after{content:"";position:absolute;right:-38px;top:-48px;width:150px;height:150px;border-radius:50%;background:rgba(243,111,33,.08);pointer-events:none}
+.player-profile-avatar-wrap{position:relative;flex:0 0 auto}
+.player-profile-avatar-wrap .profile-avatar{box-shadow:0 0 0 4px #fff,0 0 0 6px rgba(243,111,33,.18)}
+.player-profile-number{position:absolute;right:-7px;bottom:-5px;display:grid;place-items:center;min-width:42px;height:28px;padding:0 9px;border-radius:9px;background:var(--og-orange,#f36f21);color:#fff;font-size:12px;font-weight:900;box-shadow:0 4px 12px rgba(243,111,33,.25)}
+.player-profile-identity{min-width:0;position:relative;z-index:1}.player-profile-identity h2{font-size:26px;line-height:1.05;margin:3px 0 7px}.player-profile-position{font-weight:800!important;color:#25211e!important}.player-profile-subline{font-size:12px!important;margin-top:5px!important}
+.player-profile-data{gap:8px}.player-profile-data>div{background:#fff;border:1px solid var(--border,#e7e1da);border-radius:13px;padding:11px 12px}.player-profile-data span{font-size:9px}.player-profile-data strong{font-size:13px}
+.player-details-edit{align-self:flex-start}
+.player-custom-cards{display:grid;gap:12px}.player-cards-heading{padding:3px 2px}.player-cards-heading h3{font-size:19px;margin:2px 0 0}
+.player-stats-context-filters{padding:12px;border:1px solid var(--border,#e7e1da);border-radius:16px;background:#faf8f5}
+.player-game-stats-card{border-color:#f0d9c8!important;background:#fff!important;box-shadow:0 6px 20px rgba(70,45,25,.045)}
+.player-game-stats-card .player-measurement-card-icon{background:#fff1e7;color:var(--og-orange,#f36f21)}
+.player-profile-stats-grid{background:#fffaf6;border-radius:14px;padding:5px}.player-profile-stats-grid>div{padding:10px 6px}.player-profile-stats-grid span{font-size:9px}.player-profile-stats-grid strong{font-size:19px}.player-profile-stats-grid>div:first-child strong,.player-profile-stats-grid>div:nth-child(2) strong{color:var(--og-orange,#f36f21)}
+.player-attendance-card{border-radius:18px;background:#fff;border:1px solid var(--border,#e7e1da);box-shadow:0 6px 20px rgba(70,45,25,.04)}.player-attendance-heading h3{color:var(--og-orange,#f36f21)}.attendance-progress{background:#f3eee9}.attendance-progress span{background:var(--og-orange,#f36f21)}
+.player-measurement-card{border-radius:18px!important}.player-metric-row{transition:background .15s ease}.player-metric-row:hover{background:#fffaf6}
+@media(max-width:560px){.player-profile-hero-v2{padding:15px;align-items:flex-start}.player-profile-identity h2{font-size:22px}.player-profile-data{grid-template-columns:1fr 1fr}.player-profile-stats-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.player-profile-stats-grid>div:nth-child(n+5){border-top:1px solid var(--border,#e7e1da)}}

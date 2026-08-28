@@ -2246,9 +2246,9 @@ function PlayerProfileModal({ person, team, teams = [], competitions = [], viewe
   const batsLabel=person?.bats_side==='S'?'Switch':person?.bats_side==='L'?'Links':person?.bats_side==='R'?'Rechts':'Niet ingevuld'
   return <SettingsModal title="Spelersprofiel" onClose={onClose}>
     <div className="player-profile-modal">
-      <div className="player-profile-hero">
-        <ProfileAvatar person={person} size="profile"/>
-        <div><p className="eyebrow orange">{team?.name || 'MIJN OG'}</p><h2>{personName(person)}</h2><p>{person?.jersey_number ? `#${person.jersey_number}` : 'Geen rugnummer'}{person?.is_placeholder ? ' · Nog geen Mijn OG-account' : ''}</p></div>
+      <div className="player-profile-hero player-profile-hero-v2">
+        <div className="player-profile-avatar-wrap"><ProfileAvatar person={person} size="profile"/>{person?.jersey_number&&<span className="player-profile-number">#{person.jersey_number}</span>}</div>
+        <div className="player-profile-identity"><p className="eyebrow orange">{team?.name || 'MIJN OG'}</p><h2>{personName(person)}</h2><p className="player-profile-position">{person?.primary_position || 'Positie niet ingevuld'}{secondary.length ? ` · ${secondary.join(' / ')}` : ''}</p><p className="player-profile-subline">{person?.jersey_number ? `Rugnummer ${person.jersey_number}` : 'Geen rugnummer'}{person?.is_placeholder ? ' · Nog geen Mijn OG-account' : ''}</p></div>
       </div>
       <div className="player-profile-data">
         <div><span>Primaire positie</span><strong>{person?.primary_position || 'Niet ingevuld'}</strong></div>
@@ -3408,7 +3408,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="people" title="Taken & functies" subtitle="Bekijk club- en teamuitnodigingen" status={taskInvitations.some(row=>row.status==='invited')?'Nieuw':null} onClick={() => setSettingsView('tasks')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS agenda gekoppeld' : 'FOYS agenda koppelen'} status={calendar ? 'Gekoppeld' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.1.34" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.2.0" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -3449,7 +3449,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 3.1.34</h3>
+        <h3>Versie 3.2.0</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS synchronisatie</span><strong>{calendar ? 'Gekoppeld' : 'Niet gekoppeld'}</strong></div>
