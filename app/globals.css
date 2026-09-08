@@ -3082,3 +3082,39 @@ button.swing-primary { width: 100%; margin-top: 12px; border: 0; background: var
   }
 }
 
+
+/* v3.2.17 - Swing Analyzer bulk Blast upload */
+.swing-file-actions{grid-template-columns:1fr 1fr 1fr}
+.swing-multi-upload{border-color:#f2b58e;background:#fff7f1;color:var(--og-orange-dark)}
+.swing-bulk{margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:18px;background:#fafafa}
+.swing-bulk-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:9px}
+.swing-bulk-head span{display:grid;gap:2px}.swing-bulk-head strong{font-size:12px}.swing-bulk-head small{font-size:9px;color:var(--muted)}
+.swing-bulk-head>b{min-width:44px;padding:7px 8px;border-radius:10px;background:var(--ink);color:#fff;text-align:center;font-size:10px}
+.swing-bulk-list{display:grid;gap:6px;max-height:260px;overflow:auto}
+.swing-bulk-list article{min-height:48px;padding:8px 9px;border:1px solid var(--line);border-radius:12px;background:#fff;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center}
+.swing-bulk-list article>span{display:grid;gap:2px;min-width:0}.swing-bulk-list strong{font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.swing-bulk-list small{font-size:8.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.swing-bulk-list article>b{font-size:9px;color:var(--muted)}
+.swing-bulk-list .status-done{border-color:#bfe3ca;background:#f4fbf6}.swing-bulk-list .status-done>b{color:var(--green)}
+.swing-bulk-list .status-duplicate{background:#f4f4f5}.swing-bulk-list .status-duplicate>b{color:#777}
+.swing-bulk-list .status-analyzing,.swing-bulk-list .status-checking{border-color:#f1c7a8;background:#fff8f2}.swing-bulk-list .status-analyzing>b,.swing-bulk-list .status-checking>b{color:var(--og-orange-dark)}
+.swing-bulk-list .status-error{border-color:#edc4c4;background:#fff6f6}.swing-bulk-list .status-error>b{color:#a33}
+.swing-bulk-progress{margin-top:10px}.swing-bulk-note{margin:9px 2px 0;text-align:center}
+@media(max-width:390px){.swing-file-actions{grid-template-columns:1fr}.swing-bulk-list{max-height:220px}}
+
+/* v3.2.17 - Swing Analyzer bulk Blast upload */
+.swing-file-actions{grid-template-columns:1fr 1fr 1fr}
+.swing-multi-upload{border-color:#f2b58e;background:#fff7f1;color:var(--og-orange-dark)}
+.swing-bulk{margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:18px;background:#fafafa}
+.swing-bulk-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:9px}
+.swing-bulk-head span{display:grid;gap:2px}.swing-bulk-head strong{font-size:12px}.swing-bulk-head small{font-size:9px;color:var(--muted)}
+.swing-bulk-head>b{min-width:44px;padding:7px 8px;border-radius:10px;background:var(--ink);color:#fff;text-align:center;font-size:10px}
+.swing-bulk-list{display:grid;gap:6px;max-height:260px;overflow:auto}
+.swing-bulk-list article{min-height:48px;padding:8px 9px;border:1px solid var(--line);border-radius:12px;background:#fff;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center}
+.swing-bulk-list article>span{display:grid;gap:2px;min-width:0}.swing-bulk-list strong{font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.swing-bulk-list small{font-size:8.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.swing-bulk-list article>b{font-size:9px;color:var(--muted)}
+.swing-bulk-list .status-done{border-color:#bfe3ca;background:#f4fbf6}.swing-bulk-list .status-done>b{color:var(--green)}
+.swing-bulk-list .status-duplicate{background:#f4f4f5}.swing-bulk-list .status-duplicate>b{color:#777}
+.swing-bulk-list .status-analyzing,.swing-bulk-list .status-checking{border-color:#f1c7a8;background:#fff8f2}.swing-bulk-list .status-analyzing>b,.swing-bulk-list .status-checking>b{color:var(--og-orange-dark)}
+.swing-bulk-list .status-error{border-color:#edc4c4;background:#fff6f6}.swing-bulk-list .status-error>b{color:#a33}
+.swing-bulk-progress{margin-top:10px}.swing-bulk-note{margin:9px 2px 0;text-align:center}
+@media(max-width:390px){.swing-file-actions{grid-template-columns:1fr}.swing-bulk-list{max-height:220px}}

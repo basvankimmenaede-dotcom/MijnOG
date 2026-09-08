@@ -1655,6 +1655,10 @@ function SwingAnalyzerModal({ session, profile, accessLevel, team, players = [],
   const [permissionBusy, setPermissionBusy] = useState(false)
   const [videoQuality, setVideoQuality] = useState(null)
   const [qualityBusy, setQualityBusy] = useState(false)
+  const [bulkQueue, setBulkQueue] = useState([])
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const [bulkProgress, setBulkProgress] = useState({current:0,total:0,label:''})
+  const [bulkSessionId, setBulkSessionId] = useState(null)
 
   useEffect(() => { loadSwingData() }, [team?.id, accessLevel])
   useEffect(() => () => { if (videoUrl) URL.revokeObjectURL(videoUrl) }, [videoUrl])
@@ -1675,10 +1679,11 @@ function SwingAnalyzerModal({ session, profile, accessLevel, team, players = [],
   const latestFor = (playerId) => playerAnalyses(playerId)[0]
 
   function openNew(person) {
-    setSelectedPlayer(person); setVideoFile(null); setVideoUrl(''); setExitVelocity(''); setCoachNote(''); setAiResult(null); setAiProgress({progress:0,label:''}); setSavedResult(null); setVideoQuality(null); setQualityBusy(false); setView('new')
+    setSelectedPlayer(person); setVideoFile(null); setVideoUrl(''); setExitVelocity(''); setCoachNote(''); setAiResult(null); setAiProgress({progress:0,label:''}); setSavedResult(null); setVideoQuality(null); setQualityBusy(false); setBulkQueue([]); setBulkBusy(false); setBulkProgress({current:0,total:0,label:''}); setBulkSessionId(null); setView('new')
   }
   async function pickVideo(file) {
     if (!file) return
+    setBulkQueue([]); setBulkSessionId(null); setBulkProgress({current:0,total:0,label:''})
     if (videoUrl) URL.revokeObjectURL(videoUrl)
     setVideoFile(file); setVideoUrl(URL.createObjectURL(file)); setAiResult(null); setAiProgress({progress:0,label:''}); setVideoQuality(null); setQualityBusy(true); setError('')
     try{
@@ -1688,14 +1693,69 @@ function SwingAnalyzerModal({ session, profile, accessLevel, team, players = [],
     }catch(err){setVideoQuality({status:'orange',confidence:0,message:'Kwaliteitscontrole niet volledig uitgevoerd',detail:err?.message||'Controleer de opname handmatig.'})}
     finally{setQualityBusy(false)}
   }
-  function scoreInfo() {
-    if(!aiResult) return {overall:0,focus:[]}
-    const metrics=aiResult.metrics||{}
-    const confidences=aiResult.confidences||{}
-    const sorted=Object.entries(metrics).filter(([key])=>(confidences[key]??0)>=45).sort((a,b)=>Number(a[1])-Number(b[1]))
-    const focus=sorted.slice(0,3).map(([key,score])=>({ key, score:Number(score), confidence:confidences[key], ...swingMetricCatalog[key], feedback:aiResult.observations?.[key]||swingMetricCatalog[key]?.feedback }))
-    return {overall:aiResult.overall||0,focus}
+  function parseBlastSwingFile(file){
+    const name=file?.name||''
+    const match=name.match(/^(\d{4})-(\d{2})-(\d{2})-(\d{2})-(\d{2})-(\d{2})_(.+?)_(?:turbo_)?softball-swing_([0-9a-f-]{36})\.(mov|mp4)$/i)
+    if(!match)return {source:'video_upload',sourceSwingId:null,sourceAccount:null,recordedAt:null,isBlast:false}
+    const [,year,month,day,hour,minute,second,account,id]=match
+    const local=new Date(Number(year),Number(month)-1,Number(day),Number(hour),Number(minute),Number(second))
+    return {source:'blast_softball',sourceSwingId:id.toLowerCase(),sourceAccount:account,recordedAt:local.toISOString(),isBlast:true}
   }
+  function makeSessionId(){
+    try{return crypto.randomUUID()}catch{return `swing-${Date.now()}-${Math.random().toString(16).slice(2)}`}
+  }
+  function pickVideos(fileList){
+    const files=Array.from(fileList||[]).filter(file=>file?.type?.startsWith('video/')||/\.(mov|mp4)$/i.test(file?.name||''))
+    if(!files.length)return
+    if(files.length===1){pickVideo(files[0]);return}
+    if(videoUrl)URL.revokeObjectURL(videoUrl)
+    setVideoFile(null);setVideoUrl('');setAiResult(null);setVideoQuality(null);setQualityBusy(false);setError('')
+    const existingIds=new Set(analyses.map(a=>a.source_swing_id||a.analysis_meta?.source_swing_id).filter(Boolean))
+    const sessionId=makeSessionId();setBulkSessionId(sessionId)
+    setBulkQueue(files.map((file,index)=>{const meta=parseBlastSwingFile(file);return {key:`${file.name}-${file.size}-${file.lastModified}-${index}`,file,meta,status:meta.sourceSwingId&&existingIds.has(meta.sourceSwingId)?'duplicate':'ready',error:null,score:null}}))
+    setBulkProgress({current:0,total:files.length,label:''})
+  }
+  function resultScoreInfo(result){
+    if(!result)return {overall:0,focus:[]}
+    const metrics=result.metrics||{}
+    const confidences=result.confidences||{}
+    const sorted=Object.entries(metrics).filter(([key])=>(confidences[key]??0)>=45).sort((a,b)=>Number(a[1])-Number(b[1]))
+    const focus=sorted.slice(0,3).map(([key,score])=>({ key, score:Number(score), confidence:confidences[key], ...swingMetricCatalog[key], feedback:result.observations?.[key]||swingMetricCatalog[key]?.feedback }))
+    return {overall:result.overall||0,focus}
+  }
+  async function analyzeBulkQueue(){
+    if(!selectedPlayer||bulkBusy||!bulkQueue.length)return
+    setBulkBusy(true);setError('')
+    const total=bulkQueue.filter(item=>item.status!=='duplicate'&&item.status!=='done').length
+    let current=0
+    const newAnalyses=[]
+    for(const item of bulkQueue){
+      if(item.status==='duplicate'||item.status==='done')continue
+      current+=1
+      setBulkProgress({current,total,label:`${item.file.name} controleren…`})
+      setBulkQueue(prev=>prev.map(q=>q.key===item.key?{...q,status:'checking',error:null}:q))
+      try{
+        const quality=await checkSwingVideoQuality(item.file)
+        if(quality?.status==='red')throw new Error('Onvoldoende betrouwbaar voor AI-analyse')
+        setBulkQueue(prev=>prev.map(q=>q.key===item.key?{...q,status:'analyzing',quality}:q))
+        const result=await analyzeSwingVideo(item.file,(progress)=>setBulkProgress({current,total,label:`${item.file.name} · ${progress?.label||'Analyseren…'}`}))
+        const {overall,focus}=resultScoreInfo(result)
+        const meta=item.meta||{}
+        const payload={player_id:selectedPlayer.id,coach_id:session.user.id,team_id:team?.id||null,recorded_at:meta.recordedAt||new Date(item.file.lastModified||Date.now()).toISOString(),overall_score:overall,metrics:result.metrics,focus,exit_velocity:null,coach_note:null,metric_confidence:result.confidences||{},analysis_meta:{...(result.meta||{}),observations:result.observations||{},video_quality:quality||null,source_filename:item.file.name,source_account:meta.sourceAccount||null,source_swing_id:meta.sourceSwingId||null,bulk_session_id:bulkSessionId},analysis_version:'pose-ai-v1.1',source:meta.source||'video_upload',source_swing_id:meta.sourceSwingId||null,source_filename:item.file.name,session_id:bulkSessionId}
+        const {data,error:insertError}=await supabase.from('swing_analyses').insert(payload).select().single()
+        if(insertError){
+          if(insertError.code==='23505'){setBulkQueue(prev=>prev.map(q=>q.key===item.key?{...q,status:'duplicate',error:null}:q));continue}
+          throw insertError
+        }
+        newAnalyses.push(data)
+        setBulkQueue(prev=>prev.map(q=>q.key===item.key?{...q,status:'done',score:Math.round(data.overall_score)}:q))
+      }catch(err){setBulkQueue(prev=>prev.map(q=>q.key===item.key?{...q,status:'error',error:err?.message||'Analyse mislukt'}:q))}
+    }
+    if(newAnalyses.length)setAnalyses(prev=>[...newAnalyses.reverse(),...prev])
+    setBulkProgress({current:total,total,label:'Bulk-analyse afgerond'})
+    setBulkBusy(false)
+  }
+  function scoreInfo() { return resultScoreInfo(aiResult) }
   async function runAiAnalysis(){
     if(!videoFile){setError('Film of kies eerst een swingvideo.');return}
     if(videoQuality?.status==='red'){setError('Deze opname is onvoldoende betrouwbaar. Neem eerst een nieuwe video op.');return}
@@ -1710,7 +1770,8 @@ function SwingAnalyzerModal({ session, profile, accessLevel, team, players = [],
     if (!selectedPlayer) return
     if(!aiResult){setError('Start eerst de AI-analyse van de video.');return}
     const {overall,focus}=scoreInfo(); setBusy(true); setError('')
-    const payload={ player_id:selectedPlayer.id, coach_id:session.user.id, team_id:team?.id || null, recorded_at:new Date().toISOString(), exit_velocity:exitVelocity?Number(exitVelocity):null, overall_score:overall, metrics:aiResult.metrics, focus, coach_note:coachNote.trim()||null, metric_confidence:aiResult.confidences||{}, analysis_meta:{...(aiResult.meta||{}),observations:aiResult.observations||{},video_quality:videoQuality||null}, analysis_version:'pose-ai-v1.1' }
+    const sourceMeta=parseBlastSwingFile(videoFile)
+    const payload={ player_id:selectedPlayer.id, coach_id:session.user.id, team_id:team?.id || null, recorded_at:sourceMeta.recordedAt||new Date().toISOString(), exit_velocity:exitVelocity?Number(exitVelocity):null, overall_score:overall, metrics:aiResult.metrics, focus, coach_note:coachNote.trim()||null, metric_confidence:aiResult.confidences||{}, analysis_meta:{...(aiResult.meta||{}),observations:aiResult.observations||{},video_quality:videoQuality||null,source_filename:videoFile?.name||null,source_account:sourceMeta.sourceAccount||null,source_swing_id:sourceMeta.sourceSwingId||null}, analysis_version:'pose-ai-v1.1', source:sourceMeta.source||'video_upload', source_swing_id:sourceMeta.sourceSwingId||null, source_filename:videoFile?.name||null }
     const {data,error}=await supabase.from('swing_analyses').insert(payload).select().single()
     if(error){setError(error.message);setBusy(false);return}
     setSavedResult(data); setAnalyses(prev=>[data,...prev]); setBusy(false); setView('result')
@@ -1730,7 +1791,7 @@ function SwingAnalyzerModal({ session, profile, accessLevel, team, players = [],
   const coaches=allCoachIds.map(id=>profiles.find(p=>p.id===id)).filter(Boolean)
 
   return <div className="swing-layer"><section className="swing-shell" role="dialog" aria-modal="true" aria-label="Swing Analyzer">
-    <header className="swing-topbar"><button className="swing-icon-btn" onClick={()=>view==='home'?onClose():setView('home')}><Icon name={view==='home'?'close':'back'}/></button><div><p className="eyebrow orange">MIJN OG</p><h2>Swing Analyzer <span>V1</span></h2></div>{isAnalyzerAdmin?<button className={`swing-admin-btn ${view==='access'?'active':''}`} onClick={()=>setView('access')}><Icon name="lock"/></button>:<span className="swing-icon-spacer"/>}</header>
+    <header className="swing-topbar"><button className="swing-icon-btn" onClick={()=>view==='home'?onClose():setView('home')}><Icon name={view==='home'?'close':'back'}/></button><div><p className="eyebrow orange">MIJN OG</p><h2>Swing Analyzer <span>V1.1</span></h2></div>{isAnalyzerAdmin?<button className={`swing-admin-btn ${view==='access'?'active':''}`} onClick={()=>setView('access')}><Icon name="lock"/></button>:<span className="swing-icon-spacer"/>}</header>
     <div className="swing-body">
       <div className="swing-advisory"><Icon name="info"/><span><strong>Coachhulpmiddel</strong> De analyse ondersteunt jouw observatie en is niet leidend. Beoordeel altijd zelf de volledige swing en context.</span></div>
       {error && <div className="notice error">{error}</div>}
@@ -1748,10 +1809,10 @@ function SwingAnalyzerModal({ session, profile, accessLevel, team, players = [],
         </>}
         {view==='new' && selectedPlayer && <>
           <div className="swing-section-head"><div><p className="eyebrow orange">NIEUWE ANALYSE</p><h3>{personName(selectedPlayer)}</h3></div></div>
-          <section className="swing-capture-card"><SwingCameraCapture videoUrl={videoUrl} onVideo={pickVideo} videoQuality={videoQuality} qualityBusy={qualityBusy}/>{videoFile&&<small className="swing-file-name">{videoFile.name} · {(videoFile.size/1024/1024).toFixed(1)} MB · wordt niet opgeslagen</small>}</section>
-          <section className="swing-ai-card"><div className="swing-section-head compact"><div><p className="eyebrow orange">AI-VIDEOANALYSE</p><h3>Automatische swinganalyse</h3></div>{aiResult&&<span>{aiResult.overall}/100</span>}</div><p className="swing-help">De AI volgt lichaamslandmarks door de video en berekent automatisch technische indicatoren. De uitkomst is een coachhulpmiddel en geen biomechanische waarheid.</p>{analysisBusy?<div className="swing-ai-progress"><div><i style={{width:`${aiProgress.progress||0}%`}}/></div><strong>{aiProgress.label||'Analyseren…'}</strong><small>{aiProgress.progress||0}%</small></div>:!aiResult?<button className="swing-primary swing-ai-start" disabled={!videoFile||qualityBusy||videoQuality?.status==='red'} onClick={runAiAnalysis}><Icon name="swing"/> AI-analyse starten</button>:<><div className="swing-ai-ok"><strong>AI-analyse gereed</strong><small>Pose confidence {aiResult.meta?.pose_confidence??'—'}% · contactmoment is een AI-proxy</small></div><div className="swing-ai-metric-list">{Object.entries(aiResult.metrics||{}).map(([key,value])=>{const conf=aiResult.confidences?.[key]??0;const info=swingMetricCatalog[key]||{};return <article key={key}><span><strong>{info.label||key}</strong><small>{conf>=80?'Hoge':conf>=60?'Redelijke':'Lage'} betrouwbaarheid · {conf}%</small></span><b>{value}</b><div><i style={{width:`${Math.max(0,Math.min(100,Number(value)))}%`}}/></div><p className="swing-metric-observation"><b>Waarneming:</b> {metricObservationFromAnalysis(key,value,aiResult)}</p><p className="swing-metric-explain"><b>Basisdoel:</b> {info.goal}</p><p className="swing-metric-explain"><b>Wat houdt dit in?</b> {info.explanation||info.hint}</p></article>})}</div><button className="swing-secondary swing-ai-again" onClick={runAiAnalysis}>Opnieuw analyseren</button></>}</section>
-          <div className="form-stack swing-extra"><label>Exit velo <span>(optioneel)</span><input type="number" inputMode="decimal" value={exitVelocity} onChange={e=>setExitVelocity(e.target.value)} placeholder="Bijv. 92"/></label><label>Coachnotitie <span>(optioneel)</span><textarea rows="3" value={coachNote} onChange={e=>setCoachNote(e.target.value)} placeholder="Wat zie jij in deze swing?"/></label></div>
-          <button className="swing-primary" disabled={busy||analysisBusy||!aiResult} onClick={saveAnalysis}>{busy?'Opslaan…':!aiResult?'Eerst AI-analyse uitvoeren':'AI-analyse opslaan'}</button>
+          <section className="swing-capture-card"><SwingCameraCapture videoUrl={videoUrl} onVideo={pickVideo} onVideos={pickVideos} videoQuality={videoQuality} qualityBusy={qualityBusy}/>{videoFile&&<small className="swing-file-name">{videoFile.name} · {(videoFile.size/1024/1024).toFixed(1)} MB · wordt niet opgeslagen</small>}{bulkQueue.length>1&&<div className="swing-bulk"><div className="swing-bulk-head"><span><strong>{bulkQueue.length} swings geselecteerd</strong><small>Alle video’s worden gekoppeld aan {personName(selectedPlayer)}.</small></span><b>{bulkQueue.filter(i=>i.status==='done').length}/{bulkQueue.filter(i=>i.status!=='duplicate').length}</b></div><div className="swing-bulk-list">{bulkQueue.map(item=><article key={item.key} className={`status-${item.status}`}><span><strong>{item.meta?.recordedAt?new Date(item.meta.recordedAt).toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):item.file.name}</strong><small>{item.meta?.isBlast?'Blast Softball':item.file.name}{item.error?` · ${item.error}`:''}</small></span><b>{item.status==='duplicate'?'Bestaat al':item.status==='checking'?'Controleren':item.status==='analyzing'?'Analyseren':item.status==='done'?`${item.score}/100`:item.status==='error'?'Mislukt':'Klaar'}</b></article>)}</div>{bulkBusy&&<div className="swing-ai-progress swing-bulk-progress"><div><i style={{width:`${bulkProgress.total?Math.round((bulkProgress.current/bulkProgress.total)*100):0}%`}}/></div><strong>{bulkProgress.label||'Analyseren…'}</strong><small>{bulkProgress.current}/{bulkProgress.total}</small></div>}<button className="swing-primary" disabled={bulkBusy||!bulkQueue.some(i=>i.status==='ready'||i.status==='error')} onClick={analyzeBulkQueue}><Icon name="swing"/>{bulkBusy?'Swings analyseren…':'Alle nieuwe swings analyseren & opslaan'}</button><p className="swing-help swing-bulk-note">Blast-bestandsnamen worden alleen gebruikt voor datum/tijd en duplicaatcontrole. De gekozen MijnOG-speelster blijft altijd leidend.</p></div>}</section>
+          {!bulkQueue.length&&<section className="swing-ai-card"><div className="swing-section-head compact"><div><p className="eyebrow orange">AI-VIDEOANALYSE</p><h3>Automatische swinganalyse</h3></div>{aiResult&&<span>{aiResult.overall}/100</span>}</div><p className="swing-help">De AI volgt lichaamslandmarks door de video en berekent automatisch technische indicatoren. De uitkomst is een coachhulpmiddel en geen biomechanische waarheid.</p>{analysisBusy?<div className="swing-ai-progress"><div><i style={{width:`${aiProgress.progress||0}%`}}/></div><strong>{aiProgress.label||'Analyseren…'}</strong><small>{aiProgress.progress||0}%</small></div>:!aiResult?<button className="swing-primary swing-ai-start" disabled={!videoFile||qualityBusy||videoQuality?.status==='red'} onClick={runAiAnalysis}><Icon name="swing"/> AI-analyse starten</button>:<><div className="swing-ai-ok"><strong>AI-analyse gereed</strong><small>Pose confidence {aiResult.meta?.pose_confidence??'—'}% · contactmoment is een AI-proxy</small></div><div className="swing-ai-metric-list">{Object.entries(aiResult.metrics||{}).map(([key,value])=>{const conf=aiResult.confidences?.[key]??0;const info=swingMetricCatalog[key]||{};return <article key={key}><span><strong>{info.label||key}</strong><small>{conf>=80?'Hoge':conf>=60?'Redelijke':'Lage'} betrouwbaarheid · {conf}%</small></span><b>{value}</b><div><i style={{width:`${Math.max(0,Math.min(100,Number(value)))}%`}}/></div><p className="swing-metric-observation"><b>Waarneming:</b> {metricObservationFromAnalysis(key,value,aiResult)}</p><p className="swing-metric-explain"><b>Basisdoel:</b> {info.goal}</p><p className="swing-metric-explain"><b>Wat houdt dit in?</b> {info.explanation||info.hint}</p></article>})}</div><button className="swing-secondary swing-ai-again" onClick={runAiAnalysis}>Opnieuw analyseren</button></>}</section>}
+          {!bulkQueue.length&&<div className="form-stack swing-extra"><label>Exit velo <span>(optioneel)</span><input type="number" inputMode="decimal" value={exitVelocity} onChange={e=>setExitVelocity(e.target.value)} placeholder="Bijv. 92"/></label><label>Coachnotitie <span>(optioneel)</span><textarea rows="3" value={coachNote} onChange={e=>setCoachNote(e.target.value)} placeholder="Wat zie jij in deze swing?"/></label></div>}
+          {!bulkQueue.length&&<button className="swing-primary" disabled={busy||analysisBusy||!aiResult} onClick={saveAnalysis}>{busy?'Opslaan…':!aiResult?'Eerst AI-analyse uitvoeren':'AI-analyse opslaan'}</button>}
         </>}
         {view==='result' && savedResult && <SwingResult analysis={savedResult} player={profiles.find(p=>p.id===savedResult.player_id)||selectedPlayer} onNew={()=>openNew(profiles.find(p=>p.id===savedResult.player_id)||selectedPlayer)} />}
         {view==='access' && isAnalyzerAdmin && <>
@@ -1764,7 +1825,7 @@ function SwingAnalyzerModal({ session, profile, accessLevel, team, players = [],
 }
 
 
-function SwingCameraCapture({videoUrl,onVideo,videoQuality,qualityBusy}){
+function SwingCameraCapture({videoUrl,onVideo,onVideos,videoQuality,qualityBusy}){
   const liveRef=useRef(null), streamRef=useRef(null), recorderRef=useRef(null), chunksRef=useRef([])
   const [cameraOpen,setCameraOpen]=useState(false),[recording,setRecording]=useState(false),[cameraError,setCameraError]=useState(''),[liveQuality,setLiveQuality]=useState(null)
   useEffect(()=>()=>stopCamera(),[])
@@ -1817,7 +1878,7 @@ function SwingCameraCapture({videoUrl,onVideo,videoQuality,qualityBusy}){
     {cameraOpen?<div className={`swing-live-camera quality-${quality.status}`}><video ref={liveRef} muted playsInline autoPlay/><div className="swing-live-overlay"><span className="swing-ground-line"/>{box&&<span className={`swing-pose-box ${quality.status}`} style={{left:`${box.x*100}%`,top:`${box.y*100}%`,width:`${box.width*100}%`,height:`${box.height*100}%`}}/>}<div className={`swing-live-quality ${quality.status}`}><strong>{quality.message}</strong><small>{quality.detail}</small><b>{quality.confidence||0}% pose</b></div></div><div className="swing-live-controls">{!recording?<button className="swing-record" onClick={startRecording}><i/> Opname starten</button>:<button className="swing-record recording" onClick={stopRecording}><i/> Stop opname</button>}<button className="swing-camera-close" onClick={stopCamera}>Sluiten</button></div></div>:videoUrl?<div className="swing-preview-wrap"><video className="swing-preview" src={videoUrl} controls playsInline/>{qualityBusy?<div className="swing-preview-tip">Opnamekwaliteit controleren…</div>:videoQuality?<div className={`swing-video-quality ${videoQuality.status}`}><strong>{videoQuality.message}</strong><small>{videoQuality.detail}</small><b>{videoQuality.confidence||0}% pose</b></div>:null}</div>:<div className="swing-video-empty"><Icon name="camera"/><strong>Film vanuit vast zijaanzicht</strong><small>Camera op ongeveer heuphoogte · hele speler én volledige knuppel in beeld</small></div>}
     <div className="swing-capture-instructions"><strong>AI-opnamecheck</strong><div><span>1</span><p><b>Groen</b> = lichaam betrouwbaar herkend en goed gekaderd.</p></div><div><span>2</span><p><b>Oranje</b> = analyse mogelijk, maar een deel is minder betrouwbaar.</p></div><div><span>3</span><p><b>Rood</b> = AI-analyse wordt geblokkeerd; neem opnieuw op.</p></div><p className="swing-bat-note">Let op: V1 controleert de lichaamshouding automatisch. De volledige knuppel moet je nog visueel binnen beeld houden.</p></div>
     {cameraError&&<div className="notice warning">{cameraError}</div>}
-    <div className="swing-file-actions"><button className="swing-primary" type="button" onClick={openCamera}><Icon name="camera"/> Live camera</button><label className="swing-secondary">Telefooncamera<input type="file" accept="video/*" capture="environment" onChange={e=>onVideo(e.target.files?.[0])}/></label><label className="swing-secondary">Video kiezen<input type="file" accept="video/*" onChange={e=>onVideo(e.target.files?.[0])}/></label></div>
+    <div className="swing-file-actions"><button className="swing-primary" type="button" onClick={openCamera}><Icon name="camera"/> Live camera</button><label className="swing-secondary">Telefooncamera<input type="file" accept="video/*" capture="environment" onChange={e=>onVideo(e.target.files?.[0])}/></label><label className="swing-secondary swing-multi-upload">Video's kiezen<input type="file" accept="video/*,.mov,.mp4" multiple onChange={e=>{onVideos?.(e.target.files);e.target.value=''}}/></label></div>
   </>
 }
 
@@ -3375,7 +3436,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
       }, { onConflict: 'profile_id,provider' })
       if (error) throw error
 
-      // v3.2.16: opslaan van een FOYS-link start direct de centrale import.
+      // v3.2.17: opslaan van een FOYS-link start direct de centrale import.
       // De gebruiker hoeft dus niet meer apart op 'Wedstrijden nu synchroniseren' te drukken.
       if (!session?.access_token) throw new Error('FOYS-link is opgeslagen, maar de sessie kon de synchronisatie niet starten.')
       const response = await fetch('/api/calendar', {
@@ -3472,7 +3533,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="people" title="Taken & functies" subtitle="Bekijk club- en teamuitnodigingen" status={taskInvitations.some(row=>row.status==='invited')?'Nieuw':null} onClick={() => setSettingsView('tasks')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS databron gekoppeld' : 'FOYS databron toevoegen'} status={calendar ? 'Databron actief' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.2.16" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.2.17" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -3512,7 +3573,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 3.2.16</h3>
+        <h3>Versie 3.2.17</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS databron</span><strong>{calendar ? 'Dit account levert een feed' : 'Geen persoonlijke feed'}</strong></div>
