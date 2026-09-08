@@ -3129,3 +3129,13 @@ button.swing-primary { width: 100%; margin-top: 12px; border: 0; background: var
 .swing-bulk-actions{display:grid;gap:7px;margin-top:10px}
 .swing-bulk-actions .swing-primary{margin-top:0}
 .swing-stop-bulk{border-color:#d5a4a4!important;color:#9d2d2d!important;background:#fff7f7!important}
+
+/* Swing Analyzer v1.3 - doorlopend totaalrapport */
+.swing-total-report{margin:18px 0 22px;padding:18px;border:1px solid var(--border,#e5e7eb);border-radius:18px;background:var(--card,#fff);box-shadow:0 8px 24px rgba(0,0,0,.04)}
+.swing-report-head{display:flex;align-items:center;justify-content:space-between;gap:14px}.swing-report-head h3{margin:2px 0}.swing-report-head small{display:block;color:var(--muted,#6b7280)}
+.swing-report-score{display:grid;place-items:center;min-width:62px;height:62px;border-radius:50%;background:#111;color:#fff;font-size:24px}
+.swing-report-update{margin:16px 0;padding:13px 14px;border-radius:12px;background:rgba(249,115,22,.08);line-height:1.45}.swing-report-update strong{display:block;margin-bottom:3px}
+.swing-report-columns{display:grid;grid-template-columns:1fr 1fr;gap:12px}.swing-report-columns>div{padding:13px;border:1px solid var(--border,#e5e7eb);border-radius:12px}.swing-report-columns>div>strong{display:block;margin-bottom:8px}.swing-report-columns span{display:flex;justify-content:space-between;gap:10px;padding:6px 0;font-size:13px}.swing-report-columns span b{white-space:nowrap}.swing-report-columns em{font-style:normal;font-size:11px;margin-left:5px;color:var(--muted,#6b7280)}.swing-report-columns em.up{color:#15803d}.swing-report-columns em.down{color:#b91c1c}
+.swing-report-priority{margin-top:12px;padding:13px;border-radius:12px;background:rgba(0,0,0,.035)}.swing-report-priority p{margin:5px 0 8px;line-height:1.45}.swing-report-priority ol{margin:6px 0 0;padding-left:20px}.swing-report-priority li{margin:4px 0}
+.swing-report-foot{display:block;margin-top:12px;color:var(--muted,#6b7280);line-height:1.4}.swing-total-report.empty p:last-child{color:var(--muted,#6b7280);margin-bottom:0}
+@media(max-width:640px){.swing-report-columns{grid-template-columns:1fr}.swing-total-report{padding:15px}.swing-report-score{min-width:54px;height:54px;font-size:21px}}

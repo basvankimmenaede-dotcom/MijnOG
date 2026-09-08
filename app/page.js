@@ -1678,6 +1678,63 @@ function SwingAnalyzerModal({ session, profile, accessLevel, team, players = [],
   const allowedPlayers = players.filter(p => allowedPlayerIds.has(p.id))
   const playerAnalyses = (playerId) => analyses.filter(a => a.player_id === playerId)
   const latestFor = (playerId) => playerAnalyses(playerId)[0]
+  const swingReportMetrics = ['head_stability','stride','posture','front_side','balance','load_timing','hip_lead','separation','hand_path']
+  function swingAnalysisMetricValue(a,key){
+    const value=Number(a?.metrics?.[key])
+    return Number.isFinite(value)?value:null
+  }
+  function buildPlayerSwingReport(playerId){
+    const list=playerAnalyses(playerId).filter(a=>a?.metrics&&Object.keys(a.metrics||{}).length)
+    if(!list.length)return null
+    const sessions=[]
+    const sessionMap=new Map()
+    list.forEach(a=>{
+      const day=(a.recorded_at||'').slice(0,10)
+      const key=a.session_id||a.analysis_meta?.bulk_session_id||day||String(a.id)
+      if(!sessionMap.has(key)){const group={key,date:a.recorded_at,items:[]};sessionMap.set(key,group);sessions.push(group)}
+      sessionMap.get(key).items.push(a)
+    })
+    const sessionMetric=(group,key)=>{
+      const values=group.items.map(a=>swingAnalysisMetricValue(a,key)).filter(v=>v!==null)
+      return values.length?values.reduce((sum,v)=>sum+v,0)/values.length:null
+    }
+    const weightedMetric=(key)=>{
+      const weights=[.5,.3,.2], recent=sessions.slice(0,3)
+      let total=0, weightTotal=0
+      recent.forEach((group,index)=>{const value=sessionMetric(group,key);if(value!==null){total+=value*weights[index];weightTotal+=weights[index]}})
+      return weightTotal?Math.round(total/weightTotal):null
+    }
+    const metricRows=swingReportMetrics.map(key=>{
+      const current=weightedMetric(key)
+      const latest=sessionMetric(sessions[0],key)
+      const previous=sessions[1]?sessionMetric(sessions[1],key):null
+      const change=latest!==null&&previous!==null?Math.round(latest-previous):null
+      return {key,label:swingMetricCatalog[key]?.label||key,score:current,change}
+    }).filter(row=>row.score!==null).sort((a,b)=>b.score-a.score)
+    const scores=list.map(a=>Number(a.overall_score)).filter(Number.isFinite)
+    const latestScores=sessions[0]?.items.map(a=>Number(a.overall_score)).filter(Number.isFinite)||[]
+    const previousScores=sessions[1]?.items.map(a=>Number(a.overall_score)).filter(Number.isFinite)||[]
+    const avg=arr=>arr.length?arr.reduce((sum,v)=>sum+v,0)/arr.length:null
+    const latestOverall=avg(latestScores), previousOverall=avg(previousScores)
+    const overall=Math.round(metricRows.length?metricRows.reduce((sum,r)=>sum+r.score,0)/metricRows.length:avg(scores)||0)
+    const strongest=metricRows.slice(0,3)
+    const focus=[...metricRows].sort((a,b)=>a.score-b.score).slice(0,3)
+    const improved=metricRows.filter(r=>r.change!==null&&r.change>=3).sort((a,b)=>b.change-a.change)
+    const declined=metricRows.filter(r=>r.change!==null&&r.change<=-3).sort((a,b)=>a.change-b.change)
+    let update='Er is nog geen vorige sessie om de ontwikkeling mee te vergelijken.'
+    if(sessions.length>1){
+      const parts=[]
+      if(improved[0])parts.push(`${improved[0].label} is het duidelijkst verbeterd (+${improved[0].change}).`)
+      if(declined[0])parts.push(`${declined[0].label} vraagt extra aandacht (${declined[0].change}).`)
+      if(!parts.length&&latestOverall!==null&&previousOverall!==null){
+        const diff=Math.round(latestOverall-previousOverall)
+        parts.push(Math.abs(diff)<3?'De laatste sessie is technisch ongeveer stabiel ten opzichte van de vorige.':`De gemiddelde sessiescore is ${diff>0?'gestegen':'gedaald'} met ${Math.abs(diff)} punten.`)
+      }
+      update=parts.join(' ')
+    }
+    const conclusion=focus.length?`De belangrijkste trainingsprioriteit is ${focus[0].label.toLowerCase()}. ${strongest[0]?`${strongest[0].label} is momenteel het meest stabiele onderdeel.`:''}`:'Er zijn nog onvoldoende vergelijkbare technische metingen.'
+    return {count:list.length,sessionCount:sessions.length,overall,metricRows,strongest,focus,update,conclusion,lastUpdated:list[0]?.recorded_at}
+  }
 
   function openNew(person) {
     setSelectedPlayer(person); setVideoFile(null); setVideoUrl(''); setExitVelocity(''); setCoachNote(''); setAiResult(null); setAiProgress({progress:0,label:''}); setSavedResult(null); setVideoQuality(null); setQualityBusy(false); setBulkQueue([]); setBulkBusy(false); setBulkProgress({current:0,total:0,label:''}); setBulkSessionId(null); bulkCancelRef.current=false; setView('new')
@@ -1813,7 +1870,7 @@ function SwingAnalyzerModal({ session, profile, accessLevel, team, players = [],
   const coaches=allCoachIds.map(id=>profiles.find(p=>p.id===id)).filter(Boolean)
 
   return <div className="swing-layer"><section className="swing-shell" role="dialog" aria-modal="true" aria-label="Swing Analyzer">
-    <header className="swing-topbar"><button className="swing-icon-btn" onClick={()=>view==='home'?onClose():setView('home')}><Icon name={view==='home'?'close':'back'}/></button><div><p className="eyebrow orange">MIJN OG</p><h2>Swing Analyzer <span>V1.2</span></h2></div>{isAnalyzerAdmin?<button className={`swing-admin-btn ${view==='access'?'active':''}`} onClick={()=>setView('access')}><Icon name="lock"/></button>:<span className="swing-icon-spacer"/>}</header>
+    <header className="swing-topbar"><button className="swing-icon-btn" onClick={()=>view==='home'?onClose():setView('home')}><Icon name={view==='home'?'close':'back'}/></button><div><p className="eyebrow orange">MIJN OG</p><h2>Swing Analyzer <span>V1.3</span></h2></div>{isAnalyzerAdmin?<button className={`swing-admin-btn ${view==='access'?'active':''}`} onClick={()=>setView('access')}><Icon name="lock"/></button>:<span className="swing-icon-spacer"/>}</header>
     <div className="swing-body">
       <div className="swing-advisory"><Icon name="info"/><span><strong>Coachhulpmiddel</strong> De analyse ondersteunt jouw observatie en is niet leidend. Beoordeel altijd zelf de volledige swing en context.</span></div>
       {error && <div className="notice error">{error}</div>}
@@ -1826,6 +1883,7 @@ function SwingAnalyzerModal({ session, profile, accessLevel, team, players = [],
         {view==='player' && selectedPlayer && <>
           <section className="swing-player-head"><ProfileAvatar person={selectedPlayer} size="large"/><div><p className="eyebrow orange">SWINGPROFIEL</p><h3>{personName(selectedPlayer)}</h3><p>{playerSportLine(selectedPlayer)}</p></div></section>
           <button className="swing-primary" onClick={()=>openNew(selectedPlayer)}><Icon name="camera"/> Nieuwe swing analyseren</button>
+          {(()=>{const report=buildPlayerSwingReport(selectedPlayer.id);return report?<section className="swing-total-report"><div className="swing-report-head"><div><p className="eyebrow orange">TOTAALRAPPORT</p><h3>Ontwikkeling</h3><small>Automatisch bijgewerkt · {report.count} swings · {report.sessionCount} sessies</small></div><b className="swing-report-score">{report.overall}</b></div><p className="swing-report-update"><strong>Sinds de vorige sessie</strong>{report.update}</p><div className="swing-report-columns"><div><strong>Sterke punten</strong>{report.strongest.map(row=><span key={row.key}>{row.label}<b>{row.score}{row.change!==null&&<em className={row.change>=3?'up':row.change<=-3?'down':''}>{row.change>0?'+':''}{row.change}</em>}</b></span>)}</div><div><strong>Aandachtspunten</strong>{report.focus.map(row=><span key={row.key}>{row.label}<b>{row.score}{row.change!==null&&<em className={row.change>=3?'up':row.change<=-3?'down':''}>{row.change>0?'+':''}{row.change}</em>}</b></span>)}</div></div><div className="swing-report-priority"><strong>Coachconclusie</strong><p>{report.conclusion}</p>{report.focus.length>0&&<ol>{report.focus.map(row=><li key={row.key}>{swingMetricCatalog[row.key]?.drillDetails?.name||row.label}</li>)}</ol>}</div><small className="swing-report-foot">Recente sessies wegen zwaarder: 50% laatste · 30% vorige · 20% oudere sessie. Eén losse swing overschrijft het totaalbeeld niet.</small></section>:<section className="swing-total-report empty"><p className="eyebrow orange">TOTAALRAPPORT</p><h3>Nog onvoldoende data</h3><p>Na de eerste opgeslagen swinganalyse verschijnt hier automatisch het doorlopende spelersrapport.</p></section>})()}
           <div className="swing-section-head"><div><p className="eyebrow orange">HISTORIE</p><h3>Analyses</h3></div></div>
           <div className="swing-history">{playerAnalyses(selectedPlayer.id).map(a=><article key={a.id}><div className="swing-score-orb">{Math.round(a.overall_score)}</div><div><strong>{formatSwingDate(a.recorded_at)}</strong><small>{a.focus?.[0]?.label || 'Coachinganalyse'}{a.exit_velocity?` · Exit velo ${a.exit_velocity}`:''}</small></div><button onClick={()=>{setSavedResult(a);setView('result')}}><Icon name="chevron"/></button></article>)}{!playerAnalyses(selectedPlayer.id).length&&<p className="muted">Nog geen swinganalyses opgeslagen.</p>}</div>
         </>}
@@ -3555,7 +3613,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
         <SettingsRow icon="bell" title="Meldingen" subtitle="Pushmeldingen instellen" onClick={() => setSettingsView('notifications')} />
         <SettingsRow icon="people" title="Taken & functies" subtitle="Bekijk club- en teamuitnodigingen" status={taskInvitations.some(row=>row.status==='invited')?'Nieuw':null} onClick={() => setSettingsView('tasks')} />
         <SettingsRow icon="link" title="Koppelingen" subtitle={calendar ? 'FOYS databron gekoppeld' : 'FOYS databron toevoegen'} status={calendar ? 'Databron actief' : null} onClick={() => setSettingsView('calendar')} />
-        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.2.18" onClick={() => setSettingsView('about')} />
+        <SettingsRow icon="info" title="Over Mijn OG" subtitle="Versie 3.2.19" onClick={() => setSettingsView('about')} />
       </div>
 
       {profile?.role === 'admin' && <AdminPanel session={session} onMessage={onMessage} onChanged={onSaved} />}
@@ -3595,7 +3653,7 @@ function More({ session, profile, teams, competitions = [], calendar, attendance
       {settingsView === 'about' && <div className="about-settings">
         <img src="/og-logo.png" alt="Onze Gezellen" />
         <p className="eyebrow orange">MIJN OG</p>
-        <h3>Versie 3.2.18</h3>
+        <h3>Versie 3.2.19</h3>
         <p>De persoonlijke clubomgeving voor teams, trainingen, aanwezigheid, agenda en meldingen.</p>
         <div className="about-version-row"><span>Pushmeldingen</span><strong>Actief</strong></div>
         <div className="about-version-row"><span>FOYS databron</span><strong>{calendar ? 'Dit account levert een feed' : 'Geen persoonlijke feed'}</strong></div>
